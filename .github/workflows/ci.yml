@@ -33,6 +33,7 @@ jobs:
     steps:
       # runner.temp is not available to job-level env, so export it from a step.
       - run: |
+          mkdir -p "$RUNNER_TEMP/glide-tests"
           echo "GLIDE_TEST_TMP=$RUNNER_TEMP/glide-tests" >> "$GITHUB_ENV"
           echo "GLIDE_E2E_TMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
@@ -69,7 +70,7 @@ jobs:
     timeout-minutes: 20
     continue-on-error: true
     steps:
-      - run: echo "GLIDE_TEST_TMP=$RUNNER_TEMP/glide-tests" >> "$GITHUB_ENV"
+      - run: mkdir -p "$RUNNER_TEMP/glide-tests" && echo "GLIDE_TEST_TMP=$RUNNER_TEMP/glide-tests" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
