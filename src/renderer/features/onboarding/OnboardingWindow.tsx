@@ -86,12 +86,14 @@ export function OnboardingWindow() {
   // Focus the step's preferred control ([data-autofocus]) or the primary button.
   useEffect(() => {
     if (!ready) return;
-    const id = requestAnimationFrame(() => {
+    // A timeout, not requestAnimationFrame: frames can be withheld while the window is hidden or
+    // still appearing, which would leave focus nowhere. The step's DOM is committed by now.
+    const id = setTimeout(() => {
       const root = bodyRef.current;
       const target = root?.querySelector<HTMLElement>("[data-autofocus]") ?? document.querySelector<HTMLElement>(".onboarding-foot__primary");
       target?.focus();
-    });
-    return () => cancelAnimationFrame(id);
+    }, 0);
+    return () => clearTimeout(id);
   }, [flow.step, ready]);
 
   const next = useCallback(() => dispatch({ type: "next" }), []);
