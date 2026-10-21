@@ -144,7 +144,7 @@ export function createCapabilities(deps: CapabilityDeps): AgentCapabilities {
     async selectedText() {
       if (!ctx.helper.available()) return { text: null, error: "Reading the selection needs the Glide helper, which is not running." };
       try {
-        const timeout = new Promise<{ text: null }>((r) => setTimeout(() => r({ text: null }), 1500));
+        const timeout = new Promise<{ text: null }>((r) => setTimeout(() => r({ text: null }), 3000));
         const r = await Promise.race([ctx.helper.call("selection.text"), timeout]);
         return { text: r.text };
       } catch (err) {

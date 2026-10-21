@@ -18,7 +18,7 @@ import type { AiCommandDef, AiSettings, AskRequest, AskStart, ChatMessage, DoneE
 const ID = "ai";
 const DEFAULTS: AiSettings = { model: DEFAULT_MODEL, effort: "medium", customCommands: [] };
 const EFFORTS: Effort[] = ["low", "medium", "high"];
-const SELECTION_TIMEOUT_MS = 1500;
+const SELECTION_TIMEOUT_MS = 3000;
 
 let ctx: FeatureContext | undefined;
 let keys: KeyStore | undefined;
@@ -120,26 +120,36 @@ async function testConnection(model: unknown): Promise<TestResult> {
 // Selection, clipboard and paste
 // ---------------------------------------------------------------------------
 
-type SelectionRead = { text: string; source: "selection" | "clipboard" | "none" };
+type SelectionRead = { text: string; source: "selection" | "clipboard" | "none"; note?: string };
 
-/** Selected text of the app behind Glide via Accessibility, else the clipboard. */
+const SELECTION_REASONS: Record<string, string> = {
+  "no-accessibility": "Glide needs Accessibility permission to read selected text",
+  "no-target-app": "no app to read from",
+  "no-focused-element": "nothing is focused there",
+  "no-selected-text": "it didn't report a selection",
+  timeout: "it took too long to answer",
+};
+
+/** Selected text of the app behind Glide via Accessibility, else the clipboard (with the reason why). */
 async function readSelection(): Promise<SelectionRead> {
   const c = need(ctx);
+  let note: string | undefined;
   if (c.helper.available()) {
-    const ax = await helperText("selection.text");
-    if (ax) return { text: ax, source: "selection" };
-  }
+    const res = await helperSelection();
+    if (res.text?.trim()) return { text: res.text, source: "selection" };
+    const why = SELECTION_REASONS[res.reason ?? ""] ?? "it didn't report a selection";
+    note = `Couldn't read the selection${res.app ? ` in ${res.app}` : ""} (${why})`;
+  } else note = "The Glide helper isn't running";
   const clip = await clipboard.readText();
-  return clip.trim() ? { text: clip, source: "clipboard" } : { text: "", source: "none" };
+  return clip.trim() ? { text: clip, source: "clipboard", note } : { text: "", source: "none", note };
 }
 
-async function helperText(method: "selection.text", ms = SELECTION_TIMEOUT_MS): Promise<string | null> {
+async function helperSelection(): Promise<{ text: string | null; app?: string; reason?: string }> {
   try {
-    const timeout = new Promise<{ text: null }>((resolve) => setTimeout(() => resolve({ text: null }), ms));
-    const res = await Promise.race([need(ctx).helper.call(method), timeout]);
-    return res.text?.trim() ? res.text : null;
+    const timeout = new Promise<{ text: null; reason: string }>((resolve) => setTimeout(() => resolve({ text: null, reason: "timeout" }), SELECTION_TIMEOUT_MS));
+    return await Promise.race([need(ctx).helper.call("selection.text"), timeout]);
   } catch {
-    return null;
+    return { text: null };
   }
 }
 
@@ -339,7 +349,7 @@ async function runCommand(cmd: AiCommandDef, argument: string | undefined): Prom
     title: cmd.acceptsArgument && argument ? `${cmd.name.replace(/\s*…$/, "")} ${argument}` : cmd.name,
     model: cmd.model || undefined,
     replaces: !!cmd.replaces && sel.source === "selection",
-    notice: sel.source === "clipboard" ? "No selected text found — used the clipboard instead." : undefined,
+    notice: sel.source === "clipboard" ? `${sel.note ?? "No selected text found"} — used the clipboard instead.` : undefined,
   };
   return { ok: true, view: { id: "ai.chat", props: { ...props } } };
 }

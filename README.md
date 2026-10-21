@@ -62,7 +62,18 @@ Plus Quick AI and AI commands on selected text, menu-bar search for any app, a H
   </tr>
 </table>
 
-## Get started
+## Download
+
+Grab `Glide-darwin-universal.zip` from the [latest release](https://github.com/tobibytes/glide/releases/latest), unzip it, and move **Glide.app** to Applications.
+
+Release builds are not notarized by Apple yet, so the first launch is blocked with "Glide can't be opened". To allow it, choose one:
+
+- **System Settings → Privacy & Security**, scroll to the message about Glide, and click **Open Anyway**.
+- **Terminal:** `xattr -dr com.apple.quarantine /Applications/Glide.app`
+
+Glide then walks you through the hotkey, permissions and an optional AI key. It updates itself from GitHub Releases; turn that off in Settings → Updates. To uninstall, quit Glide, delete the app, and delete `~/Library/Application Support/Glide`.
+
+## Build from source
 
 Requirements: macOS 14+ on Apple silicon, Node 22+, pnpm 10, Xcode command-line tools (for the Swift helper).
 
@@ -115,7 +126,7 @@ More detail: [docs/INSTALL.md](docs/INSTALL.md) (signing, releases, auto-update,
 - [Extension store](docs/EXTENSIONS-STORE.md) · [Testing](docs/TESTING.md)
 - [Search ranking](src/engine/README.md)
 - [Native helper protocol](src/native/PROTOCOL.md)
-- [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+- [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
 ## Roadmap
 

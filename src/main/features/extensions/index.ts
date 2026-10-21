@@ -185,7 +185,7 @@ async function confirmAlert(info: SessionInfo, raw: JsonValue | undefined): Prom
 async function selectedText(): Promise<string | null> {
   if (!ctx) return null;
   try {
-    const res = await Promise.race([ctx.helper.call("selection.text"), sleep(2000).then(() => null)]);
+    const res = await Promise.race([ctx.helper.call("selection.text"), sleep(3000).then(() => null)]);
     return res?.text ?? null;
   } catch {
     return null;

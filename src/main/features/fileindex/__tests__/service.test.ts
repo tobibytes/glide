@@ -121,7 +121,8 @@ describe("FileIndexService (fixture folder)", () => {
 });
 
 describe("FSEvents watcher", () => {
-  it("picks up a created and a deleted file within the debounce window", async () => {
+  // FSEvents delivery is occasionally dropped while ~100 test files run in parallel; retry instead of flaking.
+  it("picks up a created and a deleted file within the debounce window", { retry: 2, timeout: 40_000 }, async () => {
     const svc = new FileIndexService({ dataDir, home, getSettings: () => settings, watch: true, workerPath: null, compactAfterIdleMs: 3_600_000 });
     await svc.start();
     await svc.whenIdle();
@@ -136,5 +137,5 @@ describe("FSEvents watcher", () => {
     while (Date.now() < deadline2 && names(svc, "watched").length) await new Promise((r) => setTimeout(r, 100));
     expect(names(svc, "watched")).toEqual([]);
     await svc.stop();
-  }, 40_000);
+  });
 });

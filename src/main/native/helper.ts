@@ -161,7 +161,7 @@ export interface HelperMethods {
   /** "reminders" and "location" show the system prompt the first time; call only from an explicit user action. */
   "permissions.request": { params: { kind: "accessibility" | "inputMonitoring" | "calendar" | "reminders" | "location" }; result: PermissionStatus };
   "app.frontmost": { params: void; result: FrontmostApp | null };
-  "selection.text": { params: void; result: { text: string | null } };
+  "selection.text": { params: void; result: { text: string | null; app?: string; reason?: "no-accessibility" | "no-target-app" | "no-focused-element" | "no-selected-text" } };
   "windows.apply": { params: { action: WindowAction }; result: { ok: boolean; error?: string } };
   "menus.list": { params: { pid?: number }; result: MenuItemInfo[] };
   "menus.press": { params: { pid?: number; path: string[] }; result: { ok: boolean; error?: string } };

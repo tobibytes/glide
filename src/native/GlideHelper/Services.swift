@@ -141,25 +141,71 @@ enum Selection {
 
     /// Selected text via Accessibility. Electron/Chromium apps expose nothing until a client sets
     /// AXManualAccessibility, so on an empty first read we set it once per process and read again.
+    /// A busy app can miss the AX deadline, so each read gets a second chance. `reason` explains a miss.
     static func text() -> [String: Any] {
-        guard AXIsProcessTrusted(), let app = Apps.shared.target() else { return ["text": NSNull()] }
+        guard AXIsProcessTrusted() else { return ["text": NSNull(), "reason": "no-accessibility"] }
+        guard let app = Apps.shared.target() else { return ["text": NSNull(), "reason": "no-target-app"] }
         let pid = app.processIdentifier
-        let axApp = AX.app(pid, timeout: 0.4)
-        if let text = read(axApp) { return ["text": text] }
+        let name = app.localizedName ?? app.bundleIdentifier ?? "the app"
+        let axApp = AX.app(pid, timeout: 1.0)
+        if let text = readWithRetry(axApp) { return ["text": text, "app": name] }
         lock.lock()
         let first = woken.insert(pid).inserted
         lock.unlock()
-        guard first, AXUIElementSetAttributeValue(axApp, "AXManualAccessibility" as CFString, kCFBooleanTrue) == .success else {
-            return ["text": NSNull()]
+        if first, wake(axApp, bundleId: app.bundleIdentifier) {
+            usleep(250_000) // the tree is built asynchronously
+            if let text = readWithRetry(axApp) { return ["text": text, "app": name] }
         }
-        usleep(150_000) // the tree is built asynchronously
-        return ["text": read(axApp) ?? NSNull()]
+        let focused = AX.element(axApp, kAXFocusedUIElementAttribute)
+        return ["text": NSNull(), "app": name, "reason": focused == nil ? "no-focused-element" : "no-selected-text"]
     }
 
+    private static func readWithRetry(_ axApp: AXUIElement) -> String? {
+        if let text = read(axApp) { return text }
+        usleep(120_000)
+        return read(axApp)
+    }
+
+    /// Chromium browsers build their AX tree only for assistive clients: Electron apps listen to
+    /// AXManualAccessibility, Chrome-family browsers to AXEnhancedUserInterface.
+    private static let chromiumBrowsers: Set<String> = [
+        "com.google.Chrome", "com.google.Chrome.beta", "com.google.Chrome.canary", "org.chromium.Chromium",
+        "com.brave.Browser", "com.microsoft.edgemac", "company.thebrowser.Browser", "com.vivaldi.Vivaldi",
+        "com.operasoftware.Opera", "ai.perplexity.comet", "company.thebrowser.dia",
+    ]
+
+    private static func wake(_ axApp: AXUIElement, bundleId: String?) -> Bool {
+        let manual = AXUIElementSetAttributeValue(axApp, "AXManualAccessibility" as CFString, kCFBooleanTrue) == .success
+        var enhanced = false
+        if let id = bundleId, chromiumBrowsers.contains(id) {
+            enhanced = AXUIElementSetAttributeValue(axApp, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue) == .success
+        }
+        return manual || enhanced
+    }
+
+    /// Text fields report AXSelectedText; selections in web pages (Chrome, Safari) only exist as a
+    /// text-marker range on the focused web area, read with AXStringForTextMarkerRange.
     private static func read(_ axApp: AXUIElement) -> String? {
-        guard let focused = AX.element(axApp, kAXFocusedUIElementAttribute),
-              let text = AX.attr(focused, kAXSelectedTextAttribute) as? String, !text.isEmpty
-        else { return nil }
-        return text
+        guard let focused = AX.element(axApp, kAXFocusedUIElementAttribute) else { return nil }
+        if let text = AX.attr(focused, kAXSelectedTextAttribute) as? String, !text.isEmpty { return text }
+        for el in [focused] + ancestors(of: focused, limit: 8) {
+            guard let range = AX.attr(el, "AXSelectedTextMarkerRange") else { continue }
+            var value: AnyObject?
+            if AXUIElementCopyParameterizedAttributeValue(el, "AXStringForTextMarkerRange" as CFString, range, &value) == .success,
+               let text = value as? String, !text.isEmpty {
+                return text
+            }
+        }
+        return nil
+    }
+
+    private static func ancestors(of el: AXUIElement, limit: Int) -> [AXUIElement] {
+        var out: [AXUIElement] = []
+        var cur = el
+        while out.count < limit, let parent = AX.element(cur, kAXParentAttribute) {
+            out.append(parent)
+            cur = parent
+        }
+        return out
     }
 }

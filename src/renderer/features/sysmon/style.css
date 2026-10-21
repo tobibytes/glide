@@ -141,7 +141,7 @@
 }
 
 .sysmon-dim {
-  color: var(--text-3);
+  color: var(--text-2); /* sits on a card surface, where --text-3 misses AA */
 }
 
 .sysmon-metric {

@@ -62,7 +62,7 @@ export function seedQuicklinks(): Quicklink[] {
 
 export function seedSnippets(): Snippet[] {
   return [
-    { id: "sn-email-sig", name: "Email signature", text: "Best regards,\n\n— sent from Glide", keyword: "sig" },
-    { id: "sn-shrug", name: "Shrug", text: "¯\\_(ツ)_/¯", keyword: "shrug" },
+    { id: "sn-email-sig", name: "Email signature", text: "Best regards,\n\n— sent from Glide", keyword: ";sig" },
+    { id: "sn-shrug", name: "Shrug", text: "¯\\_(ツ)_/¯", keyword: ";shrug" },
   ];
 }

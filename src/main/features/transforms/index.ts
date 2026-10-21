@@ -11,7 +11,7 @@ import { pasteText as clipboardPaste } from "../convert/output";
 import type { FeatureContext, FeatureModule } from "../types";
 import { applyTransform, TRANSFORMS, transformById } from "./transforms";
 
-const SELECTION_TIMEOUT_MS = 1200;
+const SELECTION_TIMEOUT_MS = 3000;
 
 export interface TransformInput {
   text: string;
