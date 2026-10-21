@@ -56,3 +56,6 @@ export function settingsPages(): Array<{ id: string; title: string; icon: string
 // Menu-bar mode (Settings → Menu Bar).
 import { ui as u_menubar } from "./menubar";
 Object.assign(FEATURE_UIS, { menubar: u_menubar });
+// First-run onboarding window (#/onboarding/welcome).
+import { ui as u_onboarding } from "./onboarding";
+Object.assign(FEATURE_UIS, { onboarding: u_onboarding });

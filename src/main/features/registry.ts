@@ -41,3 +41,6 @@ FEATURES.push(f_finder, f_reminders);
 // Menu-bar mode: status items, built-in extras and the Glide menu (started last; it reads other features).
 import { feature as f_menubar } from "./menubar";
 FEATURES.push(f_menubar);
+// First-run onboarding window + "Welcome to Glide" command.
+import { feature as f_onboarding } from "./onboarding";
+FEATURES.push(f_onboarding);

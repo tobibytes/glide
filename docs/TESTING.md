@@ -161,3 +161,7 @@ above 30 ms (engine) or 60 ms (IPC) fails the run; startup and memory only warn 
   e2e suites, perf and the a11y audit; perf and a11y reports are uploaded as the `quality-reports` artifact.
 - `visual`: the pixel comparison, `continue-on-error: true` because CI fonts and antialiasing differ from the Macs
   the baselines were recorded on; diffs are uploaded as the `visual-diffs` artifact.
+
+## Onboarding
+
+`pnpm test:e2e:onboarding` drives the first-run tour headless on a fresh data dir. The other suites set `GLIDE_SKIP_ONBOARDING=1` so the tour window never opens during them.

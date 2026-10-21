@@ -84,7 +84,7 @@ const storeUrl = `http://127.0.0.1:${server.address().port}/store/index.json`;
 
 const app = spawn(electronBin, [`--remote-debugging-port=${port}`, "."], {
   cwd: appDir,
-  env: { ...process.env, ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", GLIDE_USER_DATA: dataDir, GLIDE_SHOW_ON_START: "1", GLIDE_HEADLESS: "1", GLIDE_STORE_URL: storeUrl },
+  env: { ...process.env, ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", GLIDE_USER_DATA: dataDir, GLIDE_SHOW_ON_START: "1", GLIDE_HEADLESS: "1", GLIDE_SKIP_ONBOARDING: "1", GLIDE_STORE_URL: storeUrl },
   stdio: ["ignore", "pipe", "pipe"],
 });
 let appLog = "";

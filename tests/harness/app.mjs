@@ -335,6 +335,8 @@ export async function launchGlide(opts = {}) {
     // A fixture home: features that read ~ (browser bookmarks, scripts, notes, file index) see
     // fixture data instead of the user's. Opt out with { realHome: true }.
     ...(opts.realHome ? {} : { HOME: path.join(dataDir, "home") }),
+    // The first-run tour opens its own window on fresh data dirs; suites opt in with { env: { GLIDE_SKIP_ONBOARDING: "0" } }.
+    GLIDE_SKIP_ONBOARDING: "1",
     ...(opts.env ?? {}),
     // Not overridable: tests must never put anything on screen.
     GLIDE_HEADLESS: "1",

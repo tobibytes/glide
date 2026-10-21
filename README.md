@@ -71,7 +71,11 @@ Release builds are not notarized by Apple yet, so the first launch is blocked wi
 - **System Settings → Privacy & Security**, scroll to the message about Glide, and click **Open Anyway**.
 - **Terminal:** `xattr -dr com.apple.quarantine /Applications/Glide.app`
 
-Glide then walks you through the hotkey, permissions and an optional AI key. It updates itself from GitHub Releases; turn that off in Settings → Updates. To uninstall, quit Glide, delete the app, and delete `~/Library/Application Support/Glide`.
+Glide then walks you through the hotkey, permissions (with live status), an optional AI key and a theme.
+
+<img src="docs/screenshots/onboarding.png" width="560" alt="Glide's first-run permissions step" />
+
+ It updates itself from GitHub Releases; turn that off in Settings → Updates. To uninstall, quit Glide, delete the app, and delete `~/Library/Application Support/Glide`.
 
 ## Build from source
 

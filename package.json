@@ -33,7 +33,8 @@
     "test:visual:update": "node scripts/visual-snapshots.mjs --update",
     "test:a11y": "node scripts/a11y-audit.mjs",
     "test:perf": "node scripts/perf-search.mjs",
-    "test:quality": "pnpm test:harness && pnpm test:e2e:smoke && pnpm test:perf && pnpm test:a11y"
+    "test:quality": "pnpm test:harness && pnpm test:e2e:smoke && pnpm test:perf && pnpm test:a11y",
+    "test:e2e:onboarding": "node tests/e2e/onboarding.mjs"
   },
   "devDependencies": {
     "@electron/packager": "^20.3.0",

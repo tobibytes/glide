@@ -47,7 +47,7 @@ const serverUrl = `http://127.0.0.1:${server.address().port}`;
 const app = spawn(electronBin, [`--remote-debugging-port=${port}`, "."], {
   cwd: root,
   // GLIDE_EXT_FAKE_AI: AI.ask answers from a local fake (headless only); GLIDE_EXT_INTERVAL_CAP_MS: background intervals ≤ 1.5 s.
-  env: { ...process.env, ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", GLIDE_USER_DATA: dataDir, GLIDE_SHOW_ON_START: "1", GLIDE_HEADLESS: "1", GLIDE_EXT_FAKE_AI: "1", GLIDE_EXT_INTERVAL_CAP_MS: "1500" },
+  env: { ...process.env, ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", GLIDE_USER_DATA: dataDir, GLIDE_SKIP_ONBOARDING: "1", GLIDE_SHOW_ON_START: "1", GLIDE_HEADLESS: "1", GLIDE_EXT_FAKE_AI: "1", GLIDE_EXT_INTERVAL_CAP_MS: "1500" },
   stdio: ["ignore", "pipe", "pipe"],
 });
 let appLog = "";
@@ -467,7 +467,7 @@ async function main() {
   const snippetText = await evaluate(`document.querySelector('[data-field="text"]')?.value ?? null`);
   check("Action.CreateSnippet opens a prefilled snippet form", s.view === "extensions.createEntry" && snippetText === "Best, Glide", JSON.stringify({ view: s.view, snippetText }));
   await key("Enter", "Enter", 13, META);
-  const snip = await poll(() => evaluate(`window.glide.getData().then((d) => d.snippets.find((x) => x.keyword === ";sig") ?? null)`));
+  const snip = await poll(() => evaluate(`window.glide.getData().then((d) => d.snippets.find((x) => x.name === "Sig" && x.text === "Best, Glide") ?? null)`));
   check("⌘⏎ saves the snippet in Glide's snippet store", snip?.text === "Best, Glide" && snip?.name === "Sig", JSON.stringify(snip));
 
   // Form drafts + field refs.

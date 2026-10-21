@@ -54,7 +54,7 @@ jobs:
           GLIDE_PERF_THRESHOLD_SCALE: "2"
         run: pnpm test && pnpm test:harness
       - name: Headless e2e (existing smoke + harness smoke)
-        run: node scripts/e2e.mjs && pnpm test:e2e:smoke
+        run: node scripts/e2e.mjs && pnpm test:e2e:smoke && pnpm test:e2e:onboarding
       - name: Performance (fails if search p95 > 30 ms engine / 60 ms IPC)
         # Hosted runners are ~2x slower than a developer Mac; the thresholds scale accordingly.
         env:
