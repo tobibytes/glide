@@ -1,0 +1,9 @@
+node_modules/
+dist/
+release/
+build/bin/
+*.log
+.DS_Store
+# internal build-session notes
+docs-COMMON-BRIEF.md
+**/CONTRACT-REQUESTS.md

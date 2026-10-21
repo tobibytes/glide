@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Hardened-runtime entitlements for Glide.app and its Electron helper apps (used by scripts/notarize.mjs).
+     V8 needs JIT and unsigned executable memory. disable-library-validation is NOT needed: every
+     binary in the bundle (Electron frameworks, helpers, glide-helper) is signed with the same Team ID. -->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <!-- Workflows run AppleScript and Glide pastes snippets via System Events. -->
+  <key>com.apple.security.automation.apple-events</key>
+  <true/>
+  <!-- Calendar data (the calendar feature reads EventKit through the helper). -->
+  <key>com.apple.security.personal-information.calendars</key>
+  <true/>
+</dict>
+</plist>

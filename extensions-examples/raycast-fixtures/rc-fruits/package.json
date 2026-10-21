@@ -1,0 +1,48 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "rc-fruits",
+  "title": "Fruit Basket",
+  "description": "A Raycast-style List with sections, details, a dropdown, actions and preferences",
+  "icon": "extension-icon.png",
+  "author": "glide",
+  "license": "MIT",
+  "commands": [
+    {
+      "name": "browse-fruits",
+      "title": "Browse Fruits",
+      "subtitle": "Fruit Basket",
+      "description": "List fruits grouped by colour",
+      "mode": "view",
+      "keywords": ["fruit", "basket"]
+    },
+    {
+      "name": "copy-fruit",
+      "title": "Copy Fruit Name",
+      "description": "Copies a fruit name without opening a view",
+      "mode": "no-view",
+      "arguments": [{ "name": "fruit", "placeholder": "Fruit", "type": "text", "required": true }]
+    },
+    {
+      "name": "menu",
+      "title": "Fruit Menu Bar",
+      "mode": "menu-bar"
+    }
+  ],
+  "preferences": [
+    { "name": "greeting", "title": "Greeting", "description": "Shown in each fruit's detail", "type": "textfield", "required": true },
+    { "name": "showPrices", "title": "Prices", "label": "Show prices as accessories", "type": "checkbox", "default": true, "required": false },
+    {
+      "name": "currency",
+      "title": "Currency",
+      "type": "dropdown",
+      "default": "usd",
+      "required": false,
+      "data": [
+        { "title": "US Dollar", "value": "usd" },
+        { "title": "Euro", "value": "eur" }
+      ]
+    }
+  ],
+  "dependencies": { "@raycast/api": "^1.80.0" },
+  "scripts": { "build": "ray build -e dist", "dev": "ray develop" }
+}

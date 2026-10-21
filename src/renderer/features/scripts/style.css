@@ -1,0 +1,145 @@
+.scripts-out {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 440px;
+}
+
+.scripts-out__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.scripts-out__icon {
+  font-size: 16px;
+}
+
+.scripts-out__title {
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scripts-out__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.scripts-out__status--ok {
+  color: var(--success);
+}
+
+.scripts-out__status--bad {
+  color: var(--danger);
+}
+
+.scripts-out__spinner {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  animation: scripts-spin 0.8s linear infinite;
+}
+
+@keyframes scripts-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.scripts-out__pre {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 10px 16px;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+  user-select: text;
+  outline: none;
+}
+
+.scripts-out__err {
+  color: var(--danger);
+}
+
+.scripts-out__keys,
+.scripts-args__keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+}
+
+.scripts-out__keys span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.scripts-args {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px 0;
+}
+
+.scripts-args__title {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.scripts-args__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.scripts-args__keys {
+  margin: 0 -16px;
+  align-items: center;
+}
+
+.scripts-settings__dir {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+}
+
+.scripts-settings__btns {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.scripts-settings__icon {
+  width: 28px;
+  text-align: center;
+  font-size: 18px;
+}
+
+.scripts-settings__errors {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--danger);
+  font-size: 12px;
+}

@@ -1,0 +1,668 @@
+/* Launcher window: transparent body, one translucent panel sized to 760px. */
+.launcher {
+  position: relative;
+  width: var(--launcher-width, 760px);
+  max-height: 620px;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius);
+  background: var(--panel);
+  -webkit-backdrop-filter: blur(40px) saturate(1.6);
+  backdrop-filter: blur(40px) saturate(1.6);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  outline: none;
+}
+
+body.mode-launcher {
+  background: transparent;
+}
+
+/* Keep room for the action popover so it is not clipped when the list is short. */
+.launcher--panel {
+  min-height: 400px;
+}
+
+/* Browser dev only: center the panel on a neutral canvas. */
+body.mode-launcher.dev-canvas {
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  background: linear-gradient(160deg, #6a7fb2, #3a3f66 60%, #8b5a7a);
+}
+
+.launcher__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: var(--head-h, 58px);
+  padding: 0 18px 0 18px;
+  flex: 0 0 auto;
+}
+
+.launcher__glyph {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  color: var(--text-3);
+}
+
+.launcher__input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: var(--fs-input, 20px);
+  font-weight: 400;
+  letter-spacing: -0.012em;
+  color: var(--text);
+  user-select: text;
+  caret-color: var(--accent);
+}
+
+.launcher__input::placeholder {
+  color: var(--text-3);
+}
+
+.launcher__hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: 12px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.argpill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px 0 6px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.launcher__divider {
+  height: 1px;
+  background: var(--border);
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.launcher__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 524px;
+  overflow-y: auto;
+  padding: var(--list-pad, 6px 8px 8px);
+  overscroll-behavior: contain;
+}
+
+.launcher__list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.launcher__list::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 30px;
+  padding: 10px 10px 2px;
+  font-size: var(--fs-section, 11.5px);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-3);
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--row-gap, 12px);
+  height: var(--row-h, 42px);
+  padding: 0 10px;
+  border-radius: var(--row-radius, 9px);
+  transition: background var(--ease), box-shadow var(--ease);
+}
+
+.row--selected {
+  background: var(--selected);
+  box-shadow: inset 0 0 0 1px var(--selected-ring, transparent);
+}
+
+.row > .icon {
+  width: var(--icon-size, 24px);
+  height: var(--icon-size, 24px);
+  font-size: calc(var(--icon-size, 24px) * 0.74);
+}
+
+.row > .icon--symbol {
+  background: var(--icon-bg, var(--surface-3));
+  font-size: calc(var(--icon-size, 24px) * 0.5);
+}
+
+.row__main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.row__title {
+  font-size: var(--fs-title, 14px);
+  font-weight: 500;
+  letter-spacing: -0.003em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.row__title mark {
+  background: transparent;
+  color: var(--accent-text);
+  font-weight: 650;
+  text-decoration: underline 1.5px var(--accent-soft);
+  text-underline-offset: 3px;
+}
+
+.row__subtitle {
+  font-size: var(--fs-sub, 12.75px);
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.row__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.row__kind {
+  font-size: calc(var(--fs-sub, 12.75px) - 0.5px);
+  color: var(--text-3);
+  min-width: 70px;
+  text-align: right;
+}
+
+.row__star {
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.row__hotkey {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.row--calc {
+  height: 64px;
+}
+
+.row--calc .row__main {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.row--calc .row__title {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.row--calc .icon {
+  width: 36px;
+  height: 36px;
+  font-size: 22px;
+  border-radius: 9px;
+  background: var(--accent-soft);
+}
+
+.row--fallback .row__title {
+  font-weight: 450;
+}
+
+.launcher__empty {
+  padding: 26px 0 30px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.launcher__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 38px;
+  padding: 0 10px 0 14px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-2);
+  flex: 0 0 auto;
+  background: var(--hover);
+}
+
+.launcher__foot-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.launcher__foot-left .icon {
+  width: 18px;
+  height: 18px;
+  font-size: 13px;
+}
+
+.launcher__foot-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.footbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.footbtn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.footbtn--on {
+  background: var(--selected);
+  color: var(--text);
+}
+
+.footsep {
+  width: 1px;
+  height: 14px;
+  background: var(--border-strong);
+  margin: 0 4px;
+}
+
+/* Action panel */
+.actions {
+  position: absolute;
+  right: 10px;
+  bottom: 42px;
+  width: 320px;
+  max-height: 380px;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-sm, 12px);
+  background: var(--panel-solid);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  z-index: 10;
+  animation: pop-in var(--dur, 140ms) var(--ease-out, ease-out);
+  overflow: hidden;
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.actions__list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.actions__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 13px;
+}
+
+.action--selected {
+  background: var(--selected);
+}
+
+.action--destructive {
+  color: var(--danger);
+}
+
+.action__icon {
+  width: 18px;
+  text-align: center;
+  font-size: 13px;
+}
+
+.action__title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.action__shortcut {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.actions__filter {
+  border: none;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+  outline: none;
+  user-select: text;
+}
+
+.actions__empty {
+  padding: 14px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  text-align: center;
+}
+
+/* Prompt and result cards (workflow runtime) */
+.card {
+  padding: 18px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card__title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.card__prompt {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.card__input {
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 9px;
+  border: 1px solid var(--border-strong);
+  background: var(--input-bg);
+  font-size: 15px;
+  outline: none;
+  user-select: text;
+}
+
+.card__input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.card__text {
+  margin: 0;
+  max-height: 380px;
+  overflow: auto;
+  padding: 12px 14px;
+  border-radius: 9px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  cursor: text;
+}
+
+.card__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.glide-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  background-size: 50% 100%;
+  animation: loading 1s linear infinite;
+  opacity: 0.8;
+}
+
+@keyframes loading {
+  from {
+    background-position: -100% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+
+/* --- Vim mode ------------------------------------------------------------- */
+.launcher__input--normal {
+  caret-color: transparent;
+  cursor: default;
+}
+
+.vim-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 5px;
+  background: var(--accent);
+  color: var(--accent-contrast, #1d1d1f);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.vim-mode {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+  margin-right: 4px;
+}
+
+.vim-mode--normal {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+/* --- Navigation stack ------------------------------------------------------- */
+.launcher__back {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: none;
+  background: var(--hover);
+  color: var(--text-2);
+  font-size: 20px;
+  line-height: 1;
+  padding-bottom: 2px;
+}
+
+.launcher__back:hover {
+  background: var(--selected);
+  color: var(--text);
+}
+
+.crumb {
+  flex: 0 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 260px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.crumb__parent {
+  opacity: 0.7;
+}
+
+.launcher__view {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 524px;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.launcher__view > * {
+  animation: view-in var(--dur, 140ms) var(--ease-out, ease-out);
+}
+
+@keyframes view-in {
+  from {
+    opacity: 0;
+    transform: translateX(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* --- NavList ---------------------------------------------------------------- */
+.navlist {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.navlist--standalone {
+  position: relative;
+}
+
+.navlist__items {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 524px;
+  overflow-y: auto;
+  padding: var(--list-pad, 6px 8px 8px);
+  overscroll-behavior: contain;
+}
+
+.navlist--split {
+  flex-direction: row;
+  height: 420px;
+}
+
+.navlist--split .navlist__items {
+  flex: 0 0 40%;
+  max-height: none;
+  border-right: 1px solid var(--border);
+}
+
+.navlist__detail {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: auto;
+  padding: 12px 16px;
+}
+
+.navlist__empty {
+  padding: 26px 0 30px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  padding: 10px 10px 2px;
+  font-size: var(--fs-section, 11.5px);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-3);
+}
+
+.actions__filter--nav {
+  caret-color: transparent;
+  color: var(--text-3);
+}

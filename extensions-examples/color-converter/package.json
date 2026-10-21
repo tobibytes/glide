@@ -1,0 +1,22 @@
+{
+  "name": "color-converter",
+  "version": "1.0.0",
+  "description": "Convert colors between HEX, RGB and HSL",
+  "author": "Glide",
+  "license": "MIT",
+  "glide": {
+    "title": "Color Converter",
+    "description": "Type a color as #hex, rgb() or hsl() and copy it in any format.",
+    "icon": "🎨",
+    "commands": [
+      {
+        "name": "convert-color",
+        "title": "Convert Color",
+        "description": "Convert between HEX, RGB and HSL",
+        "mode": "view",
+        "keywords": ["color", "colour", "hex", "rgb", "hsl"],
+        "arguments": [{ "name": "color", "placeholder": "#ff8800", "required": false }]
+      }
+    ]
+  }
+}

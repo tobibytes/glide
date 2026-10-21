@@ -1,0 +1,50 @@
+.ocr-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.ocr-head {
+  padding: 8px 14px 2px;
+  font-size: 12px;
+}
+
+.ocr-note {
+  margin: 8px 12px 4px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ocr-note--error {
+  color: var(--danger);
+}
+
+.ocr-text {
+  margin: 0;
+  padding: 12px 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+  overflow: auto;
+  user-select: text;
+}
+
+.ocr-code-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 0;
+  font-size: 12px;
+}
+
+.ocr-code-detail > .faint {
+  padding: 0 14px;
+}

@@ -1,0 +1,67 @@
+.timers-view {
+  display: flex;
+  flex-direction: column;
+  height: 452px;
+  min-height: 0;
+}
+
+.timers-clock {
+  flex: 0 0 auto;
+  margin-left: var(--s2);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.timers-progress {
+  flex: 0 0 64px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--hover);
+  overflow: hidden;
+}
+
+.timers-progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.timers-laps {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+.timers-laps__total {
+  font-size: 26px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.timers-laps__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.timers-laps__list li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.timers-laps__list li.is-best {
+  color: var(--success, #2fa84f);
+}
+
+.timers-laps__list li.is-worst {
+  color: var(--danger);
+}

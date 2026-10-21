@@ -1,0 +1,110 @@
+.layouts-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow: auto;
+}
+
+.layouts-detail__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.layouts-detail__app {
+  margin-top: 4px;
+  color: var(--text-2);
+}
+
+.layouts-detail__appname {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.layouts-detail__win {
+  padding-left: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.layouts-warning {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--text-2);
+}
+
+.layouts-confirm {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.layouts-confirm__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px 8px;
+  font-size: 12px;
+}
+
+.layouts-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.layouts-apps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 260px;
+}
+
+.layouts-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.layouts-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 8px;
+  border-radius: 10px;
+  background: var(--hover);
+  font-size: 12px;
+}
+
+.layouts-chip button {
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.layouts-err {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.layouts-name {
+  max-width: 220px;
+}
+
+.layouts-msg {
+  margin-bottom: 8px;
+}

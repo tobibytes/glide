@@ -1,0 +1,171 @@
+/* fileindex feature: Search Files view, preview pane, status, settings. */
+.fileindex-search {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.fileindex-row .row__main {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.fileindex-row {
+  height: 44px;
+}
+
+.fileindex-row .row__subtitle {
+  font-size: 11.5px;
+  max-width: 100%;
+}
+
+.fileindex-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.fileindex-preview__thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 150px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.fileindex-preview__thumb img {
+  max-width: 128px;
+  max-height: 128px;
+  object-fit: contain;
+}
+
+.fileindex-preview__glyph {
+  font-size: 48px;
+  color: var(--text-3);
+}
+
+.fileindex-preview__text {
+  margin: 0;
+  max-height: 190px;
+  overflow: hidden;
+  padding: var(--s2) var(--s3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.fileindex-preview__more {
+  color: var(--text-3);
+}
+
+.fileindex-preview__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.fileindex-preview__meta,
+.fileindex-status {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.fileindex-preview__meta dt,
+.fileindex-status dt {
+  color: var(--text-3);
+}
+
+.fileindex-preview__meta dd,
+.fileindex-status dd {
+  margin: 0;
+  color: var(--text);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fileindex-preview__meta dd.fileindex-preview__path {
+  text-align: left;
+  white-space: normal;
+  word-break: break-all;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.fileindex-preview__missing {
+  color: var(--danger);
+}
+
+.fileindex-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--s3);
+  padding: 6px 12px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.fileindex-footer__keys {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.fileindex-status {
+  padding: var(--s3) var(--s4);
+  font-size: 12px;
+}
+
+.fileindex-status__row {
+  display: contents;
+}
+
+.fileindex-settings__status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--s3);
+  padding: var(--s3) var(--s4);
+}
+
+.fileindex-settings__status .fileindex-status {
+  width: 100%;
+  padding: 0;
+}
+
+.fileindex-settings__none {
+  color: var(--text-3);
+}
+
+/* Long scope paths must ellipsize instead of widening the row. */
+.fileindex-settings .row__control:has(.list-edit) {
+  flex: 1 1 60%;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.fileindex-settings .list-edit,
+.fileindex-settings .list-edit__item span {
+  min-width: 0;
+}
+
+.fileindex-settings .list-edit__item span {
+  direction: rtl;
+  text-align: left;
+}

@@ -1,0 +1,18 @@
+.convert-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+
+.convert-examples code {
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  background: var(--hover);
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.convert-currency {
+  width: 72px;
+  text-transform: uppercase;
+}

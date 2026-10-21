@@ -1,0 +1,11 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "rc-colors",
+  "title": "Color Grid",
+  "description": "A Raycast-style Grid with sections, colours and emoji",
+  "icon": "🎨",
+  "author": "glide",
+  "license": "MIT",
+  "commands": [{ "name": "color-grid", "title": "Show Color Grid", "description": "Browse colours in a grid", "mode": "view" }],
+  "dependencies": { "@raycast/api": "^1.80.0" }
+}

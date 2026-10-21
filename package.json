@@ -1,0 +1,53 @@
+{
+  "name": "glide",
+  "version": "0.2.0",
+  "private": true,
+  "description": "A keyboard-first macOS launcher with a Shortcuts-style workflow builder, automations, an AI agent and vim keys.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tobibytes/glide.git"
+  },
+  "homepage": "https://github.com/tobibytes/glide#readme",
+  "main": "dist/main/index.cjs",
+  "type": "module",
+  "scripts": {
+    "build:helper": "node scripts/build-helper.mjs",
+    "build:main": "node scripts/build-main.mjs && node scripts/build-fileindex-worker.mjs",
+    "build:renderer": "vite build",
+    "build": "pnpm build:helper && pnpm build:main && pnpm build:renderer",
+    "dev": "node scripts/dev.mjs",
+    "start": "pnpm build && electron .",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:e2e": "pnpm build && node scripts/e2e.mjs",
+    "package": "pnpm build && node scripts/package.mjs",
+    "install:app": "pnpm build && node scripts/package.mjs --install",
+    "release": "pnpm build && node scripts/package.mjs --zip",
+    "notarize": "node scripts/notarize.mjs --zip"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^44.9.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
+  },
+  "productName": "Glide"
+}

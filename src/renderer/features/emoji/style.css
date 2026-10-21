@@ -1,0 +1,92 @@
+.emoji {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 440px;
+  min-height: 0;
+}
+
+.emoji__grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 10px 8px;
+  overscroll-behavior: contain;
+}
+
+.emoji__row {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.emoji__cell {
+  height: 48px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  font-size: 30px;
+  line-height: 1;
+  cursor: default;
+  font-family: "Apple Color Emoji", var(--sans);
+  transition: background var(--ease);
+}
+
+.emoji__cell:hover {
+  background: var(--hover);
+}
+
+.emoji__cell--selected,
+.emoji__cell--selected:hover {
+  background: var(--selected);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.emoji__detail {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  min-height: 52px;
+}
+
+.emoji__big {
+  font-size: 30px;
+  font-family: "Apple Color Emoji", var(--sans);
+}
+
+.emoji__meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.emoji__name {
+  font-weight: 500;
+  text-transform: capitalize;
+  color: var(--text);
+}
+
+.emoji__kw {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emoji__keys {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 12px;
+  font-size: 11px;
+  max-width: 330px;
+}
+
+.emoji__keys span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}

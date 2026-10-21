@@ -1,0 +1,35 @@
+{
+  "name": "hacker-news",
+  "version": "1.0.0",
+  "description": "Top stories from Hacker News",
+  "author": "Glide",
+  "license": "MIT",
+  "glide": {
+    "title": "Hacker News",
+    "description": "Browse the current top stories on Hacker News. Fetches from the public Hacker News API when you run it.",
+    "icon": "📰",
+    "commands": [
+      {
+        "name": "top-stories",
+        "title": "Hacker News Top Stories",
+        "description": "Front page of Hacker News",
+        "mode": "view",
+        "keywords": ["hn", "news", "ycombinator"]
+      }
+    ],
+    "preferences": [
+      {
+        "name": "count",
+        "title": "Number of stories",
+        "type": "dropdown",
+        "default": "30",
+        "required": false,
+        "data": [
+          { "value": "15", "title": "15" },
+          { "value": "30", "title": "30" },
+          { "value": "60", "title": "60" }
+        ]
+      }
+    ]
+  }
+}

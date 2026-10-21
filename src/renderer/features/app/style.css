@@ -1,0 +1,70 @@
+/* Updates & App settings page */
+.app-updates__version {
+  color: var(--text-2);
+}
+.app-updates__feed .input {
+  width: 220px;
+}
+.app-updates__buttons {
+  display: flex;
+  gap: var(--s2);
+  align-items: center;
+}
+.app-updates__status {
+  font-weight: 500;
+}
+.app-updates__status--available {
+  color: var(--accent-text);
+}
+.app-updates__status--error {
+  color: var(--danger);
+}
+.app-updates__status--up-to-date {
+  color: var(--success);
+}
+.app-updates__note {
+  margin-bottom: var(--s4);
+  padding: var(--s2) var(--s3);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 12px;
+  user-select: text;
+  word-break: break-all;
+}
+
+/* HUD window (route app/hud): fully transparent page, one centered pill. */
+html.app-hud-root,
+html.app-hud-root body,
+html.app-hud-root #root {
+  background: transparent !important;
+  height: 100%;
+}
+.app-hud {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.app-hud__pill {
+  max-width: 244px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: rgba(28, 28, 32, 0.86);
+  color: #f4f4f6;
+  font: 500 14px/1.2 var(--sans);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  opacity: 0;
+  transform: translateY(6px) scale(0.98);
+  transition:
+    opacity 180ms ease-out,
+    transform 180ms ease-out;
+}
+.app-hud__pill--on {
+  opacity: 1;
+  transform: none;
+}

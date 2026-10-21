@@ -1,0 +1,7 @@
+.keyboard-perm--ok {
+  color: var(--success);
+  font-weight: 500;
+}
+.keyboard-status--error {
+  color: var(--danger);
+}

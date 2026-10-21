@@ -1,0 +1,156 @@
+.sysmon-view {
+  display: flex;
+  flex-direction: column;
+  height: 452px;
+  min-height: 0;
+}
+
+.sysmon-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 8px 12px 2px;
+  flex: 0 0 auto;
+}
+
+.sysmon-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2, var(--hover));
+  border: 1px solid var(--border);
+  min-width: 0;
+}
+
+.sysmon-card header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.sysmon-card header strong {
+  font-size: 18px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.sysmon-card footer {
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sysmon-spark {
+  width: 100%;
+  height: 28px;
+  display: block;
+}
+
+.sysmon-spark__line {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.sysmon-spark__area {
+  fill: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.sysmon-spark.is-tx .sysmon-spark__line {
+  stroke: var(--warning, #d9a400);
+}
+
+.sysmon-spark.is-tx .sysmon-spark__area {
+  fill: color-mix(in srgb, var(--warning, #d9a400) 16%, transparent);
+}
+
+.sysmon-net {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+}
+
+.sysmon-net .sysmon-spark {
+  height: 14px;
+}
+
+.sysmon-cores {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 18px;
+}
+
+.sysmon-cores > span {
+  flex: 1 1 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  background: var(--hover);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.sysmon-cores > span > span {
+  display: block;
+  width: 100%;
+  background: var(--accent);
+}
+
+.sysmon-cores > span.is-mid > span,
+.sysmon-meter.is-mid > span {
+  background: var(--warning, #d9a400);
+}
+
+.sysmon-cores > span.is-high > span,
+.sysmon-meter.is-high > span {
+  background: var(--danger);
+}
+
+.sysmon-line {
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.sysmon-line .mono {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.sysmon-meter {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--hover);
+  overflow: hidden;
+}
+
+.sysmon-meter > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.sysmon-dim {
+  color: var(--text-3);
+}
+
+.sysmon-metric {
+  flex: 0 0 64px;
+  text-align: right;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sysmon-view .navlist__items {
+  --list-pad: 2px 8px 8px;
+}

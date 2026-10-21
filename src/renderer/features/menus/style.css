@@ -1,0 +1,13 @@
+.menus-status {
+  padding: var(--s4) var(--s5);
+  color: var(--text-2);
+}
+.menus-status--error {
+  color: var(--danger);
+}
+.menus-row--disabled .row__title,
+.menus-row--disabled .row__subtitle,
+.menus-row--disabled .kbd-group,
+.menus-row--disabled .icon {
+  opacity: 0.45;
+}

@@ -1,0 +1,7 @@
+{
+  "name": "@glide/api",
+  "version": "0.1.0",
+  "description": "Type declarations for Glide extensions. The implementation is provided by Glide at run time.",
+  "types": "index.d.ts",
+  "private": true
+}

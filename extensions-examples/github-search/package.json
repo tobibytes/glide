@@ -1,0 +1,31 @@
+{
+  "name": "github-search",
+  "version": "1.0.0",
+  "description": "Search GitHub repositories",
+  "author": "Glide",
+  "license": "MIT",
+  "glide": {
+    "title": "GitHub Search",
+    "description": "Search public GitHub repositories as you type. Queries go to api.github.com only while you use the command.",
+    "icon": "🐙",
+    "commands": [
+      {
+        "name": "search-repositories",
+        "title": "Search GitHub Repositories",
+        "description": "Search public repositories",
+        "mode": "view",
+        "keywords": ["github", "repo", "git", "code"],
+        "arguments": [{ "name": "query", "placeholder": "Query", "required": false }]
+      }
+    ],
+    "preferences": [
+      {
+        "name": "token",
+        "title": "Personal access token",
+        "description": "Optional. Raises the API rate limit; no scopes are needed.",
+        "type": "password",
+        "required": false
+      }
+    ]
+  }
+}

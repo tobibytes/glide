@@ -1,0 +1,14 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "rc-notes",
+  "title": "Quick Notes",
+  "description": "A Raycast-style Form with validation, LocalStorage and toasts",
+  "icon": "📝",
+  "author": "glide",
+  "license": "MIT",
+  "commands": [
+    { "name": "new-note", "title": "New Quick Note", "description": "Write a note with a form", "mode": "view" },
+    { "name": "list-notes", "title": "List Quick Notes", "description": "Notes saved with New Quick Note", "mode": "view" }
+  ],
+  "dependencies": { "@raycast/api": "^1.80.0", "@raycast/utils": "^1.16.0" }
+}

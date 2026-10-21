@@ -1,0 +1,34 @@
+{
+  "name": "timezones",
+  "version": "1.0.0",
+  "description": "World clocks",
+  "author": "Glide",
+  "license": "MIT",
+  "glide": {
+    "title": "World Clocks",
+    "description": "The current time in cities around the world. Type a city to filter.",
+    "icon": "🌍",
+    "commands": [
+      {
+        "name": "world-clocks",
+        "title": "World Clocks",
+        "description": "Current time in major cities",
+        "mode": "view",
+        "keywords": ["time", "timezone", "clock", "utc"]
+      }
+    ],
+    "preferences": [
+      {
+        "name": "hourCycle",
+        "title": "Clock",
+        "type": "dropdown",
+        "default": "h23",
+        "required": false,
+        "data": [
+          { "value": "h23", "title": "24-hour" },
+          { "value": "h12", "title": "12-hour" }
+        ]
+      }
+    ]
+  }
+}

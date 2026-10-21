@@ -1,0 +1,133 @@
+// Generates src/renderer/features/emoji/data.ts (dev-time only; the app ships the generated file).
+//
+// Inputs:
+//   - Unicode emoji-test.txt (groups, order, skin-tone variants)   --test <path>  (downloaded when omitted)
+//   - CLDR annotations en.xml (search keywords)                     --cldr <path>  (downloaded when omitted; optional)
+//   - macOS CoreEmoji AppleName.strings (Apple's display names)     read when present
+//
+// Usage: node scripts/dev/gen-emoji.mjs [--test emoji-test.txt] [--cldr en.xml] [--out file]
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const args = process.argv.slice(2);
+const arg = (name) => {
+  const i = args.indexOf(`--${name}`);
+  return i >= 0 ? args[i + 1] : undefined;
+};
+const OUT = arg("out") ?? path.join(root, "src/renderer/features/emoji/data.ts");
+const TEST_URL = "https://unicode.org/Public/emoji/15.1/emoji-test.txt";
+const CLDR_URL = "https://raw.githubusercontent.com/unicode-org/cldr/release-44/common/annotations/en.xml";
+const APPLE_NAMES = "/System/Library/PrivateFrameworks/CoreEmoji.framework/Versions/A/Resources/en.lproj/AppleName.strings";
+
+async function load(file, url, required) {
+  if (file) return readFileSync(file, "utf8");
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`${res.status}`);
+    return await res.text();
+  } catch (err) {
+    if (required) throw new Error(`Could not download ${url} (${err.message}); pass a local copy with --test`);
+    console.warn(`skipping ${url}: ${err.message}`);
+    return "";
+  }
+}
+
+function appleNames() {
+  if (!existsSync(APPLE_NAMES)) return {};
+  try {
+    return JSON.parse(execFileSync("plutil", ["-convert", "json", "-o", "-", APPLE_NAMES], { encoding: "utf8", maxBuffer: 16 << 20 }));
+  } catch {
+    return {};
+  }
+}
+
+function cldrKeywords(xml) {
+  const map = new Map();
+  for (const m of xml.matchAll(/<annotation cp="([^"]+)">([^<]+)<\/annotation>/g)) {
+    map.set(m[1], m[2].split("|").map((s) => s.trim().toLowerCase()).filter(Boolean));
+  }
+  return map;
+}
+
+const GROUP_IDS = {
+  "Smileys & Emotion": "smileys",
+  "People & Body": "people",
+  "Animals & Nature": "nature",
+  "Food & Drink": "food",
+  "Travel & Places": "travel",
+  Activities: "activities",
+  Objects: "objects",
+  Symbols: "symbols",
+  Flags: "flags",
+};
+const TONES = ["1F3FB", "1F3FC", "1F3FD", "1F3FE", "1F3FF"];
+const strip = (s) => s.replace(/️/g, "");
+const fromHex = (hex) => String.fromCodePoint(...hex.trim().split(/\s+/).map((h) => parseInt(h, 16)));
+
+/** The simple rule the runtime applies: put the modifier after the first code point (dropping a following VS16). */
+function simpleTone(base, modifier) {
+  const cps = [...base];
+  const rest = cps.slice(1);
+  if (rest[0] === "️") rest.shift();
+  return cps[0] + modifier + rest.join("");
+}
+
+const test = await load(arg("test"), TEST_URL, true);
+const cldr = cldrKeywords(await load(arg("cldr"), CLDR_URL, false));
+const apple = appleNames();
+
+const entries = [];
+const byName = new Map();
+let group = "";
+for (const line of test.split("\n")) {
+  const g = line.match(/^# group: (.+)$/);
+  if (g) {
+    group = g[1].trim();
+    continue;
+  }
+  const m = line.match(/^([0-9A-F ]+);\s*fully-qualified\s*#\s*\S+\s+E[\d.]+\s+(.+)$/);
+  if (!m || !GROUP_IDS[group]) continue;
+  const hex = m[1].trim();
+  const name = m[2].trim();
+  const char = fromHex(hex);
+  const toneIdx = name.indexOf(": ");
+  if (TONES.some((t) => hex.includes(t))) {
+    // Skin-tone variant: remember the light single-tone form for its base.
+    const baseName = name.slice(0, toneIdx);
+    const tones = name.slice(toneIdx + 2);
+    const base = byName.get(baseName);
+    if (base && tones === "light skin tone") base.light = char;
+    continue;
+  }
+  const entry = { char, name, group: GROUP_IDS[group], light: null };
+  entries.push(entry);
+  byName.set(name, entry);
+}
+
+const groupOrder = Object.values(GROUP_IDS);
+const lines = entries.map((e) => {
+  const appleName = apple[e.char] ?? apple[strip(e.char)];
+  const display = (appleName || e.name).replace(/\|/g, "/");
+  const nameWords = new Set(display.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean));
+  const kw = (cldr.get(e.char) ?? cldr.get(strip(e.char)) ?? [])
+    .flatMap((k) => k.split(/\s+/))
+    .filter((k) => k && !nameWords.has(k) && !/[|;]/.test(k));
+  if (appleName && appleName.toLowerCase() !== e.name.toLowerCase()) kw.push(...e.name.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w && !nameWords.has(w)));
+  const uniq = [...new Set(kw)].slice(0, 12).join(" ");
+  let skin = "";
+  if (e.light) skin = e.light === simpleTone(e.char, "\u{1F3FB}") ? "1" : e.light;
+  return [e.char, display, uniq, groupOrder.indexOf(e.group), skin].join("|");
+});
+
+const out = `/* eslint-disable */
+// GENERATED by scripts/dev/gen-emoji.mjs — do not edit by hand.
+// Sources: Unicode emoji-test.txt 15.1 (order, groups, skin tones), CLDR 44 annotations (keywords),
+// macOS CoreEmoji AppleName.strings (display names). ${entries.length} base emoji, no skin-tone duplicates.
+// Row format: char|name|keywords|categoryIndex|skin  (skin: "" none, "1" modifier after first code point, else light-tone form).
+export const EMOJI_ROWS = ${JSON.stringify(lines.join("\n"))};
+`;
+writeFileSync(OUT, out);
+console.log(`wrote ${entries.length} emoji to ${path.relative(root, OUT)} (${(out.length / 1024).toFixed(0)} KB)`);

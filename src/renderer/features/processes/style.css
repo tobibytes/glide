@@ -1,0 +1,74 @@
+.processes-view {
+  display: flex;
+  flex-direction: column;
+  height: 452px;
+  min-height: 0;
+}
+
+.processes-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: 6px 16px 2px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.processes-toolbar__hint {
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.processes-metric {
+  flex: 0 0 56px;
+  text-align: right;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.processes-metric--mem {
+  flex-basis: 72px;
+  color: var(--text-2);
+}
+
+.processes-port {
+  color: var(--accent-text, var(--accent));
+  font-weight: 600;
+}
+
+.processes-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  margin: 4px 8px 4px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.processes-confirm__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.processes-confirm__text span {
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.processes-confirm__keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
