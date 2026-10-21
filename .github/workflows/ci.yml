@@ -30,10 +30,11 @@ jobs:
   quality:
     runs-on: macos-latest
     timeout-minutes: 40
-    env:
-      GLIDE_TEST_TMP: ${{ runner.temp }}/glide-tests
-      GLIDE_E2E_TMP: ${{ runner.temp }}
     steps:
+      # runner.temp is not available to job-level env, so export it from a step.
+      - run: |
+          echo "GLIDE_TEST_TMP=$RUNNER_TEMP/glide-tests" >> "$GITHUB_ENV"
+          echo "GLIDE_E2E_TMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
@@ -67,9 +68,8 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 20
     continue-on-error: true
-    env:
-      GLIDE_TEST_TMP: ${{ runner.temp }}/glide-tests
     steps:
+      - run: echo "GLIDE_TEST_TMP=$RUNNER_TEMP/glide-tests" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
