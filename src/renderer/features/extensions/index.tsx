@@ -5,6 +5,7 @@ import { RunView } from "./RunView";
 import { StoreView } from "./StoreView";
 import { ArgumentsView, InstallUrlView, ManageView, PreferencesView, RaycastImportView } from "./ManageViews";
 import { SettingsPage } from "./SettingsPage";
+import { CreateEntryView, OAuthView } from "./CompatViews";
 import "./style.css";
 
 /** Frameless HUD window ("#/extensions/hud/<text>") shown by showHUD and copy actions. */
@@ -30,6 +31,8 @@ export const ui: FeatureUI = {
     arguments: ArgumentsView,
     installUrl: InstallUrlView,
     importRaycast: RaycastImportView,
+    createEntry: CreateEntryView,
+    oauth: OAuthView,
   },
   settingsPage: { title: "Extensions", icon: "🧩", component: SettingsPage },
   windows: { hud: Hud },

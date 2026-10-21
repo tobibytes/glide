@@ -12,3 +12,4 @@ Import one: launcher → Manage Extensions → **Import Raycast Extension Folder
 | `rc-notes` | Form (text, textarea, checkbox, dropdown, date, tags), useForm validation, Action.SubmitForm, LocalStorage, Toast updates, confirmAlert |
 | `rc-colors` | Grid (sections, colour + emoji content, columns), useNavigation, Cache |
 | `rc-fetch` | useFetch against a URL from preferences (the e2e test points it at a local 127.0.0.1 server), isLoading, onSearchTextChange, pagination |
+| `rc-compat` | MenuBarExtra (sections, submenu, separator, `interval`), a no-view `interval` command (background launches), command-scoped preferences, ActionPanel.Submenu, Quick Look, PickDate, toast actions, CreateSnippet/CreateQuicklink, `selectedItemId`, Form `enableDrafts` + field refs, `useAI`, OAuthService/PKCE + `withAccessToken`, getFrontmostApplication / getSelectedFinderItems |

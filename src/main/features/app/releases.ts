@@ -1,9 +1,21 @@
 /** GitHub Releases as an update feed: feed parsing, the API call and asset selection. */
 import { isNewer, normaliseVersion } from "./semver";
 
-export const ZIP_ASSET = "Glide-darwin-arm64.zip";
+export type ReleaseArch = "arm64" | "x64" | "universal";
+export const zipAssetName = (arch: ReleaseArch): string => `Glide-darwin-${arch}.zip`;
+export const ZIP_ASSET = zipAssetName("arm64");
 export const SHA_ASSET = `${ZIP_ASSET}.sha256`;
 export const GITHUB_API = "https://api.github.com";
+
+/**
+ * Asset preference for a running process.arch: the native build first, then the universal one.
+ * Unknown archs get only the universal build (it is the only one that could run there).
+ */
+export function assetPreference(processArch: string): ReleaseArch[] {
+  if (processArch === "arm64") return ["arm64", "universal"];
+  if (processArch === "x64") return ["x64", "universal"];
+  return ["universal"];
+}
 
 export interface ReleaseAsset {
   name: string;
@@ -58,17 +70,24 @@ export function parseRelease(raw: unknown): ReleaseInfo | null {
   return { version, tag, name: str(raw.name) || tag, notes: str(raw.body), pageUrl: str(raw.html_url), assets };
 }
 
-/** The zip + checksum pair, or null when the release does not carry both. */
-export function selectAssets(release: ReleaseInfo): { zip: ReleaseAsset; sha256: ReleaseAsset } | null {
-  const zip = release.assets.find((a) => a.name === ZIP_ASSET);
-  const sha256 = release.assets.find((a) => a.name === SHA_ASSET);
-  return zip && sha256 ? { zip, sha256 } : null;
+/**
+ * The zip + checksum pair for this arch (exact names, native build before universal), or null when
+ * the release carries no complete pair that can run here.
+ */
+export function selectAssets(release: ReleaseInfo, processArch: string = process.arch): { zip: ReleaseAsset; sha256: ReleaseAsset } | null {
+  for (const arch of assetPreference(processArch)) {
+    const name = zipAssetName(arch);
+    const zip = release.assets.find((a) => a.name === name);
+    const sha256 = release.assets.find((a) => a.name === `${name}.sha256`);
+    if (zip && sha256) return { zip, sha256 };
+  }
+  return null;
 }
 
-/** An update is offered only when the release is newer and has both assets. */
-export function pickUpdate(release: ReleaseInfo | null, currentVersion: string): UpdateCandidate | null {
+/** An update is offered only when the release is newer and has a complete asset pair for this arch. */
+export function pickUpdate(release: ReleaseInfo | null, currentVersion: string, processArch: string = process.arch): UpdateCandidate | null {
   if (!release || !isNewer(release.version, currentVersion)) return null;
-  const assets = selectAssets(release);
+  const assets = selectAssets(release, processArch);
   return assets ? { release, ...assets } : null;
 }
 

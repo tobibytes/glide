@@ -33,16 +33,27 @@ export function Detail({ s }: { s: ClipSummary }) {
 
   const meta: Array<[string, string]> = [["Content type", TYPE_LABEL[s.type]]];
   if (s.source?.name) meta.push(["Source", s.source.name]);
+  if (s.type === "link" && s.domain) meta.push(["Domain", s.domain]);
   meta.push(["Copied", new Date(s.lastCopiedAt).toLocaleString()]);
   if (s.count > 1) meta.push(["First copied", new Date(s.createdAt).toLocaleString()], ["Times copied", String(s.count)]);
-  if (s.type === "image" && s.image) meta.push(["Dimensions", `${s.image.width} × ${s.image.height}`], ["Size", formatBytes(s.image.bytes)]);
+  if (s.type === "image" && s.image) meta.push(["Dimensions", `${s.image.width} × ${s.image.height} px`], ["Size", formatBytes(s.image.bytes)]);
   else if (s.type === "file") meta.push(["Files", String(s.files?.length ?? 0)]);
   else meta.push(["Characters", s.chars.toLocaleString()], ["Words", s.words.toLocaleString()]);
 
   return (
     <div className="clipboard-detail">
       <div className="clipboard-detail__body">
-        {s.type === "image" && (img ? <img className="clipboard-detail__image" src={img} alt={s.title} /> : <div className="clipboard-detail__loading">Loading image…</div>)}
+        {s.type === "image" && (
+          <div className="clipboard-detail__imagewrap">
+            {img ? <img className="clipboard-detail__image" src={img} alt={s.title} /> : <div className="clipboard-detail__loading">Loading image…</div>}
+          </div>
+        )}
+        {s.type === "image" && s.ocr && (
+          <div className="clipboard-detail__ocr">
+            <div className="clipboard-detail__ocrhead">Recognized text</div>
+            <pre className="clipboard-detail__text clipboard-detail__text--small">{s.ocr}</pre>
+          </div>
+        )}
         {s.type === "color" && (
           <div className="clipboard-detail__color">
             <div className="clipboard-detail__swatch" style={{ background: s.preview.trim() }} />
@@ -54,7 +65,12 @@ export function Detail({ s }: { s: ClipSummary }) {
             {(s.files ?? []).map((f) => (
               <li key={f}>
                 <Icon icon={{ kind: "file", value: f }} size="lg" fallback="▤" />
-                <span title={f}>{f}</span>
+                <span className="clipboard-detail__filetext">
+                  <span className="clipboard-detail__filename">{f.split("/").filter(Boolean).pop() ?? f}</span>
+                  <span className="clipboard-detail__filepath" title={f}>
+                    {f}
+                  </span>
+                </span>
               </li>
             ))}
           </ul>

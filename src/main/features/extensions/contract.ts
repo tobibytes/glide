@@ -67,7 +67,9 @@ export interface PreferencesState {
   name: string;
   title: string;
   preferences: PreferenceManifest[];
+  /** Values keyed by prefKey (command-scoped preferences are "<command>/<name>"). */
   values: Record<string, string | boolean>;
+  commands?: Array<{ name: string; title: string }>;
 }
 
 /** Event payloads (window.glide.onFeatureEvent with feature "extensions"). */

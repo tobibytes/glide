@@ -16,14 +16,21 @@ export interface CommandManifest {
   title: string;
   subtitle?: string;
   description?: string;
-  mode: "view" | "no-view";
+  /** "menu-bar": a Raycast MenuBarExtra command shown as a status item instead of a launcher view. */
+  mode: CommandMode;
   arguments: ArgumentManifest[];
   keywords: string[];
   /** Entry file relative to the extension root. */
   entry: string;
   /** Command icon (Raycast commands may have their own). */
   icon?: string;
+  /** Raycast `interval` (e.g. "1m"): background refresh period of no-view and menu-bar commands, in ms. */
+  intervalMs?: number;
+  /** The manifest's interval text, for display. */
+  interval?: string;
 }
+
+export type CommandMode = "view" | "no-view" | "menu-bar";
 
 export interface PreferenceManifest {
   name: string;
@@ -147,24 +154,64 @@ export function preferencesFor(manifest: ExtensionManifest, command?: string): P
   return command === undefined ? manifest.preferences : manifest.preferences.filter((p) => !p.command || p.command === command);
 }
 
+/**
+ * Storage key of a preference. Command-scoped preferences are namespaced ("<command>/<name>") so two
+ * commands (or a command and the extension) can declare the same name without sharing a value.
+ */
+export function prefKey(p: Pick<PreferenceManifest, "name" | "command">): string {
+  return p.command ? `${p.command}/${p.name}` : p.name;
+}
+
+/** Saved value of a preference; command-scoped values saved before namespacing are still read. */
+function savedValue(p: PreferenceManifest, saved: Record<string, unknown>): unknown {
+  const v = saved[prefKey(p)];
+  return v === undefined && p.command ? saved[p.name] : v;
+}
+
+function valueOf(p: PreferenceManifest, saved: Record<string, unknown>): string | boolean {
+  const v = savedValue(p, saved);
+  if (p.type === "checkbox") return typeof v === "boolean" ? v : ((p.default as boolean | undefined) ?? false);
+  return typeof v === "string" ? v : ((p.default as string | undefined) ?? "");
+}
+
 /** Required preferences with no saved value and no default. */
 export function missingPreferences(manifest: ExtensionManifest, saved: Record<string, unknown>, command?: string): PreferenceManifest[] {
   return preferencesFor(manifest, command).filter((p) => {
     if (!p.required) return false;
-    const v = saved[p.name] ?? p.default;
+    const v = savedValue(p, saved) ?? p.default;
     return v === undefined || v === "";
   });
 }
 
-/** Saved values over defaults (checkbox defaults to false, text to ""). */
+/**
+ * What a command sees (getPreferenceValues): saved values over defaults, keyed by preference name;
+ * a command-scoped preference wins over an extension preference with the same name.
+ * Without a command, every preference keyed by prefKey (the preferences form).
+ */
 export function resolvePreferences(manifest: ExtensionManifest, saved: Record<string, unknown>, command?: string): Record<string, string | boolean> {
   const out: Record<string, string | boolean> = {};
-  for (const p of preferencesFor(manifest, command)) {
-    const v = saved[p.name];
-    if (p.type === "checkbox") out[p.name] = typeof v === "boolean" ? v : (p.default as boolean | undefined) ?? false;
-    else out[p.name] = typeof v === "string" ? v : ((p.default as string | undefined) ?? "");
+  if (command === undefined) {
+    for (const p of manifest.preferences) out[prefKey(p)] = valueOf(p, saved);
+    return out;
   }
+  const visible = preferencesFor(manifest, command);
+  for (const p of visible.filter((x) => !x.command)) out[p.name] = valueOf(p, saved);
+  for (const p of visible.filter((x) => x.command)) out[p.name] = valueOf(p, saved);
   return out;
+}
+
+const INTERVAL_RE = /^(\d+)(s|m|h|d)$/;
+const UNIT_MS: Record<string, number> = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
+/** Raycast's lower bound for `interval`. */
+export const MIN_INTERVAL_MS = 10_000;
+
+/** Raycast `interval` ("90s", "5m", "12h", "1d") → ms; null when malformed or below 10 s. */
+export function parseInterval(v: unknown): number | null {
+  if (typeof v !== "string") return null;
+  const m = INTERVAL_RE.exec(v.trim());
+  if (!m) return null;
+  const ms = Number(m[1]) * UNIT_MS[m[2]];
+  return ms >= MIN_INTERVAL_MS ? ms : null;
 }
 
 /** Map the launcher's single argument string onto declared arguments: one per word, the last takes the rest. */

@@ -1,6 +1,6 @@
 import { ipcMain } from "electron";
-import { IPC } from "@shared/ipc";
-import type { Quicklink, ScoredItem, SearchItem, Settings, Snippet, Workflow } from "@shared/types";
+import { IPC, type ExecuteResult } from "@shared/ipc";
+import { switchesApp, type Quicklink, type ScoredItem, type SearchItem, type Settings, type Snippet, type Workflow } from "@shared/types";
 import type { SearchEngine } from "@engine/api";
 import type { Executor } from "./execute";
 import type { AppSource } from "./sources/apps";
@@ -9,7 +9,9 @@ import { FILE_SOURCE_ID, type FileSource } from "./sources/files";
 import type { Store } from "./store";
 import type { Windows } from "./window";
 import type { WorkflowRuntime } from "./workflows/runtime";
-import { ACTION_SPECS } from "./workflows/specs";
+import { allActionSpecs } from "./workflows/feature-actions";
+import type { RunOptions } from "@shared/search";
+import { didYouMean } from "@shared/did-you-mean";
 
 export interface IpcDeps {
   store: Store;
@@ -48,9 +50,8 @@ import type { FeatureHost } from "./features/host";
 export function registerIpc(deps: IpcDeps): void {
   const { store, engine, apps, files, executor, windows, runtime } = deps;
 
-  ipcMain.handle(IPC.SEARCH_QUERY, async (_e, query: unknown) => {
-    const q = str(query);
-    setLastQuery(q);
+  // The launcher's search path; FeatureContext.search (via features.provideSearch) uses the same one.
+  const runSearch = async (q: string, opts: RunOptions = {}) => {
     const settings = store.getSettings();
     const disabled = new Set(settings.disabledSources);
     const dynamicItems: ScoredItem[] = [];
@@ -65,19 +66,45 @@ export function registerIpc(deps: IpcDeps): void {
       files.cancel();
     }
     if (deps.features) dynamicItems.push(...(await deps.features.dynamicItems(q)));
-    return engine.search(q, { dynamicItems });
+    const cap = opts.sectionLimit && opts.sectionLimit > settings.sectionLimit ? Math.min(Math.floor(opts.sectionLimit), 500) : 0;
+    if (!cap) return engine.search(q, { dynamicItems });
+    // Synchronous configure → search → restore: no other search can interleave.
+    engine.configure({ sectionLimit: cap });
+    try {
+      return engine.search(q, { dynamicItems });
+    } finally {
+      engine.configure({ sectionLimit: settings.sectionLimit });
+    }
+  };
+  ipcMain.handle(IPC.SEARCH_QUERY, async (_e, query: unknown) => {
+    const q = str(query);
+    setLastQuery(q);
+    return runSearch(q);
   });
+  deps.features?.provideSearch({ run: runSearch, find: (id) => executor.findItem?.(id), suggest: (q) => didYouMean(q, (v) => engine.search(v)) });
+
+  /**
+   * Keep-open mode: paste, confirmations and workflows hide the launcher so they act on the app
+   * behind it; bring it back afterwards unless the command switched to another app.
+   */
+  const keepOpen = async (item: ScoredItem, actionId: string | undefined, run: () => Promise<ExecuteResult>): Promise<ExecuteResult> => {
+    const wasVisible = windows.isLauncherVisible();
+    const result = await run();
+    const stay = store.getSettings().keepOpenAfterRun && !switchesApp(item.item, actionId) && !result.navigate;
+    if (stay && wasVisible && !windows.isLauncherVisible()) windows.showLauncher();
+    return stay ? { ...result, hide: false } : result;
+  };
 
   ipcMain.handle(IPC.SEARCH_EXECUTE, (_e, item: unknown, modifiers: unknown) => {
     if (!isScoredItem(item)) return { ok: false, error: "Invalid item" };
-    return executor.execute(item, isRecord(modifiers) ? modifiers : undefined);
+    return keepOpen(item, undefined, () => executor.execute(item, isRecord(modifiers) ? modifiers : undefined));
   });
 
   ipcMain.handle(IPC.SEARCH_ACTIONS, (_e, item: unknown) => (isSearchItem(item) ? executor.actionsFor(item) : []));
 
   ipcMain.handle(IPC.SEARCH_RUN_ACTION, (_e, item: unknown, actionId: unknown) => {
     if (!isScoredItem(item) || typeof actionId !== "string") return { ok: false, error: "Invalid action" };
-    return executor.runAction(item, actionId);
+    return keepOpen(item, actionId, () => executor.runAction(item, actionId));
   });
 
   ipcMain.handle(IPC.DATA_GET, () => store.getData());
@@ -94,7 +121,7 @@ export function registerIpc(deps: IpcDeps): void {
     if (!wf) throw new Error("Workflow not found");
     return runtime.run(wf, str(input));
   });
-  ipcMain.handle(IPC.WORKFLOW_ACTION_SPECS, () => ACTION_SPECS);
+  ipcMain.handle(IPC.WORKFLOW_ACTION_SPECS, () => allActionSpecs());
 
   ipcMain.handle(IPC.QUICKLINK_SAVE, (_e, q: unknown) => {
     if (!isQuicklink(q)) throw new Error("Invalid quicklink");

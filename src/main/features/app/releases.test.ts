@@ -36,14 +36,14 @@ describe("release selection", () => {
   it("selects the arm64 zip and its checksum by exact name", () => {
     const r = parseRelease(gh())!;
     expect(r.version).toBe("0.2.0");
-    expect(selectAssets(r)).toEqual({ zip: { name: ZIP_ASSET, url: "https://x/arm.zip", size: 10 }, sha256: { name: SHA_ASSET, url: "https://x/arm.zip.sha256", size: undefined } });
+    expect(selectAssets(r, "arm64")).toEqual({ zip: { name: ZIP_ASSET, url: "https://x/arm.zip", size: 10 }, sha256: { name: SHA_ASSET, url: "https://x/arm.zip.sha256", size: undefined } });
   });
   it("offers an update only when newer and complete", () => {
-    expect(pickUpdate(parseRelease(gh()), "0.1.0")?.release.version).toBe("0.2.0");
+    expect(pickUpdate(parseRelease(gh()), "0.1.0", "arm64")?.release.version).toBe("0.2.0");
     expect(pickUpdate(parseRelease(gh()), "0.2.0")).toBeNull();
     expect(pickUpdate(parseRelease(gh()), "0.10.0")).toBeNull();
     const noSha = gh({ assets: [{ name: ZIP_ASSET, browser_download_url: "https://x/a.zip" }] });
-    expect(pickUpdate(parseRelease(noSha), "0.1.0")).toBeNull();
+    expect(pickUpdate(parseRelease(noSha), "0.1.0", "arm64")).toBeNull();
   });
   it("ignores drafts, prereleases and non-semver tags", () => {
     expect(parseRelease(gh({ draft: true }))).toBeNull();

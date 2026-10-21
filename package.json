@@ -1,6 +1,6 @@
 {
   "name": "glide",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "A keyboard-first macOS launcher with a Shortcuts-style workflow builder, automations, an AI agent and vim keys.",
   "license": "MIT",
@@ -24,7 +24,16 @@
     "package": "pnpm build && node scripts/package.mjs",
     "install:app": "pnpm build && node scripts/package.mjs --install",
     "release": "pnpm build && node scripts/package.mjs --zip",
-    "notarize": "node scripts/notarize.mjs --zip"
+    "notarize": "node scripts/notarize.mjs --zip",
+    "build:helper:universal": "node scripts/build-helper.mjs --arch universal",
+    "release:universal": "pnpm build && node scripts/package.mjs --arch universal --zip",
+    "test:harness": "node --test \"tests/unit/*.test.mjs\"",
+    "test:e2e:smoke": "node tests/e2e/smoke.mjs",
+    "test:visual": "node scripts/visual-snapshots.mjs",
+    "test:visual:update": "node scripts/visual-snapshots.mjs --update",
+    "test:a11y": "node scripts/a11y-audit.mjs",
+    "test:perf": "node scripts/perf-search.mjs",
+    "test:quality": "pnpm test:harness && pnpm test:e2e:smoke && pnpm test:perf && pnpm test:a11y"
   },
   "devDependencies": {
     "@electron/packager": "^20.3.0",

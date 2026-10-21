@@ -9,11 +9,14 @@ import { sleep } from "./util/exec";
 import type { Windows } from "./window";
 import { pasteFromClipboard, type WorkflowRuntime } from "./workflows/runtime";
 import type { FeatureHost } from "./features/host";
+import { extraActionsFor, quicklinkAction, runExtraAction, snippetAction } from "./quicklinks/execute-hooks";
 
 export interface Executor {
   actionsFor(item: SearchItem): ItemAction[];
   execute(scored: ScoredItem, modifiers?: ExecuteModifiers): Promise<ExecuteResult>;
   runAction(scored: ScoredItem, actionId: string, modifiers?: ExecuteModifiers): Promise<ExecuteResult>;
+  /** Catalogue item by id (FeatureContext.findItem). */
+  findItem?(id: string): SearchItem | undefined;
 }
 
 export interface ExecutorDeps {
@@ -74,6 +77,7 @@ export function createExecutor(deps: ExecutorDeps): Executor {
     const favorites = store.getData().favorites;
     const isFavorite = favorites.includes(item.id);
     const actions = deps.features?.owns(item) ? deps.features.actions(item) : specificActions(item, isFavorite);
+    actions.push(...extraActionsFor(item)); // e.g. "Add as Quicklink" on bookmark rows
     if (!KINDS_WITHOUT_GENERIC_ACTIONS.has(item.kind)) {
       actions.push(
         A("favorite", isFavorite ? "Remove from Favorites" : "Add to Favorites", "⇧⌘F", { icon: isFavorite ? "💔" : "⭐" }),
@@ -165,6 +169,8 @@ export function createExecutor(deps: ExecutorDeps): Executor {
         case "hotkey":
           return navigate(`settings/hotkeys/${encodeURIComponent(item.id)}`);
       }
+      const extra = await runExtraAction(item, actionId);
+      if (extra) return extra;
       if (deps.features?.owns(item)) {
         const primaryFeatureAction = deps.features.actions(item)[0]?.id;
         if (actionId === primaryFeatureAction && !item.data?.noUsage) recordUsage(item);
@@ -186,12 +192,7 @@ export function createExecutor(deps: ExecutorDeps): Executor {
           break;
         case "quicklink": {
           const id = item.id.replace(/^quicklink:/, "");
-          if (actionId === "open") {
-            if (!item.url) return fail("Quicklink has no URL");
-            await shell.openExternal(fillQuery(item.url, argument));
-            return done();
-          }
-          if (actionId === "copyUrl") return copy(item.url ? fillQuery(item.url, argument) : "", "URL");
+          if (actionId === "open" || actionId === "copyUrl") return quicklinkAction(store, item, scored, actionId);
           if (actionId === "edit") return navigate(`settings/quicklinks/${id}`);
           if (actionId === "delete") {
             store.deleteQuicklink(id);
@@ -201,8 +202,8 @@ export function createExecutor(deps: ExecutorDeps): Executor {
         }
         case "snippet": {
           const id = item.id.replace(/^snippet:/, "");
-          if (actionId === "paste") return pasteSnippet(item.text ?? "");
-          if (actionId === "copy") return copy(item.text, "Snippet");
+          if (actionId === "paste") return (await snippetAction(item, "paste", windows.hideLauncher)) ?? pasteSnippet(item.text ?? "");
+          if (actionId === "copy") return (await snippetAction(item, "copy", windows.hideLauncher)) ?? copy(item.text, "Snippet");
           if (actionId === "edit") return navigate(`settings/snippets/${id}`);
           if (actionId === "delete") {
             store.deleteSnippet(id);
@@ -252,5 +253,5 @@ export function createExecutor(deps: ExecutorDeps): Executor {
     return runAction(scored, chosen.id, modifiers);
   };
 
-  return { actionsFor, execute, runAction };
+  return { actionsFor, execute, runAction, findItem: (id) => catalogue.find(id) };
 }

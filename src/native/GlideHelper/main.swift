@@ -55,6 +55,21 @@ func dispatch(_ method: String, _ p: Params) throws -> Any {
     case "calendar.events":
         guard let from = p["from"] as? String, let to = p["to"] as? String else { throw HelperError("Missing from/to") }
         return try CalendarService.events(from: from, to: to)
+    case "finder.selection":
+        return FinderSelection.selection()
+    case "finder.selectionViaAutomation":
+        return FinderSelection.selectionViaAutomation()
+    case "reminders.lists":
+        return try RemindersService.lists()
+    case "reminders.list":
+        return try RemindersService.list(listId: p["listId"] as? String, includeCompleted: (p["includeCompleted"] as? Bool) ?? false)
+    case "reminders.create":
+        return try RemindersService.create(p)
+    case "reminders.complete":
+        guard let id = p["id"] as? String else { throw HelperError("Missing id") }
+        return try RemindersService.complete(id: id, completed: (p["completed"] as? Bool) ?? true)
+    case "wifi.info":
+        return WiFi.info()
     case "color.pick":
         return ColorPicker.pick(timeout: (p["timeoutMs"] as? Double).map { $0 / 1000 } ?? 120)
     case "system.spotlightShortcut":

@@ -143,7 +143,7 @@ export interface Environment {
   extensionName: string;
   extensionTitle: string;
   commandName: string;
-  commandMode: "view" | "no-view";
+  commandMode: "view" | "no-view" | "menu-bar";
   /** Absolute path of the extension's `assets/` folder. */
   assetsPath: string;
   /** Absolute path of the installed extension. */
@@ -168,8 +168,8 @@ export interface CommandContext {
 // Wire model (serialisable)
 // ---------------------------------------------------------------------------
 
-/** Raycast-compatible views add open/showInFinder/trash/submit. */
-export type ActionKind = ActionDescriptor["kind"] | "open" | "showInFinder" | "trash" | "submit";
+/** Raycast-compatible views add open/showInFinder/trash/submit, submenus, date pickers, Quick Look and snippet/quicklink creation. */
+export type ActionKind = ActionDescriptor["kind"] | "open" | "showInFinder" | "trash" | "submit" | "submenu" | "pickDate" | "quickLook" | "createSnippet" | "createQuicklink";
 
 export interface ActionModel {
   /** Unique within one rendered view. */
@@ -195,6 +195,19 @@ export interface ActionModel {
   callback?: string;
   /** copy: the content also carries HTML. */
   html?: string;
+  /** submenu: nested actions (ActionPanel.Submenu), shown as their own ⌘K panel. */
+  children?: ActionModel[];
+  /** pickDate: "date" or "datetime"; `handler` receives the ISO string (or null). */
+  dateType?: "date" | "datetime";
+  /** createSnippet / createQuicklink: the prefilled entry. */
+  snippet?: { name?: string; text: string; keyword?: string };
+  quicklink?: { name?: string; link: string };
+}
+
+/** List.Item `quickLook` (Action.ToggleQuickLook previews it inside the launcher). */
+export interface QuickLookModel {
+  path: string;
+  name?: string;
 }
 
 export interface ListItemModel {
@@ -207,6 +220,7 @@ export interface ListItemModel {
   section?: string;
   detail?: ItemDetail;
   actions: ActionModel[];
+  quickLook?: QuickLookModel;
 }
 
 export interface GridItemModel {
@@ -220,6 +234,7 @@ export interface GridItemModel {
   section?: string;
   accessoryIcon?: IconSource;
   actions: ActionModel[];
+  quickLook?: QuickLookModel;
 }
 
 export interface OptionModel {
@@ -267,6 +282,8 @@ export interface FormFieldModel {
   /** description fields */
   text?: string;
   autoFocus?: boolean;
+  /** reset() target when a restored draft replaced the field's default. */
+  resetTo?: FormValue;
 }
 
 /** Options shared by List and Grid (Raycast-compatible extras are optional). */
@@ -287,13 +304,31 @@ export interface CollectionOptions {
   /** Actions shown when the list is empty. */
   actions?: ActionModel[];
   title?: string;
+  /** Raycast `selectedItemId`: the launcher selects this item whenever the value changes. */
+  selectedItemId?: string;
+}
+
+/** One entry of a MenuBarExtra menu (Item / Section / Submenu / Separator). */
+export interface MenuBarEntryModel {
+  kind: "item" | "section" | "submenu" | "separator";
+  title?: string;
+  subtitle?: string;
+  icon?: IconSource;
+  tooltip?: string;
+  /** Display string such as "⌘R". */
+  shortcut?: string;
+  /** onAction(event) of an item; items without one are disabled. */
+  handler?: string;
+  children?: MenuBarEntryModel[];
 }
 
 export type ViewModel =
   | ({ type: "list"; items: ListItemModel[]; showDetail?: boolean } & CollectionOptions)
   | ({ type: "grid"; items: GridItemModel[]; columns: number; aspectRatio: string; fit: "contain" | "fill"; inset?: "sm" | "md" | "lg" } & CollectionOptions)
   | { type: "detail"; markdown: string; title?: string; metadata: MetadataEntry[]; actions: ActionModel[]; isLoading: boolean }
-  | { type: "form"; fields: FormFieldModel[]; submitHandler?: string; submitTitle: string; description?: string; isLoading: boolean; actions?: ActionModel[]; title?: string };
+  | { type: "form"; fields: FormFieldModel[]; submitHandler?: string; submitTitle: string; description?: string; isLoading: boolean; actions?: ActionModel[]; title?: string; drafts?: boolean }
+  /** A menu-bar command's MenuBarExtra (never shown in the launcher; main turns it into a status item). */
+  | { type: "menubar"; title?: string; icon?: IconSource; tooltip?: string; isLoading: boolean; items: MenuBarEntryModel[] };
 
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [k: string]: JsonValue };
 
@@ -319,7 +354,17 @@ export type RequestMethod =
   | "trash"
   | "popToRoot"
   | "clearSearchBar"
-  | "openPreferences";
+  | "openPreferences"
+  | "app.frontmost"
+  | "finder.selection"
+  | "applications"
+  | "ai.ask"
+  | "oauth.authorize"
+  | "oauth.getTokens"
+  | "oauth.setTokens"
+  | "oauth.removeTokens"
+  | "form.field"
+  | "toast.actions";
 
 export interface InitPayload {
   commandPath: string;
@@ -330,6 +375,8 @@ export interface InitPayload {
   shimDir?: string;
   launchContext?: JsonValue;
   launchType?: "userInitiated" | "background";
+  /** What the host can offer (environment.canAccess). */
+  capabilities?: { ai?: boolean };
   arguments: Record<string, string>;
   preferences: PreferenceValues;
   environment: Environment;
@@ -350,4 +397,6 @@ export type ParentMessage =
   | { type: "init"; init: InitPayload }
   | { type: "invoke"; depth: number; handler: string; args: JsonValue[] }
   | { type: "closeView"; depth: number }
-  | { type: "response"; id: number; result?: JsonValue; error?: string };
+  | { type: "response"; id: number; result?: JsonValue; error?: string }
+  /** A partial result of a streaming request (AI.ask "data" events). */
+  | { type: "stream"; id: number; chunk: string };

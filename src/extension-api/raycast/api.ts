@@ -12,7 +12,8 @@ import type { InitPayload, JsonValue, RequestMethod } from "../types";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 export interface RaycastBridge {
-  request(method: RequestMethod, params: JsonValue[]): Promise<unknown>;
+  /** `onChunk` receives partial results of streaming requests (AI.ask). */
+  request(method: RequestMethod, params: JsonValue[], onChunk?: (chunk: string) => void): Promise<unknown>;
   init(): InitPayload;
   nodeRequire(id: string): any;
 }
@@ -20,7 +21,11 @@ export interface RaycastBridge {
 export function createRaycastApi(mr: MiniReact, ser: RaycastSerializer, bridge: RaycastBridge): Record<string, any> {
   const React = mr.React;
   const H = mr.host;
-  const fieldHandle = () => ({ focus: () => undefined, reset: () => undefined });
+  // Form field refs: focus()/reset() are applied by the launcher to the field with that id.
+  const fieldHandle = (props: () => Record<string, any>) => ({
+    focus: () => void bridge.request("form.field", ["focus", String(props().id ?? "")]).catch(() => undefined),
+    reset: () => void bridge.request("form.field", ["reset", String(props().id ?? "")]).catch(() => undefined),
+  });
   const isObj = (v: unknown): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v);
 
   // --- host components ----------------------------------------------------------------------
@@ -137,6 +142,8 @@ export function createRaycastApi(mr: MiniReact, ser: RaycastSerializer, bridge: 
   const ToastStyle = { Success: "SUCCESS", Failure: "FAILURE", Animated: "ANIMATED" };
   const wireStyle = (s: unknown) => (s === "FAILURE" || s === "failure" ? "failure" : s === "ANIMATED" || s === "animated" ? "animated" : "success");
   let toastSeq = 0;
+  /** Toast action handlers ("toast:<id>:primary|secondary"), invoked by the runtime like view handlers. */
+  const toastHandlers = new Map<string, () => unknown>();
   class Toast {
     static Style = ToastStyle;
     readonly id = `t${++toastSeq}`;
@@ -183,9 +190,19 @@ export function createRaycastApi(mr: MiniReact, ser: RaycastSerializer, bridge: 
         void this.show();
       });
     }
+    private wireActions(): JsonValue {
+      const out: JsonValue[] = [];
+      for (const [slot, a] of [["primary", this.primaryAction], ["secondary", this.secondaryAction]] as const) {
+        if (!isObj(a)) continue;
+        const handler = `toast:${this.id}:${slot}`;
+        toastHandlers.set(handler, () => a.onAction?.(this));
+        out.push({ slot, title: String(a.title ?? (slot === "primary" ? "Open" : "More")), shortcut: ser.shortcutDisplay(a.shortcut) ?? null, handler });
+      }
+      return out;
+    }
     async show() {
       this.shown = true;
-      await req("showToast", [wireStyle(this._style), this._title, this._message ?? null, this.id]);
+      await req("showToast", [wireStyle(this._style), this._title, this._message ?? null, this.id, this.wireActions()]);
     }
     async hide() {
       this.shown = false;
@@ -318,10 +335,28 @@ export function createRaycastApi(mr: MiniReact, ser: RaycastSerializer, bridge: 
 
   // --- environment / preferences / launching -----------------------------------------------------
   const LaunchType = { UserInitiated: "userInitiated", Background: "background" };
+  /** AI.ask → Glide's AI feature (main process). The promise also emits "data" chunks while streaming. */
+  function ask(prompt: string, options?: Record<string, any>) {
+    const { EventEmitter } = bridge.nodeRequire("node:events");
+    const emitter = new EventEmitter();
+    const signal = options?.signal as AbortSignal | undefined;
+    const opts: JsonValue = { model: options?.model ? String(options.model) : null, creativity: options?.creativity === undefined ? null : String(options.creativity) };
+    let p: Promise<string> = bridge.request("ai.ask", [String(prompt ?? ""), opts], (chunk: string) => emitter.emit("data", chunk)).then((r) => String(r ?? ""));
+    if (signal) {
+      p = new Promise<string>((resolve, reject) => {
+        const onAbort = () => reject(Object.assign(new Error("Aborted"), { name: "AbortError" }));
+        if (signal.aborted) return onAbort();
+        signal.addEventListener("abort", onAbort, { once: true });
+        p.then(resolve, reject);
+      });
+    }
+    for (const m of ["on", "once", "off", "addListener", "removeListener", "emit"]) (p as any)[m] = (...a: unknown[]) => (emitter[m](...a), p);
+    return p;
+  }
   const AI = {
-    Model: {},
+    Model: new Proxy({} as Record<string, string>, { get: (_t, k) => (typeof k === "string" ? k : undefined) }),
     Creativity: { None: "none", Low: "low", Medium: "medium", High: "high", Maximum: "maximum" },
-    ask: () => Promise.reject(new Error("AI.ask is not available in Glide's Raycast compatibility layer")),
+    ask,
   };
   const BrowserExtension = { getContent: () => Promise.reject(new Error("BrowserExtension is not available in Glide")), getTabs: () => Promise.resolve([]) };
   const environment: Record<string, any> = {
@@ -337,7 +372,7 @@ export function createRaycastApi(mr: MiniReact, ser: RaycastSerializer, bridge: 
     supportPath: "",
     textSize: "medium",
     theme: "dark",
-    canAccess: (api: unknown) => api !== AI && api !== BrowserExtension,
+    canAccess: (api: unknown) => (api === AI ? bridge.init().capabilities?.ai === true : api !== BrowserExtension),
   };
 
   const getPreferenceValues = () => ({ ...(bridge.init().preferences ?? {}) });
@@ -346,7 +381,7 @@ export function createRaycastApi(mr: MiniReact, ser: RaycastSerializer, bridge: 
   async function launchCommand(options: Record<string, any>) {
     const name = String(options?.name ?? "");
     if (!name) throw new Error("launchCommand needs a command name");
-    await req("launchCommand", [name, options.extensionName ? String(options.extensionName) : null, (options.arguments ?? {}) as JsonValue, (options.context ?? null) as JsonValue]);
+    await req("launchCommand", [name, options.extensionName ? String(options.extensionName) : null, (options.arguments ?? {}) as JsonValue, (options.context ?? null) as JsonValue, options.type === "background" ? "background" : "userInitiated"]);
   }
 
   async function getSelectedText() {
@@ -369,10 +404,128 @@ export function createRaycastApi(mr: MiniReact, ser: RaycastSerializer, bridge: 
       } catch {
         continue;
       }
-      for (const n of names) if (n.endsWith(".app")) out.push({ name: n.slice(0, -4), path: path.join(r, n) });
+      for (const n of names) {
+        if (!n.endsWith(".app")) continue;
+        const app: { name: string; path: string; bundleId?: string } = { name: n.slice(0, -4), path: path.join(r, n) };
+        try {
+          // XML Info.plist only (binary plists are skipped); enough for most apps.
+          const plist = fs.readFileSync(path.join(app.path, "Contents", "Info.plist"), "utf8");
+          const m = /<key>CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/.exec(plist);
+          if (m) app.bundleId = m[1];
+        } catch {
+          /* no readable Info.plist */
+        }
+        out.push(app);
+      }
     }
-    void dir;
+    void dir; // Glide cannot ask Launch Services which apps open a file: every app is returned.
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async function getFrontmostApplication() {
+    const app = (await req("app.frontmost")) as Record<string, any> | null;
+    if (!app) throw new Error("Could not determine the frontmost application");
+    const out: Record<string, string> = { name: String(app.name ?? ""), path: String(app.path ?? "") };
+    if (app.bundleId) out.bundleId = String(app.bundleId);
     return out;
+  }
+
+  async function getSelectedFinderItems() {
+    const paths = (await req("finder.selection")) as string[] | null;
+    return (Array.isArray(paths) ? paths : []).map((p) => ({ path: String(p) }));
+  }
+
+  // --- OAuth (PKCE; redirect through glide://oauth) -------------------------------------------
+  const b64url = (buf: any) => buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  class TokenSetImpl {
+    accessToken: string;
+    refreshToken?: string;
+    idToken?: string;
+    expiresIn?: number;
+    scope?: string;
+    updatedAt: Date;
+    constructor(o: Record<string, any>) {
+      this.accessToken = String(o.accessToken ?? "");
+      if (o.refreshToken) this.refreshToken = String(o.refreshToken);
+      if (o.idToken) this.idToken = String(o.idToken);
+      if (typeof o.expiresIn === "number") this.expiresIn = o.expiresIn;
+      if (o.scope) this.scope = String(o.scope);
+      this.updatedAt = new Date(o.updatedAt ?? Date.now());
+    }
+    isExpired() {
+      // Like Raycast: a token is treated as expired 10 s early.
+      return typeof this.expiresIn === "number" && this.updatedAt.getTime() + this.expiresIn * 1000 - 10_000 < Date.now();
+    }
+  }
+  class PKCEClient {
+    redirectMethod: string;
+    providerName: string;
+    providerIcon?: unknown;
+    providerId: string;
+    description?: string;
+    constructor(options: Record<string, any> = {}) {
+      this.redirectMethod = String(options.redirectMethod ?? "web");
+      this.providerName = String(options.providerName ?? "Provider");
+      this.providerIcon = options.providerIcon;
+      this.providerId = String(options.providerId ?? options.providerName ?? "default").replace(/[^\w.-]/g, "_");
+      if (options.description) this.description = String(options.description);
+    }
+    async authorizationRequest(options: Record<string, any>) {
+      const crypto = bridge.nodeRequire("node:crypto");
+      const codeVerifier = b64url(crypto.randomBytes(32));
+      const codeChallenge = b64url(crypto.createHash("sha256").update(codeVerifier).digest());
+      const state = b64url(crypto.randomBytes(16));
+      const redirectURI = `glide://oauth?package_name=${encodeURIComponent(String(environment.extensionName || "extension"))}`;
+      const endpoint = String(options?.endpoint ?? "");
+      const params: Record<string, string> = {
+        response_type: "code",
+        client_id: String(options?.clientId ?? ""),
+        redirect_uri: redirectURI,
+        scope: String(options?.scope ?? ""),
+        state,
+        code_challenge: codeChallenge,
+        code_challenge_method: "S256",
+        ...(isObj(options?.extraParameters) ? options.extraParameters : {}),
+      };
+      return {
+        codeChallenge,
+        codeVerifier,
+        state,
+        redirectURI,
+        toURL: () => {
+          const u = new URL(endpoint);
+          for (const [k, v] of Object.entries(params)) u.searchParams.set(k, String(v));
+          return u.toString();
+        },
+      };
+    }
+    async authorize(request: Record<string, any>) {
+      const url = typeof request?.toURL === "function" ? request.toURL() : String(request?.url ?? "");
+      let state = typeof request?.state === "string" ? request.state : "";
+      if (!state) {
+        try {
+          state = new URL(url).searchParams.get("state") ?? "";
+        } catch {
+          /* checked by main */
+        }
+      }
+      const res = (await req("oauth.authorize", [{ url, state, providerName: this.providerName, providerIcon: ser.toIconSource(this.providerIcon) ?? null, description: this.description ?? null }])) as Record<string, any>;
+      return { authorizationCode: String(res?.code ?? "") };
+    }
+    async setTokens(t: Record<string, any>) {
+      const o = isObj(t) && "access_token" in t
+        ? { accessToken: t.access_token, refreshToken: t.refresh_token, idToken: t.id_token, expiresIn: t.expires_in, scope: t.scope }
+        : t;
+      const set = new TokenSetImpl({ ...o, updatedAt: Date.now() });
+      await req("oauth.setTokens", [this.providerId, JSON.parse(JSON.stringify({ ...set, updatedAt: set.updatedAt.toISOString() }))]);
+    }
+    async getTokens() {
+      const raw = (await req("oauth.getTokens", [this.providerId])) as Record<string, any> | null;
+      return isObj(raw) && raw.accessToken ? new TokenSetImpl(raw) : undefined;
+    }
+    async removeTokens() {
+      await req("oauth.removeTokens", [this.providerId]);
+    }
   }
 
   const api: Record<string, any> = {
@@ -415,22 +568,19 @@ export function createRaycastApi(mr: MiniReact, ser: RaycastSerializer, bridge: 
     openCommandPreferences: async () => void (await req("openPreferences")),
     launchCommand,
     getSelectedText,
-    getSelectedFinderItems: () => Promise.reject(new Error("getSelectedFinderItems is not supported in Glide yet")),
+    getSelectedFinderItems,
     getApplications,
     getDefaultApplication: () => Promise.reject(new Error("getDefaultApplication is not supported in Glide yet")),
-    getFrontmostApplication: () => Promise.reject(new Error("getFrontmostApplication is not supported in Glide yet")),
+    getFrontmostApplication,
     updateCommandMetadata: async () => undefined,
     captureException: (e: unknown) => console.error(e),
     OAuth: {
       RedirectMethod: { Web: "web", App: "app", AppURI: "appURI" },
-      PKCEClient: class {
-        constructor() {
-          throw new Error("OAuth is not supported in Glide's Raycast compatibility layer");
-        }
-      },
+      PKCEClient,
+      TokenSet: TokenSetImpl,
     },
     WindowManagement: { getActiveWindow: () => Promise.reject(new Error("WindowManagement is not supported in Glide yet")) },
-    __glide: { NavigationContext },
+    __glide: { NavigationContext, toastHandlers },
   };
   api.default = api;
   return api;

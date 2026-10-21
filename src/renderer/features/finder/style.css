@@ -1,0 +1,14 @@
+.finder {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.finder__context {
+  margin: 6px 14px 2px;
+  font-size: 11px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

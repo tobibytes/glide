@@ -51,3 +51,18 @@ Every feature is a module in `src/main/features/<id>` (main process) and `src/re
 | **Themes & Appearance** | *Switch Theme* (live preview while moving), 9 presets, accent, density, font size, radius, width, translucency, follow system light/dark. |
 | **Sync & Backup** | Settings → Sync. Pick any synced folder: each Mac writes its own file, merges are deterministic, there's a conflict log and 10 rolling backups. Secrets are never synced. |
 | **Vim mode** | Normal and insert modes, `j k gg G ⌃D ⌃U { } / counts`, in the launcher and feature views. |
+
+## New in v0.3
+
+| Feature | Commands and behaviour |
+| --- | --- |
+| **Menu Bar** | Settings → Menu Bar. Extras for timers, system monitor, next meeting, clipboard and agent. Glide's menu shows recent commands, running timers and focus status. |
+| **Clipboard 2.0** | ⌘G toggles list or grid, ⌘P filters by type or source app. Text inside copied images is searchable. Paste Stack (FIFO/LIFO), merge, edit before pasting, plain-text paste, per-type retention. |
+| **Extension Store** | *Store*. Browse by category, install after a third-party-code warning (size and SHA-256 verified, safe extraction), update, uninstall. The index lives in `store/index.json`. |
+| **Quicklinks 2.0** | `{argument name="q" default="…" options="a,b"}`, `{clipboard}`, `{selection}`, `{date offset="+1d"}`, `{uuid}`, open with a chosen app, favicons, import from bookmarks or Raycast. |
+| **Snippets 2.0** | `{cursor}`, nested `{snippet name=…}`, rich text, keyword prefix (e.g. `;`), per-app exclusions, case-adaptive, Raycast import, *Search Snippets*. |
+| **Reminders** | Type `remind <task> tomorrow 9am #list`; *My Reminders* shows overdue, today and upcoming. Access is asked only when you choose Grant Access. |
+| **Finder** | Copy Path of Selection, Open Terminal Here, New File Here, Move Selection to…, Compress, Open With. |
+| **Launcher** | Tab chooser (Ask AI, Agent or a fallback), "Did you mean…", result count, Show more, ↑ for recent searches. *Keep open after running a command* (Settings → General). |
+| **Workflows** | 39 feature actions (all text transforms, Start Timer, Restore Layout, Run Automation, Convert…), plus "Run Glide Command". |
+| **Glide Agent 2.0** | Conversations and history (⌘N, ⌘Y), ~17 more tools, a plan shown first, undo (⌘Z), read-only mode, ⌘⏎ from the launcher, Save as Workflow (⌘S). |

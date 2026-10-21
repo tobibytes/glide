@@ -1,29 +1,100 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ItemIcon, Quicklink, UserData } from "@shared/types";
 import { glide } from "../../lib/glide";
 import { navigateTo } from "../../lib/route";
 import { Icon } from "../../components/Icon";
-import { IconPicker } from "../../components/IconPicker";
-import { Field } from "../../components/form";
+import { QuicklinkForm } from "./quicklinks/QuicklinkForm";
+import { BookmarkPicker } from "./quicklinks/BookmarkPicker";
+import { importSummary, quicklinksApi } from "./quicklinks/api";
 
 const DEFAULT_ICON: ItemIcon = { kind: "emoji", value: "🔗" };
+const errText = (err: unknown) => (err instanceof Error ? err.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : String(err));
 
 export function QuicklinksPage({ data, editId }: { data: UserData; editId?: string }) {
+  const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null);
+  const [picking, setPicking] = useState(false);
+  const [paste, setPaste] = useState<string | null>(null);
+
   if (editId) {
     const existing = editId === "new" ? undefined : data.quicklinks.find((q) => q.id === editId || `quicklink:${q.id}` === editId);
     if (editId !== "new" && !existing) return <div className="empty">Quicklink not found.</div>;
     return <QuicklinkEditor key={editId} initial={existing} />;
   }
+
+  const run = async (fn: () => Promise<string>) => {
+    try {
+      setNotice({ text: await fn() });
+    } catch (err) {
+      setNotice({ text: errText(err), error: true });
+    }
+  };
+
   return (
     <div className="page">
       <div className="page__head">
         <p className="page__lead" style={{ margin: 0 }}>
-          Open URLs from the launcher. Use <code>{"{query}"}</code> to insert text typed after the name.
+          Open URLs from the launcher. Arguments like <code>{'{argument name="query"}'}</code> are typed after the name — Tab moves to the next one.
         </p>
         <button type="button" className="btn btn--primary" onClick={() => navigateTo("quicklinks", "new")}>
           New Quicklink
         </button>
       </div>
+      <div className="qltools" role="toolbar" aria-label="Import and export">
+        <button type="button" className="btn btn--sm" onClick={() => setPicking((p) => !p)} data-ql-bookmarks>
+          Import from Bookmarks…
+        </button>
+        <button type="button" className="btn btn--sm" onClick={() => void run(async () => importSummary(await quicklinksApi.importFile(), "quicklink"))}>
+          Import JSON File…
+        </button>
+        <button type="button" className="btn btn--sm" onClick={() => setPaste(paste === null ? "" : null)}>
+          Paste JSON…
+        </button>
+        <button type="button" className="btn btn--sm" onClick={() => void run(async () => ((await quicklinksApi.exportFile()) ? "Exported" : "Export cancelled"))}>
+          Export JSON File…
+        </button>
+        <button
+          type="button"
+          className="btn btn--sm"
+          onClick={() =>
+            void run(async () => {
+              await navigator.clipboard.writeText(await quicklinksApi.exportJson());
+              return "Quicklinks JSON copied";
+            })
+          }
+        >
+          Copy JSON
+        </button>
+      </div>
+      {notice && <div className={notice.error ? "error-banner" : "notice-banner qlnotice"} data-ql-notice>{notice.text}</div>}
+      {paste !== null && (
+        <div className="qlpaste">
+          <textarea className="textarea mono" rows={5} value={paste} onChange={(e) => setPaste(e.target.value)} placeholder='[{"name": "Docs", "link": "https://docs.example.com/search?q={argument name=&quot;q&quot;}"}]' aria-label="Quicklinks JSON" data-ql-paste />
+          <button
+            type="button"
+            className="btn btn--primary btn--sm"
+            onClick={() =>
+              void run(async () => {
+                const r = await quicklinksApi.importJson(paste);
+                setPaste(null);
+                return importSummary(r, "quicklink");
+              })
+            }
+            data-ql-paste-import
+          >
+            Import
+          </button>
+          <span className="field__hint">Glide exports and Raycast's quicklink export (name, link, openWith) both work.</span>
+        </div>
+      )}
+      {picking && (
+        <BookmarkPicker
+          onDone={(text) => {
+            setNotice({ text });
+            setPicking(false);
+          }}
+          onClose={() => setPicking(false)}
+        />
+      )}
       <div className="table">
         {data.quicklinks.length === 0 && <div className="empty">No quicklinks yet.</div>}
         {data.quicklinks.map((q) => (
@@ -33,6 +104,7 @@ export function QuicklinksPage({ data, editId }: { data: UserData; editId?: stri
               <div className="trow__title">
                 {q.name}
                 {q.alias && <span className="tag tag--accent">{q.alias}</span>}
+                {q.openWith && <span className="tag">{q.openWith.split("/").pop()?.replace(/\.app$/, "")}</span>}
               </div>
               <div className="trow__sub">{q.url}</div>
             </div>
@@ -50,85 +122,16 @@ export function QuicklinksPage({ data, editId }: { data: UserData; editId?: stri
 }
 
 function QuicklinkEditor({ initial }: { initial?: Quicklink }) {
-  const [q, setQ] = useState<Quicklink>(initial ?? { id: "", name: "", url: "", icon: DEFAULT_ICON, alias: "", keywords: [] });
-  const [keywords, setKeywords] = useState((initial?.keywords ?? []).join(", "));
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    document.getElementById("ql-name")?.focus();
-  }, []);
-
-  const save = async () => {
-    if (!q.name.trim() || !q.url.trim()) {
-      setError("Name and URL are required.");
-      return;
-    }
-    setBusy(true);
-    try {
-      await glide().saveQuicklink({ ...q, name: q.name.trim(), url: q.url.trim(), alias: q.alias?.trim() || undefined, keywords: keywords.split(",").map((k) => k.trim()).filter(Boolean) });
-      navigateTo("quicklinks");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const remove = async () => {
     if (!initial || !confirm(`Delete “${initial.name}”?`)) return;
     await glide().deleteQuicklink(initial.id);
     navigateTo("quicklinks");
   };
-
   return (
     <div className="page">
       <h2 className="page__title">{initial ? "Edit Quicklink" : "New Quicklink"}</h2>
-      <p className="page__lead">Quicklinks open in your default browser.</p>
-      {error && <div className="error-banner">{error}</div>}
-      <form
-        className="form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void save();
-        }}
-        onKeyDown={(e) => {
-          if (e.metaKey && e.key.toLowerCase() === "s") {
-            e.preventDefault();
-            void save();
-          }
-        }}
-      >
-        <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-          <IconPicker value={q.icon ?? DEFAULT_ICON} onChange={(icon) => setQ({ ...q, icon })} />
-          <div style={{ flex: 1 }}>
-            <Field label="Name" htmlFor="ql-name">
-              <input id="ql-name" className="input" value={q.name} onChange={(e) => setQ({ ...q, name: e.target.value })} placeholder="Google" />
-            </Field>
-          </div>
-        </div>
-        <Field label="URL" htmlFor="ql-url" hint={<>Use <code>{"{query}"}</code> where the typed argument should go, e.g. https://www.google.com/search?q={"{query}"}</>}>
-          <input id="ql-url" className="input mono" value={q.url} onChange={(e) => setQ({ ...q, url: e.target.value })} placeholder="https://example.com/search?q={query}" />
-        </Field>
-        <div className="form__grid">
-          <Field label="Alias" htmlFor="ql-alias" hint="Short word that ranks this link first">
-            <input id="ql-alias" className="input" value={q.alias ?? ""} onChange={(e) => setQ({ ...q, alias: e.target.value })} placeholder="g" />
-          </Field>
-          <Field label="Keywords" htmlFor="ql-kw" hint="Comma separated extra search terms">
-            <input id="ql-kw" className="input" value={keywords} onChange={(e) => setKeywords(e.target.value)} placeholder="search, web" />
-          </Field>
-        </div>
-        <div className="form__actions">
-          <div>{initial && <button type="button" className="btn btn--danger" onClick={() => void remove()}>Delete</button>}</div>
-          <div>
-            <button type="button" className="btn" onClick={() => navigateTo("quicklinks")}>
-              Cancel
-            </button>
-            <button type="submit" className="btn btn--primary" disabled={busy}>
-              Save
-            </button>
-          </div>
-        </div>
-      </form>
+      <p className="page__lead">Quicklinks open in your default browser, or in the app you choose.</p>
+      <QuicklinkForm initial={initial} onSaved={() => navigateTo("quicklinks")} onCancel={() => navigateTo("quicklinks")} onDelete={initial ? () => void remove() : undefined} />
     </div>
   );
 }

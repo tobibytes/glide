@@ -5,6 +5,7 @@ import type { AppSource } from "./sources/apps";
 import { settingItems, systemItems } from "./sources/system";
 import type { Store } from "./store";
 import { accelToDisplay } from "./util/accel";
+import { quicklinkItemExtras } from "./quicklinks/item";
 
 export const WORKFLOW_SOURCE_ID = "workflows";
 export const QUICKLINK_SOURCE_ID = "quicklinks";
@@ -57,7 +58,7 @@ function quicklinkItems(quicklinks: Quicklink[]): SearchItem[] {
     keywords: q.keywords,
     alias: q.alias,
     url: q.url,
-    acceptsArgument: q.url.includes("{query}"),
+    ...quicklinkItemExtras(q), // acceptsArgument + data.arguments for the launcher's multi-argument entry
     source: QUICKLINK_SOURCE_ID,
   }));
 }

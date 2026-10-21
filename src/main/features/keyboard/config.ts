@@ -1,5 +1,6 @@
 import type { Snippet } from "@shared/types";
 import type { KeyConfig } from "../../native/helper";
+import { liveExpansionList } from "../../snippets/live";
 
 export interface KeyboardSettings extends Record<string, unknown> {
   /** Expand snippet keywords as you type (takes effect once Accessibility is granted). */
@@ -21,17 +22,12 @@ export const KEYBOARD_DEFAULTS: KeyboardSettings = {
 export const SPOTLIGHT_HOTKEY = "Command+Space";
 export const FALLBACK_HOTKEY = "Alt+Space";
 
-/** Snippets with a non-empty keyword, longest keyword first (so ";sig2" wins over ";sig"). */
+/**
+ * Snippets with a non-empty keyword, longest keyword first (so ";sig2" wins over ";sig").
+ * Keyword prefix, case variants, per-app exclusions and placeholders come from src/main/snippets.
+ */
 export function snippetKeywords(snippets: Snippet[]): KeyConfig["snippets"] {
-  const seen = new Set<string>();
-  const out: KeyConfig["snippets"] = [];
-  for (const s of snippets) {
-    const keyword = s.keyword?.trim();
-    if (!keyword || !s.text || seen.has(keyword)) continue;
-    seen.add(keyword);
-    out.push({ keyword, text: s.text });
-  }
-  return out.sort((a, b) => b.keyword.length - a.keyword.length);
+  return liveExpansionList(snippets);
 }
 
 /** The config to send to the helper. Without Accessibility nothing is enabled (the tap would fail). */

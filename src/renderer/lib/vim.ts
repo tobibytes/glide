@@ -190,6 +190,37 @@ function normalKey(state: VimState, k: VimKey, ctx: VimContextInput): VimResult 
 }
 
 // ---------------------------------------------------------------------------
+// Mode transitions (pure; the launcher applies them)
+// ---------------------------------------------------------------------------
+
+export type ModeEvent =
+  | { type: "command"; command: VimCommand }
+  /** a view was pushed / popped, or the launcher was shown */
+  | { type: "push" }
+  | { type: "pop" }
+  | { type: "show" }
+  /** the user started typing via a chooser/prompt that needs the field */
+  | { type: "needsInput" };
+
+/**
+ * The mode after an event. Pushing, popping and showing always land in INSERT so the search
+ * field is never left read-only (a pop from NORMAL via h/⌫ used to keep NORMAL).
+ */
+export function modeAfter(mode: VimMode, ev: ModeEvent): VimMode {
+  switch (ev.type) {
+    case "push":
+    case "pop":
+    case "show":
+    case "needsInput":
+      return "insert";
+    case "command":
+      if (ev.command.type === "normal") return "normal";
+      if (ev.command.type === "insert" || ev.command.type === "pop") return "insert";
+      return mode;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Action panel (⌘K) in NORMAL mode
 // ---------------------------------------------------------------------------
 

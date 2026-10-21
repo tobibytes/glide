@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type DragEvent } from "react";
 import type { ActionSpec, SearchItem, WorkflowAction } from "@shared/types";
-import { availableVariables, CATEGORY_COLORS, CATEGORY_LABELS, pathKey, type Path } from "../../../lib/workflowTree";
+import { specForAction, visibleParams } from "@shared/workflow-specs";
+import { availableVariables, CATEGORY_COLORS, CATEGORY_LABELS, pathKey, walk, type Path } from "../../../lib/workflowTree";
 import { Icon } from "../../../components/Icon";
 import { Kbd } from "../../../components/Kbd";
 import { ParamEditor } from "./ParamEditor";
@@ -30,6 +31,24 @@ const useEditor = (): EditorContext => {
 
 const DRAG_MIME = "application/x-glide-action";
 const MONO_PARAMS = new Set(["runShell:command", "runAppleScript:script", "httpRequest:headers", "httpRequest:body"]);
+
+/** availableVariables() resolves specs by type only; add the outputVars of earlier feature actions. */
+function variablesFor(root: WorkflowAction[], path: Path, specs: ActionSpec[]): Array<{ name: string; hint: string }> {
+  const out = availableVariables(root, path, specs.filter((s) => s.type !== "feature"));
+  const seen = new Set(out.map((v) => v.name));
+  const target = pathKey(path);
+  let reached = false;
+  walk(root, (a, p) => {
+    if (pathKey(p) === target) reached = true;
+    if (reached || a.type !== "feature") return;
+    const spec = specForAction(specs, a);
+    if (spec?.outputVar && !seen.has(spec.outputVar)) {
+      seen.add(spec.outputVar);
+      out.push({ name: spec.outputVar, hint: spec.title });
+    }
+  });
+  return out;
+}
 
 function DropZone({ container, index, end }: { container: Path; index: number; end?: boolean }) {
   const ed = useEditor();
@@ -76,13 +95,14 @@ export function ActionStack({ actions, container }: { actions: WorkflowAction[];
 
 function ActionCard({ action, path, isFirst, isLast }: { action: WorkflowAction; path: Path; isFirst: boolean; isLast: boolean }) {
   const ed = useEditor();
-  const spec = ed.specs.find((s) => s.type === action.type);
+  const spec = specForAction(ed.specs, action);
+  const params = spec ? visibleParams(spec) : [];
   const key = pathKey(path);
   const selected = ed.selected ? pathKey(ed.selected) === key : false;
   const dragging = ed.dragging ? pathKey(ed.dragging) === key : false;
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const variables = availableVariables(ed.root, path, ed.specs);
+  const variables = variablesFor(ed.root, path, ed.specs);
   const color = spec ? CATEGORY_COLORS[spec.category] : "var(--text-3)";
 
   useEffect(() => {
@@ -135,7 +155,7 @@ function ActionCard({ action, path, isFirst, isLast }: { action: WorkflowAction;
             </span>
             <span className="acard__title">
               <Icon icon={spec?.icon} />
-              {action.label || spec?.title || action.type}
+              {action.label || spec?.title || (action.type === "feature" ? `${action.params.feature ?? ""}.${action.params.action ?? ""}` : action.type)}
               {action.disabled && <span className="tag">disabled</span>}
             </span>
             {spec && <span className="acard__cat">{CATEGORY_LABELS[spec.category]}</span>}
@@ -162,9 +182,9 @@ function ActionCard({ action, path, isFirst, isLast }: { action: WorkflowAction;
               </button>
             </div>
           )}
-          {spec && spec.params.length > 0 && (
+          {spec && params.length > 0 && (
             <div className="acard__params">
-              {spec.params.map((p) => (
+              {params.map((p) => (
                 <ParamEditor
                   key={p.key}
                   param={p}
@@ -177,7 +197,11 @@ function ActionCard({ action, path, isFirst, isLast }: { action: WorkflowAction;
               ))}
             </div>
           )}
-          {!spec && <div className="faint">Unknown action type “{action.type}”.</div>}
+          {!spec && (
+            <div className="faint">
+              {action.type === "feature" ? `Action “${action.params.feature ?? "?"}.${action.params.action ?? "?"}” is not available — is that feature installed?` : `Unknown action type “${action.type}”.`}
+            </div>
+          )}
           {action.type === "condition" && (
             <div className="branches">
               <Branch label="Then" container={[...path, "then"]} actions={action.then ?? []} />

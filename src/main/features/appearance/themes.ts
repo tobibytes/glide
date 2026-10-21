@@ -70,14 +70,14 @@ export const LIMITS = {
 const status = { danger: "#ff6b5e", success: "#4ade80", warning: "#fbbf24" };
 
 export const PRESETS: ThemePreset[] = [
-  { id: "glide-dark", name: "Glide Dark", scheme: "dark", bg: "#161618", surface: "#202023", surface2: "#2a2a2e", surface3: "#343439", text: "#f4f4f6", text2: "#a9a9b3", text3: "#6e6e78", accent: "#f5a524", ...status },
-  { id: "glide-light", name: "Glide Light", scheme: "light", bg: "#f6f6f8", surface: "#ffffff", surface2: "#f0f0f3", surface3: "#e4e4e9", text: "#18181c", text2: "#585862", text3: "#8c8c96", accent: "#e08e0b", danger: "#d63b2f", success: "#1f9d55", warning: "#c77700" },
-  { id: "midnight", name: "Midnight", scheme: "dark", bg: "#0b0e17", surface: "#121726", surface2: "#1a2033", surface3: "#242b42", text: "#e8ebf5", text2: "#9aa3bd", text3: "#626b86", accent: "#7c8cff", ...status },
+  { id: "glide-dark", name: "Glide Dark", scheme: "dark", bg: "#161618", surface: "#202023", surface2: "#2a2a2e", surface3: "#343439", text: "#f4f4f6", text2: "#a9a9b3", text3: "#8b8b95", accent: "#f5a524", ...status },
+  { id: "glide-light", name: "Glide Light", scheme: "light", bg: "#f6f6f8", surface: "#ffffff", surface2: "#f0f0f3", surface3: "#e4e4e9", text: "#18181c", text2: "#585862", text3: "#71717b", accent: "#e08e0b", danger: "#d63b2f", success: "#1f9d55", warning: "#c77700" },
+  { id: "midnight", name: "Midnight", scheme: "dark", bg: "#0b0e17", surface: "#121726", surface2: "#1a2033", surface3: "#242b42", text: "#e8ebf5", text2: "#9aa3bd", text3: "#7f88a3", accent: "#7c8cff", ...status },
   { id: "nord", name: "Nord", scheme: "dark", bg: "#2e3440", surface: "#3b4252", surface2: "#434c5e", surface3: "#4c566a", text: "#eceff4", text2: "#c5cddb", text3: "#8a93a6", accent: "#88c0d0", danger: "#bf616a", success: "#a3be8c", warning: "#ebcb8b" },
-  { id: "solarized", name: "Solarized", scheme: "dark", bg: "#002b36", surface: "#073642", surface2: "#0d4250", surface3: "#164e5c", text: "#eee8d5", text2: "#93a1a1", text3: "#657b83", accent: "#268bd2", danger: "#dc322f", success: "#859900", warning: "#b58900" },
+  { id: "solarized", name: "Solarized", scheme: "dark", bg: "#002b36", surface: "#073642", surface2: "#0d4250", surface3: "#164e5c", text: "#eee8d5", text2: "#93a1a1", text3: "#839496", accent: "#268bd2", danger: "#dc322f", success: "#859900", warning: "#b58900" },
   { id: "dracula", name: "Dracula", scheme: "dark", bg: "#21222c", surface: "#282a36", surface2: "#343746", surface3: "#44475a", text: "#f8f8f2", text2: "#c6c8d6", text3: "#7a84b8", accent: "#bd93f9", danger: "#ff5555", success: "#50fa7b", warning: "#f1fa8c" },
   { id: "mocha", name: "Mocha", scheme: "dark", bg: "#181825", surface: "#1e1e2e", surface2: "#313244", surface3: "#45475a", text: "#cdd6f4", text2: "#a6adc8", text3: "#7f849c", accent: "#cba6f7", danger: "#f38ba8", success: "#a6e3a1", warning: "#f9e2af" },
-  { id: "dawn", name: "Dawn", scheme: "light", bg: "#faf4ed", surface: "#fffaf3", surface2: "#f2e9e1", surface3: "#e4dcd6", text: "#4b466c", text2: "#6e6a88", text3: "#8c879b", accent: "#d7827e", danger: "#b4637a", success: "#286983", warning: "#ea9d34" },
+  { id: "dawn", name: "Dawn", scheme: "light", bg: "#faf4ed", surface: "#fffaf3", surface2: "#f2e9e1", surface3: "#e4dcd6", text: "#4b466c", text2: "#6e6a88", text3: "#77738e", accent: "#d7827e", danger: "#b4637a", success: "#286983", warning: "#ea9d34" },
   { id: "high-contrast", name: "High Contrast", scheme: "dark", bg: "#000000", surface: "#0a0a0a", surface2: "#1a1a1a", surface3: "#2b2b2b", text: "#ffffff", text2: "#e8e8e8", text3: "#c2c2c2", accent: "#ffd60a", danger: "#ff6b6b", success: "#5dff9a", warning: "#ffd60a", contrast: 2.2 },
 ];
 

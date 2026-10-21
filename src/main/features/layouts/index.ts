@@ -331,7 +331,14 @@ export const feature: FeatureModule = {
     /** Capture now (the launcher hides itself first only for the restore path; capture skips Glide's windows anyway). */
     save: async (name, overwriteId) => saveLayout(name, overwriteId),
     /** What "Save" would capture right now (nothing is stored). */
-    preview: () => captureLayout(deps(), "Preview"),
+    // Returned, not thrown: a missing helper or permission is an expected state, not an IPC failure.
+    preview: async () => {
+      try {
+        return await captureLayout(deps(), "Preview");
+      } catch (err) {
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    },
     restore: (id, relaunch) => restore(str(id), typeof relaunch === "boolean" ? relaunch : undefined),
     rename: (id, name) => {
       const s = need(store);

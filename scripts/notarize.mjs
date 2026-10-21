@@ -1,5 +1,6 @@
-// Signs release/Glide-darwin-arm64/Glide.app with a Developer ID (hardened runtime), notarizes it
+// Signs release/Glide-darwin-<arch>/Glide.app with a Developer ID (hardened runtime), notarizes it
 // with Apple and staples the ticket. Run after `pnpm package`; pass --zip to rebuild the release zip.
+// --arch arm64|x64|universal picks the build (default: the host arch, like package.mjs).
 //
 // Needs: APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD (an app-specific password from appleid.apple.com)
 // and a "Developer ID Application" certificate in the login keychain. Optional: APPLE_SIGN_IDENTITY
@@ -11,7 +12,17 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const app = path.join(root, "release/Glide-darwin-arm64/Glide.app");
+const argv = process.argv.slice(2);
+const ARCH = (() => {
+  const i = argv.indexOf("--arch");
+  const v = i >= 0 ? argv[i + 1] : argv.find((a) => a.startsWith("--arch="))?.slice(7);
+  return v ?? (process.arch === "x64" ? "x64" : "arm64");
+})();
+if (!["arm64", "x64", "universal"].includes(ARCH)) {
+  console.error(`unknown --arch "${ARCH}" (use arm64, x64 or universal)`);
+  process.exit(1);
+}
+const app = path.join(root, `release/Glide-darwin-${ARCH}/Glide.app`);
 const appEntitlements = path.join(root, "build/entitlements.mac.plist");
 const helperEntitlements = path.join(root, "build/entitlements.helper.plist");
 const helperPath = path.join(app, "Contents/Resources/bin/glide-helper");
@@ -47,7 +58,7 @@ What you need (nothing has been changed):
   3. An app-specific password for your Apple ID: https://account.apple.com > Sign-In and Security.
   4. Then run:
        APPLE_ID=you@example.com APPLE_TEAM_ID=ABCDE12345 APPLE_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx \\
-         pnpm package && node scripts/notarize.mjs --zip`);
+         pnpm package && node scripts/notarize.mjs --zip --arch ${ARCH}`);
   process.exit(1);
 }
 
@@ -112,4 +123,4 @@ try {
   rmSync(tmp, { recursive: true, force: true });
 }
 console.log("Notarized and stapled", app);
-if (process.argv.includes("--zip")) execFileSync(process.execPath, [path.join(root, "scripts/package.mjs"), "--zip-only"], { stdio: "inherit" });
+if (process.argv.includes("--zip")) execFileSync(process.execPath, [path.join(root, "scripts/package.mjs"), "--zip-only", "--arch", ARCH], { stdio: "inherit" });

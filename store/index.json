@@ -1,0 +1,185 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "updatedAt": "2026-10-21",
+  "extensions": [
+    {
+      "id": "color-converter",
+      "name": "color-converter",
+      "title": "Color Converter",
+      "description": "Type a color as #hex, rgb() or hsl() and copy it in any format.",
+      "author": "Glide",
+      "version": "1.0.0",
+      "categories": [
+        "Design Tools",
+        "Developer Tools"
+      ],
+      "icon": "🎨",
+      "kind": "glide",
+      "minGlideVersion": "0.2.0",
+      "commands": [
+        {
+          "name": "convert-color",
+          "title": "Convert Color",
+          "description": "Convert between HEX, RGB and HSL",
+          "mode": "view"
+        }
+      ],
+      "source": {
+        "bundled": true,
+        "path": "color-converter"
+      },
+      "screenshots": [],
+      "changelog": [
+        {
+          "version": "1.0.0",
+          "notes": "First release."
+        }
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/tobibytes/glide/tree/main/extensions-examples/color-converter"
+    },
+    {
+      "id": "github-search",
+      "name": "github-search",
+      "title": "GitHub Search",
+      "description": "Search public GitHub repositories as you type. Queries go to api.github.com only while you use the command.",
+      "author": "Glide",
+      "version": "1.0.0",
+      "categories": [
+        "Developer Tools",
+        "Web"
+      ],
+      "icon": "🐙",
+      "kind": "glide",
+      "minGlideVersion": "0.2.0",
+      "commands": [
+        {
+          "name": "search-repositories",
+          "title": "Search GitHub Repositories",
+          "description": "Search public repositories",
+          "mode": "view"
+        }
+      ],
+      "source": {
+        "bundled": true,
+        "path": "github-search"
+      },
+      "screenshots": [],
+      "changelog": [
+        {
+          "version": "1.0.0",
+          "notes": "First release."
+        }
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/tobibytes/glide/tree/main/extensions-examples/github-search"
+    },
+    {
+      "id": "hacker-news",
+      "name": "hacker-news",
+      "title": "Hacker News",
+      "description": "Browse the current top stories on Hacker News. Fetches from the public Hacker News API when you run it.",
+      "author": "Glide",
+      "version": "1.0.0",
+      "categories": [
+        "News",
+        "Web"
+      ],
+      "icon": "📰",
+      "kind": "glide",
+      "minGlideVersion": "0.2.0",
+      "commands": [
+        {
+          "name": "top-stories",
+          "title": "Hacker News Top Stories",
+          "description": "Front page of Hacker News",
+          "mode": "view"
+        }
+      ],
+      "source": {
+        "bundled": true,
+        "path": "hacker-news"
+      },
+      "screenshots": [],
+      "changelog": [
+        {
+          "version": "1.0.0",
+          "notes": "First release."
+        }
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/tobibytes/glide/tree/main/extensions-examples/hacker-news"
+    },
+    {
+      "id": "timezones",
+      "name": "timezones",
+      "title": "World Clocks",
+      "description": "The current time in cities around the world. Type a city to filter.",
+      "author": "Glide",
+      "version": "1.0.0",
+      "categories": [
+        "Productivity"
+      ],
+      "icon": "🌍",
+      "kind": "glide",
+      "minGlideVersion": "0.2.0",
+      "commands": [
+        {
+          "name": "world-clocks",
+          "title": "World Clocks",
+          "description": "Current time in major cities",
+          "mode": "view"
+        }
+      ],
+      "source": {
+        "bundled": true,
+        "path": "timezones"
+      },
+      "screenshots": [],
+      "changelog": [
+        {
+          "version": "1.0.0",
+          "notes": "First release."
+        }
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/tobibytes/glide/tree/main/extensions-examples/timezones"
+    },
+    {
+      "id": "uuid-generator",
+      "name": "uuid-generator",
+      "title": "UUID Generator",
+      "description": "Generate a random v4 UUID and copy it to the clipboard.",
+      "author": "Glide",
+      "version": "1.0.0",
+      "categories": [
+        "Developer Tools"
+      ],
+      "icon": "🆔",
+      "kind": "glide",
+      "minGlideVersion": "0.2.0",
+      "commands": [
+        {
+          "name": "generate-uuid",
+          "title": "Generate UUID",
+          "description": "Copies a new v4 UUID",
+          "mode": "no-view"
+        }
+      ],
+      "source": {
+        "bundled": true,
+        "path": "uuid-generator"
+      },
+      "screenshots": [],
+      "changelog": [
+        {
+          "version": "1.0.0",
+          "notes": "First release."
+        }
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/tobibytes/glide/tree/main/extensions-examples/uuid-generator"
+    }
+  ]
+}

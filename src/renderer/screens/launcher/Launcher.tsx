@@ -5,7 +5,7 @@ import type { ScoredItem, SearchResponse, SectionId, Settings } from "@shared/ty
 import { glide } from "../../lib/glide";
 import { eventMatchesShortcut } from "../../lib/keys";
 import { kindLabel } from "../../lib/icons";
-import { findActionOfKind, INITIAL_VIM_STATE, toVimKey, VimContext, vimKey, type VimCommand, type VimInfo, type VimMode } from "../../lib/vim";
+import { findActionOfKind, INITIAL_VIM_STATE, modeAfter, toVimKey, VimContext, vimKey, type VimCommand, type VimInfo, type VimMode } from "../../lib/vim";
 import { NavHostContext, type NavController, type NavFooter, type NavHost } from "../../lib/navHost";
 import { FEATURE_UIS, resolveView } from "../../features/registry";
 import { useResizeReporter } from "../../hooks/useResizeReporter";
@@ -18,19 +18,39 @@ import { Kbd } from "../../components/Kbd";
 import { ActionPanel } from "../../components/ActionPanel";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { ResultRow } from "./ResultRow";
+import "../settings/coreViews"; // registers the quicklinks.* and snippets.* launcher views
+import { ArgFields, argPlaceholder, initMultiArg, multiArgKey, multiArgValues, needsArgEntry, type MultiArg } from "./quicklinkArgs";
 import { PromptCard, ResultCard } from "./Cards";
 import { ViewHost, viewTitle, type LauncherApi, type ViewEntry } from "./ViewHost";
+import { TabChooser } from "./TabChooser";
+import { initialChoiceIndex, loadTabChoice, saveTabChoice, type TabChoice } from "./tabChoice";
+import { isWeak, type Suggestion } from "@shared/did-you-mean";
+import "./launcher-extra.css";
 
 const POP_TO_ROOT_MS = 90_000;
 const DELETE_CONFIRM_MS = 3000;
 const QUICK_AI_VIEW = "ai.chat";
+const AGENT_VIEW = "agent.run";
+/** Section cap requested by "show more". */
+const EXPANDED_LIMIT = 100;
+/** Same key as hooks/useQueryHistory (read-only here, for the "↑ Recent" hint). */
+const HISTORY_KEY = "glide:query-history";
+const DYM_GROUP = "dym";
 
-type Row = { kind: "header"; key: string; sectionId: SectionId; title: string } | { kind: "item"; key: string; sectionId: SectionId; scored: ScoredItem; n: number };
+type HeaderRow = { kind: "header"; key: string; sectionId: SectionId; group: string; title: string; count: number; more: boolean; dym?: string };
+type Row = HeaderRow | { kind: "item"; key: string; sectionId: SectionId; group: string; scored: ScoredItem; n: number };
 type ItemRow = Extract<Row, { kind: "item" }>;
+
+interface Expanded {
+  query: string;
+  sections: Partial<Record<SectionId, ScoredItem[]>>;
+}
 
 interface ArgMode {
   scored: ScoredItem;
   text: string;
+  /** Quicklinks with several named arguments: Tab steps through them (./quicklinkArgs). */
+  multi?: MultiArg;
 }
 
 function GlideGlyph() {
@@ -43,16 +63,38 @@ function GlideGlyph() {
   );
 }
 
-function buildRows(res: SearchResponse | null): Row[] {
+/** Per-section cap the engine applies (results get twice the user's limit). */
+const capOf = (id: SectionId, limit: number) => (id === "results" ? limit * 2 : limit);
+
+function buildRows(res: SearchResponse | null, expanded: Expanded | null, suggestion: Suggestion | null, limit: number): Row[] {
   if (!res) return [];
   const rows: Row[] = [];
   let n = 0;
+  const ex = expanded && expanded.query === res.query ? expanded.sections : {};
+  const pushSuggestion = () => {
+    if (!suggestion) return;
+    rows.push({ kind: "header", key: `h:${DYM_GROUP}`, sectionId: "results", group: DYM_GROUP, title: "Did you mean", count: suggestion.items.length, more: false, dym: suggestion.query });
+    for (const it of suggestion.items) rows.push({ kind: "item", key: `${DYM_GROUP}:${it.item.id}`, sectionId: "results", group: DYM_GROUP, scored: it, n: ++n });
+  };
+  // Only offered when the real results are weak (loose fuzzy hits or none), so it leads.
+  pushSuggestion();
   for (const s of res.sections) {
-    if (!s.items.length) continue;
-    rows.push({ kind: "header", key: `h:${s.id}`, sectionId: s.id, title: s.title });
-    for (const it of s.items) rows.push({ kind: "item", key: `${s.id}:${it.item.id}`, sectionId: s.id, scored: it, n: ++n });
+    const items = ex[s.id] ?? s.items;
+    if (!items.length) continue;
+    const more = !ex[s.id] && s.id !== "calculator" && s.id !== "fallbacks" && items.length >= capOf(s.id, limit);
+    rows.push({ kind: "header", key: `h:${s.id}`, sectionId: s.id, group: s.id, title: s.title, count: items.length, more });
+    for (const it of items) rows.push({ kind: "item", key: `${s.id}:${it.item.id}`, sectionId: s.id, group: s.id, scored: it, n: ++n });
   }
   return rows;
+}
+
+function historyCount(): number {
+  try {
+    const arr: unknown = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? "[]");
+    return Array.isArray(arr) ? arr.length : 0;
+  } catch {
+    return 0;
+  }
 }
 
 declare global {
@@ -94,6 +136,10 @@ export function Launcher({ theme, vimMode = true }: { theme: Settings["theme"] |
   const [stack, setStack] = useState<ViewEntry[]>([]);
   const [viewFooter, setViewFooter] = useState<NavFooter | null>(null);
   const [rawMode, setRawMode] = useState<VimMode>("insert");
+  const [tabChooser, setTabChooser] = useState<{ options: TabChoice[]; index: number } | null>(null);
+  const [sectionLimit, setSectionLimit] = useState(8);
+  const [expanded, setExpanded] = useState<Expanded | null>(null);
+  const [suggestion, setSuggestion] = useState<Suggestion & { for: string } | null>(null);
   const mode: VimMode = vimMode ? rawMode : "insert";
   const normal = mode === "normal";
   const top = stack.length ? stack[stack.length - 1] : null;
@@ -105,12 +151,18 @@ export function Launcher({ theme, vimMode = true }: { theme: Settings["theme"] |
 
   // --- rows & selection (selection is derived during render: never a frame without a selected row) ---
   const rows = useMemo<Row[]>(
-    () => (argMode ? [{ kind: "header", key: "h:arg", sectionId: "results", title: "Argument" }, { kind: "item", key: "arg", sectionId: "results", scored: argMode.scored, n: 1 }] : buildRows(response)),
-    [response, argMode],
+    () =>
+      argMode
+        ? [
+            { kind: "header", key: "h:arg", sectionId: "results", group: "arg", title: "Argument", count: 1, more: false },
+            { kind: "item", key: "arg", sectionId: "results", group: "arg", scored: argMode.scored, n: 1 },
+          ]
+        : buildRows(response, expanded, suggestion && response && suggestion.for === response.query ? suggestion : null, sectionLimit),
+    [response, argMode, expanded, suggestion, sectionLimit],
   );
   const itemRows = useMemo(() => rows.filter((r): r is ItemRow => r.kind === "item"), [rows]);
   const rowKeys = useMemo(() => itemRows.map((r) => r.key), [itemRows]);
-  const rowSections = useMemo(() => itemRows.map((r) => r.sectionId as string), [itemRows]);
+  const rowSections = useMemo(() => itemRows.map((r) => r.group), [itemRows]);
   const halfPage = useCallback(() => halfPageOf(listRef.current), []);
   const rootNav = useListNav(rowKeys, { sections: rowSections, halfPage });
   const selectedRow = rootNav.index >= 0 ? itemRows[rootNav.index] : null;
@@ -126,7 +178,19 @@ export function Launcher({ theme, vimMode = true }: { theme: Settings["theme"] |
         const res = await glide().search(q);
         if (s !== seq.current) return; // a newer keystroke won
         setResponse(res);
-        if (!opts.preserveSelection) selectKey(null);
+        if (!opts.preserveSelection) {
+          selectKey(null);
+          setExpanded(null);
+        }
+        // "Did you mean": only for queries with no real results (one cheap engine pass in main).
+        if (q.trim().length >= 3 && isWeak(res)) {
+          void glide()
+            .feature<Suggestion | null>("glide", "didYouMean", q)
+            .then((sug) => {
+              if (s === seq.current) setSuggestion(sug && sug.items.length ? { ...sug, for: res.query } : null);
+            })
+            .catch(() => undefined);
+        } else setSuggestion(null);
       } catch (err) {
         if (s === seq.current) showToast(err instanceof Error ? err.message : String(err), "error");
       } finally {
@@ -183,7 +247,11 @@ export function Launcher({ theme, vimMode = true }: { theme: Settings["theme"] |
       setStack((s) => (opts.replace ? [entry] : [...s, entry]));
       setArgMode(null);
       setPanelOpen(false);
+      setTabChooser(null);
       setViewFooter(null);
+      // A new view starts in INSERT so its search field is typeable.
+      vimState.current = INITIAL_VIM_STATE;
+      setRawMode((m) => modeAfter(m, { type: "push" }));
       requestAnimationFrame(focusInput);
       return true;
     },
@@ -193,6 +261,9 @@ export function Launcher({ theme, vimMode = true }: { theme: Settings["theme"] |
   const popView = useCallback(() => {
     setStack((s) => s.slice(0, -1));
     setViewFooter(null);
+    // Popping (⌫ on empty, h, ⎋) must never leave the field read-only in NORMAL mode.
+    vimState.current = INITIAL_VIM_STATE;
+    setRawMode((m) => modeAfter(m, { type: "pop" }));
     requestAnimationFrame(focusInput);
   }, [focusInput]);
 
@@ -227,12 +298,19 @@ export function Launcher({ theme, vimMode = true }: { theme: Settings["theme"] |
   useEffect(() => {
     void runSearch("");
     focusInput();
+    const loadInfo = () =>
+      void glide()
+        .feature<{ sectionLimit: number }>("glide", "info")
+        .then((info) => setSectionLimit(info.sectionLimit > 0 ? info.sectionLimit : 8))
+        .catch(() => undefined);
+    loadInfo();
     const offShow = glide().onShow(() => {
       actionCache.current.clear();
+      setTabChooser(null);
       const stale = Date.now() - lastActivity.current > POP_TO_ROOT_MS;
       setPanelOpen(false);
       setResultCard(null);
-      setRawMode("insert");
+      setRawMode((m) => modeAfter(m, { type: "show" }));
       vimState.current = INITIAL_VIM_STATE;
       if (stale) {
         setQuery("");
@@ -246,8 +324,9 @@ export function Launcher({ theme, vimMode = true }: { theme: Settings["theme"] |
       lastActivity.current = Date.now();
       requestAnimationFrame(focusInput);
     });
-    const offData = glide().onDataChanged(() => {
+    const offData = glide().onDataChanged((data) => {
       actionCache.current.clear();
+      if (data?.settings?.sectionLimit > 0) setSectionLimit(data.settings.sectionLimit);
       void runSearch(queryRef.current, { preserveSelection: true });
     });
     const offAsk = glide().onAskInput((req) => {
@@ -302,6 +381,7 @@ export function Launcher({ theme, vimMode = true }: { theme: Settings["theme"] |
       }
       if (res.error) showToast(res.error, "error");
       else if (res.message) showToast(res.message);
+      else if (res.ok && !res.hide && !res.view && titleHint) showToast(`✓ ${titleHint}`);
       if (res.view) {
         pushView(res.view, { titleHint });
         return;
@@ -343,7 +423,14 @@ export function Launcher({ theme, vimMode = true }: { theme: Settings["theme"] |
   );
 
   const activeItem = argMode?.scored ?? selected;
-  const activeScored = argMode ? { ...argMode.scored, argument: argMode.text || undefined } : selected;
+  const activeScored = argMode ? { ...argMode.scored, argument: argMode.text || undefined, ...(argMode.multi ? { arguments: multiArgValues(argMode.multi, argMode.text) } : {}) } : selected;
+
+  const enterArgMode = (scored: ScoredItem) => {
+    const init = initMultiArg(scored);
+    setArgMode(init ? { scored, text: init.text, multi: init.multi } : { scored, text: scored.argument ?? "" });
+    if (normal) setMode("insert");
+    requestAnimationFrame(() => inputRef.current?.select());
+  };
 
   const executeSelected = (modifiers?: ExecuteModifiers) => {
     if (activeScored) void execute(activeScored, modifiers);
@@ -358,7 +445,7 @@ export function Launcher({ theme, vimMode = true }: { theme: Settings["theme"] |
   /** Root-list controller: the same interface a view's NavList registers. */
   const rootCtl: NavController = {
     nav: (c) => rootNav.apply(c),
-    activate: (mods) => executeSelected(mods),
+    activate: (mods) => (!argMode && needsArgEntry(selected) && selected ? enterArgMode(selected) : executeSelected(mods)),
     secondary: () => executeSelected({ cmd: true }),
     toggleActions: () => (panelOpen ? setPanelOpen(false) : void openPanel()),
     findAction: async (kind) => {
@@ -391,6 +478,7 @@ export function Launcher({ theme, vimMode = true }: { theme: Settings["theme"] |
     lastActivity.current = Date.now();
     if (top) return updateEntry(top.key, { query: value });
     history.reset();
+    setTabChooser(null);
     if (argMode) return setArgMode({ ...argMode, text: value });
     setQuery(value);
     void runSearch(value);
@@ -449,7 +537,74 @@ export function Launcher({ theme, vimMode = true }: { theme: Settings["theme"] |
     }
   };
 
-  const quickAiAvailable = !top && !argMode && !!query.trim() && !!selected && !selected.item.acceptsArgument && !!resolveView(QUICK_AI_VIEW);
+  // --- Tab chooser: where a free-text query goes (Quick AI / Glide Agent / first fallback) ---
+  const firstFallback = (): ScoredItem | null => {
+    const sec = response?.sections.find((x) => x.id === "fallbacks");
+    return sec?.items.find((i) => i.item.feature !== "agent" && i.item.feature !== "ai") ?? null;
+  };
+  const tabOptions = (): TabChoice[] => {
+    const out: TabChoice[] = [];
+    if (resolveView(QUICK_AI_VIEW)) out.push({ id: "ai", title: "Ask AI", subtitle: "Quick AI answer" });
+    if (resolveView(AGENT_VIEW)) out.push({ id: "agent", title: "Ask Glide Agent", subtitle: "Let the agent do it" });
+    const fb = firstFallback();
+    if (fb) out.push({ id: "fallback", title: fb.item.title, subtitle: fb.item.subtitle });
+    return out;
+  };
+  const chooserAvailable = !top && !argMode && !!query.trim() && !selected?.item.acceptsArgument && tabOptions().length > 0;
+
+  const runTabChoice = (choice: TabChoice) => {
+    saveTabChoice(choice.id);
+    setTabChooser(null);
+    const q = query;
+    if (choice.id === "ai") pushView({ id: QUICK_AI_VIEW, props: { prompt: q } }, { titleHint: "Quick AI" });
+    else if (choice.id === "agent") pushView({ id: AGENT_VIEW, props: { prompt: q } }, { titleHint: "Glide Agent" });
+    else {
+      const fb = firstFallback();
+      if (fb) void execute({ ...fb, argument: q.trim() });
+    }
+  };
+
+  const openTabChooser = () => {
+    const options = tabOptions();
+    if (!options.length) return;
+    if (options.length === 1) return runTabChoice(options[0]);
+    if (normal) setMode("insert");
+    setPanelOpen(false);
+    setTabChooser({ options, index: initialChoiceIndex(options, loadTabChoice()) });
+  };
+
+  /** Keys while the Tab chooser is open. Returns true when handled. */
+  const chooserKey = (e: React.KeyboardEvent): boolean => {
+    if (!tabChooser) return false;
+    const { options, index } = tabChooser;
+    const move = (d: number) => setTabChooser({ options, index: (index + d + options.length) % options.length });
+    const ctrl = e.ctrlKey && !e.metaKey && !e.altKey;
+    if (e.key === "Escape") setTabChooser(null);
+    else if (e.key === "ArrowDown" || (e.key === "Tab" && !e.shiftKey) || (ctrl && (e.key === "j" || e.key === "n"))) move(1);
+    else if (e.key === "ArrowUp" || (e.key === "Tab" && e.shiftKey) || (ctrl && (e.key === "k" || e.key === "p"))) move(-1);
+    else if (e.key === "Enter") runTabChoice(options[index]);
+    else if (/^[1-9]$/.test(e.key) && !e.metaKey && !e.ctrlKey && Number(e.key) <= options.length) runTabChoice(options[Number(e.key) - 1]);
+    else {
+      // Anything else (typing, ⌘K …) closes the chooser and behaves normally.
+      setTabChooser(null);
+      return false;
+    }
+    return true;
+  };
+
+  // --- "show more" per section ---------------------------------------------------
+  const expandSection = async (id: SectionId) => {
+    const q = query;
+    try {
+      const res = await glide().feature<SearchResponse>("glide", "search", q, { sectionLimit: EXPANDED_LIMIT });
+      const items = res.sections.find((x) => x.id === id)?.items;
+      if (!items || queryRef.current !== q) return;
+      setExpanded((prev) => ({ query: res.query, sections: { ...(prev && prev.query === res.query ? prev.sections : {}), [id]: items } }));
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err), "error");
+    }
+  };
+  const headerOf = (group: string) => rows.find((r): r is HeaderRow => r.kind === "header" && r.group === group);
 
   /** Root-only keys that run before the shared vim mapping. Returns true when handled. */
   const rootKey = (e: React.KeyboardEvent): boolean => {
@@ -458,16 +613,29 @@ export function Launcher({ theme, vimMode = true }: { theme: Settings["theme"] |
       setArgMode(null);
       return true;
     }
+    const multiStep = argMode?.multi ? multiArgKey(argMode.multi, e, argMode.text) : null;
+    if (argMode && multiStep) {
+      setArgMode({ ...argMode, multi: multiStep.multi, text: multiStep.text });
+      requestAnimationFrame(() => inputRef.current?.select());
+      return true;
+    }
     if (key === "Tab" && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
       if (argMode) return true;
       if (selected?.item.acceptsArgument) {
-        setArgMode({ scored: selected, text: selected.argument ?? "" });
-        if (normal) setMode("insert");
-        requestAnimationFrame(() => inputRef.current?.select());
-      } else if (quickAiAvailable) {
-        pushView({ id: QUICK_AI_VIEW, props: { prompt: query } }, { titleHint: "Quick AI" });
+        enterArgMode(selected);
+      } else if (chooserAvailable) {
+        openTabChooser();
       } else executeSelected();
       return true;
+    }
+    // ⌘↓ on the last row of a capped section (or ⇧⌘↓ anywhere in it) shows the rest of that section.
+    if (key === "ArrowDown" && e.metaKey && !e.altKey && !e.ctrlKey && selectedRow && !argMode) {
+      const header = headerOf(selectedRow.group);
+      const lastOfGroup = itemRows[rootNav.index + 1]?.group !== selectedRow.group;
+      if (header?.more && (e.shiftKey || lastOfGroup)) {
+        void expandSection(header.sectionId);
+        return true;
+      }
     }
     if (key === "Backspace" && argMode && !argMode.text) {
       setArgMode(null);
@@ -497,6 +665,10 @@ export function Launcher({ theme, vimMode = true }: { theme: Settings["theme"] |
     lastActivity.current = Date.now();
     // A view that handled the key itself (e.g. a capture-phase window listener) wins.
     if (prompt || resultCard || e.nativeEvent.isComposing || e.nativeEvent.defaultPrevented) return;
+    if (!top && chooserKey(e)) {
+      e.preventDefault();
+      return;
+    }
     const target = e.target as HTMLElement;
     // A view's own text field (chat composer, form) keeps its keys.
     if (target !== inputRef.current && isEditable(target)) return;
@@ -526,7 +698,7 @@ export function Launcher({ theme, vimMode = true }: { theme: Settings["theme"] |
   const TopView = top ? (resolveView(top.id) as (ComponentType<ViewProps> & { hideLauncherFooter?: boolean }) | undefined) : undefined;
   const showFooter = !showCards && (top ? !TopView?.hideLauncherFooter : rows.length > 0 || panelOpen);
   const vimInfo = useMemo<VimInfo>(() => ({ enabled: vimMode, mode, setMode }), [vimMode, mode, setMode]);
-  const placeholder = top ? top.placeholder : argMode ? (argMode.scored.item.kind === "quicklink" ? "Query…" : "Input…") : "Search apps, workflows, commands…";
+  const placeholder = top ? top.placeholder : argMode ? (argMode.multi ? argPlaceholder(argMode.multi) : argMode.scored.item.kind === "quicklink" ? "Query…" : "Input…") : "Search apps, workflows, commands…";
   const footPrimary = top ? viewFooter?.primary : activeItem ? primaryTitle : null;
   const footHasActions = top ? !!viewFooter?.hasActions : !!activeItem;
 
@@ -586,17 +758,29 @@ export function Launcher({ theme, vimMode = true }: { theme: Settings["theme"] |
             </span>
           )}
           {argMode ? (
-            <span className="argpill" title={argMode.scored.item.title}>
-              <Icon icon={argMode.scored.item.icon} size="md" />
-              {argMode.scored.item.title}
-            </span>
+            <>
+              {argMode.multi && <ArgFields multi={argMode.multi} text={argMode.text} />}
+              <span className="argpill" title={argMode.scored.item.title}>
+                <Icon icon={argMode.scored.item.icon} size="md" />
+                {argMode.scored.item.title}
+              </span>
+            </>
           ) : (
             !showCards &&
             !normal && (
               <span className="launcher__hint">
-                {quickAiAvailable ? (
+                {chooserAvailable ? (
                   <>
-                    Ask AI <Kbd keys="⇥" />
+                    {(() => {
+                      const opts = tabOptions();
+                      const o = opts[initialChoiceIndex(opts, loadTabChoice())];
+                      return opts.length > 1 ? "Ask…" : (o?.title ?? "Ask");
+                    })()}{" "}
+                    <Kbd keys="⇥" />
+                  </>
+                ) : !top && !argMode && !query && historyCount() > 0 ? (
+                  <>
+                    <Kbd keys="↑" /> recent · <Kbd keys="⌘K" /> actions
                   </>
                 ) : (
                   <>
@@ -607,6 +791,8 @@ export function Launcher({ theme, vimMode = true }: { theme: Settings["theme"] |
             )
           )}
         </div>
+
+        {tabChooser && !top && <TabChooser options={tabChooser.options} index={tabChooser.index} query={query.trim()} onPick={(i) => runTabChoice(tabChooser.options[i])} />}
 
         {prompt && (
           <>
@@ -657,8 +843,24 @@ export function Launcher({ theme, vimMode = true }: { theme: Settings["theme"] |
             <div id="glide-results" ref={listRef} className="launcher__list" role="listbox" aria-label="Results">
               {rows.map((r) =>
                 r.kind === "header" ? (
-                  <div key={r.key} className="section" role="presentation">
-                    <span>{r.title}</span>
+                  <div key={r.key} className={`section ${r.dym ? "section--dym" : ""}`} role="presentation" data-section={r.group}>
+                    <span>
+                      {r.dym ? (
+                        <>
+                          Did you mean <em>“{r.dym}”</em>?
+                        </>
+                      ) : (
+                        r.title
+                      )}
+                    </span>
+                    <span className="section__meta">
+                      {r.more && (
+                        <button type="button" className="section__more" tabIndex={-1} onClick={() => void expandSection(r.sectionId)} title="Show more (⌘↓ at the end of the section)">
+                          Show more <Kbd keys="⌘↓" />
+                        </button>
+                      )}
+                      <span className="section__count">{r.count}</span>
+                    </span>
                   </div>
                 ) : (
                   <ResultRow key={r.key} rowId={`row-${r.key}`} scored={r.scored} selected={r.key === rootNav.selectedKey} onHover={() => r.key !== rootNav.selectedKey && selectKey(r.key)} onClick={() => void execute(r.scored)} />
@@ -686,6 +888,14 @@ export function Launcher({ theme, vimMode = true }: { theme: Settings["theme"] |
               )}
             </div>
             <div className="launcher__foot-right">
+              {!top && !argMode && query.trim() && (
+                <>
+                  <span className="launcher__count" data-count={itemRows.length}>
+                    {itemRows.length} {itemRows.length === 1 ? "result" : "results"}
+                  </span>
+                  <span className="footsep" />
+                </>
+              )}
               {footPrimary && (
                 <>
                   <button type="button" className="footbtn" onClick={() => controller()?.activate({ cmd: false, shift: false, alt: false })}>

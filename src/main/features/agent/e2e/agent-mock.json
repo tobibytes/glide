@@ -1,0 +1,13 @@
+{
+  "model": "mock-model",
+  "turns": [
+    { "text": "On it.", "delay_ms": 2, "tool_calls": [
+      { "name": "plan", "input": { "steps": ["Create a signature snippet", "Create a GitHub quicklink"] } },
+      { "name": "create_snippet", "input": { "name": "Sig", "text": "Best, Tobi", "keyword": ";sig" } },
+      { "name": "create_quicklink", "input": { "name": "GH Search", "url": "https://github.com/search?q={query}" } }
+    ] },
+    { "text": "Created the snippet “Sig” and the quicklink “GH Search”.", "delay_ms": 2 },
+    { "delay_ms": 2, "tool_calls": [ { "name": "start_timer", "input": { "minutes": 1, "name": "Tea" } } ] },
+    { "text": "Started a 1 minute Tea timer as a follow-up.", "delay_ms": 2 }
+  ]
+}

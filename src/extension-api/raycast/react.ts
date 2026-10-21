@@ -45,7 +45,7 @@ export interface MiniReact {
   jsxRuntime: Record<string, any>;
   createRoot(cb: RootCallbacks): MiniRoot;
   /** Declare a host component (rendered by Glide). `slots` are props whose element values are rendered as subtrees. */
-  host(name: string, slots?: string[], handle?: () => Record<string, unknown>): any;
+  host(name: string, slots?: string[], handle?: (props: () => Record<string, any>) => Record<string, unknown>): any;
   /** Run all pending updates and effects now (tests). */
   flush(): void;
 }
@@ -274,7 +274,7 @@ export function createMiniReact(): MiniReact {
   class PureComponent extends Component {}
   (PureComponent.prototype as any).isPureReactComponent = true;
 
-  function host(name: string, slots: string[] = [], handle?: () => Record<string, unknown>) {
+  function host(name: string, slots: string[] = [], handle?: (props: () => Record<string, any>) => Record<string, unknown>) {
     const fn: any = function GlideHostComponent() {
       throw new Error(`${name} is a host component and cannot be called directly`);
     };
@@ -940,8 +940,9 @@ export function createMiniReact(): MiniReact {
   }
 
   function makeHandle(inst: Inst): unknown {
-    const meta = inst.type?.[HOST] as { handle?: () => Record<string, unknown> } | undefined;
-    return meta?.handle ? meta.handle() : {};
+    const meta = inst.type?.[HOST] as { handle?: (props: () => Record<string, any>) => Record<string, unknown> } | undefined;
+    // The handle reads the latest props (e.g. a form field's id for focus()/reset()).
+    return meta?.handle ? meta.handle(() => inst.props ?? {}) : {};
   }
 
   const roots = new Set<RootState>();

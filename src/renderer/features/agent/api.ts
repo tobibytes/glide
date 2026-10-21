@@ -1,17 +1,29 @@
-/** Typed wrappers over window.glide.feature("agent", …) and the live-run hook. */
+/** Typed wrappers over window.glide.feature("agent", …) and the live-conversation hook. */
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AgentSettings, AgentStatus, RunSnapshot, StartResult, ToolInfo } from "../../../main/features/agent/types";
+import type {
+  AgentSettings, AgentStatus, ConversationSummary, ConversationView, RunSnapshot, SaveWorkflowResult, StartResult, ToolInfo, UndoResult,
+} from "../../../main/features/agent/types";
 
-export type { AgentSettings, AgentStatus, AgentStep, RunSnapshot, ToolInfo, TranscriptEntry } from "../../../main/features/agent/types";
+export type {
+  AgentSettings, AgentStatus, AgentStep, ConversationSummary, ConversationView, PlanItem, RunSnapshot, ToolInfo, TranscriptEntry,
+} from "../../../main/features/agent/types";
 
 const call = <T,>(method: string, ...args: unknown[]): Promise<T> => window.glide.feature<T>("agent", method, ...args);
 
 export const agent = {
-  start: (runId: string, prompt: string) => call<StartResult>("start", { runId, prompt }),
+  start: (runId: string, prompt: string, conversationId?: string) => call<StartResult>("start", { runId, prompt, conversationId }),
   respond: (runId: string, confirmationId: string, approve: boolean) => call<boolean>("respond", runId, confirmationId, approve),
   cancel: (runId: string) => call<boolean>("cancel", runId),
   getRun: (runId: string) => call<RunSnapshot | null>("getRun", runId),
   activeRun: () => call<RunSnapshot | null>("activeRun"),
+  getConversation: (id: string) => call<ConversationView | null>("getConversation", id),
+  latestConversation: () => call<ConversationView | null>("latestConversation"),
+  listConversations: (query: string) => call<ConversationSummary[]>("listConversations", query),
+  deleteConversation: (id: string) => call<boolean>("deleteConversation", id),
+  clearHistory: () => call<number>("clearHistory"),
+  undo: (runId: string, stepId?: string) => call<UndoResult>("undo", runId, stepId),
+  saveAsWorkflow: (runId: string, name?: string) => call<SaveWorkflowResult>("saveAsWorkflow", runId, name),
+  openFromLauncher: (query: string) => call<boolean>("openFromLauncher", query),
   status: () => call<AgentStatus>("status"),
   getSettings: () => call<AgentSettings>("getSettings"),
   setSettings: (patch: Partial<AgentSettings>) => call<AgentSettings>("setSettings", patch),
@@ -28,47 +40,96 @@ export interface StartError {
   kind: string;
 }
 
-/** Follows one run's snapshots (pushed from main as the "run" event). */
-export function useAgentRun() {
-  const [run, setRun] = useState<RunSnapshot | null>(null);
+interface ConvState {
+  id: string | null;
+  title: string;
+  runs: RunSnapshot[];
+}
+
+const EMPTY: ConvState = { id: null, title: "", runs: [] };
+
+function upsert(runs: RunSnapshot[], snap: RunSnapshot): RunSnapshot[] {
+  const i = runs.findIndex((r) => r.runId === snap.runId);
+  if (i < 0) return [...runs, snap];
+  const next = runs.slice();
+  next[i] = snap;
+  return next;
+}
+
+/** Follows one conversation: its runs' snapshots are pushed from main as the "run" event. */
+export function useConversation() {
+  const [conv, setConv] = useState<ConvState>(EMPTY);
   const [startError, setStartError] = useState<StartError | null>(null);
   const idRef = useRef<string | null>(null);
+  const runIds = useRef(new Set<string>());
 
   useEffect(
     () =>
       window.glide.onFeatureEvent((e) => {
         if (e.feature !== "agent" || e.event !== "run") return;
         const snap = e.payload as RunSnapshot | undefined;
-        if (snap && snap.runId === idRef.current) setRun(snap);
+        if (!snap) return;
+        const mine = runIds.current.has(snap.runId) || (!!snap.conversationId && snap.conversationId === idRef.current);
+        if (!mine) return;
+        runIds.current.add(snap.runId);
+        if (snap.conversationId && !idRef.current) idRef.current = snap.conversationId;
+        setConv((c) => ({ ...c, id: idRef.current, runs: upsert(c.runs, snap) }));
       }),
     [],
   );
 
-  const attach = useCallback(async (runId: string) => {
-    idRef.current = runId;
-    const snap = await agent.getRun(runId);
-    if (snap && idRef.current === runId) setRun(snap);
-    return !!snap;
+  const show = useCallback((v: ConversationView | null) => {
+    if (!v) return false;
+    idRef.current = v.id;
+    runIds.current = new Set(v.runs.map((r) => r.runId));
+    setConv({ id: v.id, title: v.title, runs: v.runs });
+    return true;
+  }, []);
+
+  const load = useCallback(async (id: string) => show(await agent.getConversation(id)), [show]);
+
+  const attach = useCallback(
+    async (runId: string) => {
+      const snap = await agent.getRun(runId);
+      if (!snap) return false;
+      if (snap.conversationId && (await load(snap.conversationId))) return true;
+      runIds.current = new Set([runId]);
+      idRef.current = snap.conversationId ?? null;
+      setConv({ id: idRef.current, title: snap.prompt, runs: [snap] });
+      return true;
+    },
+    [load],
+  );
+
+  const reset = useCallback(() => {
+    idRef.current = null;
+    runIds.current = new Set();
+    setStartError(null);
+    setConv(EMPTY);
   }, []);
 
   const start = useCallback(async (prompt: string) => {
     const runId = newRunId();
-    idRef.current = runId;
+    runIds.current.add(runId);
     setStartError(null);
-    setRun({ runId, prompt, status: "running", entries: [{ kind: "prompt", id: "p", text: prompt }], toolCalls: 0, maxToolCalls: 12, model: "", startedAt: Date.now() });
+    const optimistic: RunSnapshot = { runId, conversationId: idRef.current ?? undefined, prompt, status: "running", entries: [{ kind: "prompt", id: `${runId}-p`, text: prompt }], toolCalls: 0, maxToolCalls: 12, model: "", startedAt: Date.now() };
+    setConv((c) => ({ ...c, title: c.title || prompt, runs: upsert(c.runs, optimistic) }));
+    const drop = (message: string, kind: string) => {
+      runIds.current.delete(runId);
+      setConv((c) => ({ ...c, runs: c.runs.filter((r) => r.runId !== runId) }));
+      setStartError({ message, kind });
+    };
     try {
-      const res = await agent.start(runId, prompt);
-      if (!res.ok) {
-        idRef.current = null;
-        setRun(null);
-        setStartError({ message: res.error ?? "Could not start", kind: res.errorKind ?? "other" });
+      const res = await agent.start(runId, prompt, idRef.current ?? undefined);
+      if (!res.ok) return drop(res.error ?? "Could not start", res.errorKind ?? "other");
+      if (res.conversationId) {
+        idRef.current = res.conversationId;
+        setConv((c) => ({ ...c, id: res.conversationId ?? null }));
       }
     } catch (err) {
-      idRef.current = null;
-      setRun(null);
-      setStartError({ message: err instanceof Error ? err.message : String(err), kind: "other" });
+      drop(err instanceof Error ? err.message : String(err), "other");
     }
   }, []);
 
-  return { run, startError, start, attach };
+  return { conv, startError, start, attach, load, show, reset };
 }

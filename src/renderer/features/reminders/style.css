@@ -1,0 +1,59 @@
+.reminders {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.reminders__banner {
+  margin: 8px 12px 2px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.reminders__banner--error {
+  color: var(--danger);
+}
+
+.reminders__filter {
+  margin: 6px 14px 0;
+  font-size: 11px;
+  color: var(--text-3, var(--text-2));
+}
+
+.reminders__check {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin: 0 6px 0 4px;
+  border: 1.5px solid var(--accent);
+  border-radius: 50%;
+  color: #fff;
+  font-size: 9px;
+  line-height: 12px;
+  text-align: center;
+}
+
+.reminders__row--done .row__title {
+  color: var(--text-2);
+  text-decoration: line-through;
+}
+
+.reminders__prio {
+  color: var(--warning, var(--danger));
+  font-weight: 700;
+}
+
+.reminders__due {
+  font-size: 12px;
+  color: var(--text-2);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.reminders__due--overdue {
+  color: var(--danger);
+  font-weight: 600;
+}

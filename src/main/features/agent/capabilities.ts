@@ -4,13 +4,15 @@
  */
 import fs from "node:fs";
 import { clipboard, shell } from "electron";
-import type { ExecuteResult } from "@shared/ipc";
 import type { WindowAction } from "../../native/helper";
 import { calculatorItems } from "../../sources/calculator";
 import { expandHome, openApp, sleep } from "../../util/exec";
 import type { FeatureContext, FeatureModule } from "../types";
 import type { CatalogueSource } from "./catalogue";
-import type { AgentCapabilities, OpResult } from "./tools";
+import { createExtraCapabilities } from "./capabilities-extra";
+import { asOp } from "./tooling";
+import type { AgentCapabilities, OpResult, WindowSnapshot } from "./tools";
+import { itemToWorkflowStep } from "./workflow";
 
 const NEEDS_ACCESSIBILITY = "Glide needs Accessibility permission to move windows (System Settings → Privacy & Security → Accessibility).";
 
@@ -18,15 +20,12 @@ export interface CapabilityDeps {
   ctx: FeatureContext;
   catalogue: CatalogueSource;
   features(): Promise<FeatureModule[]>;
+  /** Ids of the installed features (tools needing a missing one are hidden). */
+  featureIds: ReadonlySet<string>;
   /** Called when a tool hid the launcher, so the run can bring its view back afterwards. */
   onLauncherHidden(): void;
 }
 
-function asOp(r: unknown, fallback = "Done"): OpResult {
-  const e = r as Partial<ExecuteResult> | null | undefined;
-  if (!e || typeof e !== "object") return { ok: r !== false, message: fallback };
-  return { ok: e.ok !== false, message: typeof e.message === "string" ? e.message : fallback, error: typeof e.error === "string" ? e.error : undefined };
-}
 
 export function createCapabilities(deps: CapabilityDeps): AgentCapabilities {
   const { ctx } = deps;
@@ -43,9 +42,41 @@ export function createCapabilities(deps: CapabilityDeps): AgentCapabilities {
     await sleep(ms);
   };
 
+  const windowSnapshot = async (): Promise<WindowSnapshot | null> => {
+    if (!ctx.helper.available()) return null;
+    const r = await ctx.helper.call("layouts.capture", {});
+    if (!r.ok || !r.windows) return null;
+    return { windows: r.windows.map((w) => ({ pid: w.pid, bundleId: w.bundleId, appName: w.appName, title: w.title, order: w.order, frame: { ...w.frame } })) };
+  };
+
   return {
+    ...createExtraCapabilities({ ctx, method, featureIds: deps.featureIds, onLauncherHidden: deps.onLauncherHidden }),
     now: () => Date.now(),
     search: (q, limit) => deps.catalogue.search(q, limit),
+    workflowForItem: (id, argument, title) => itemToWorkflowStep(id, argument, ctx.getData(), title),
+    windowSnapshot,
+    async restoreWindows(before) {
+      if (!ctx.helper.available()) return { ok: false, error: "Restoring windows needs the Glide helper, which is not running." };
+      const r = await ctx.helper.call("layouts.capture", {});
+      if (!r.ok || !r.windows) return { ok: false, error: r.error ?? "Could not read windows" };
+      // Refs change on every capture: match saved windows to live ones by process + title, then order.
+      const used = new Set<number>();
+      const moves: Array<{ ref: number; frame: { x: number; y: number; width: number; height: number } }> = [];
+      for (const saved of before.windows) {
+        const live =
+          r.windows.find((w) => !used.has(w.ref) && w.pid === saved.pid && w.title === saved.title) ??
+          r.windows.find((w) => !used.has(w.ref) && w.pid === saved.pid && w.order === saved.order);
+        if (!live) continue;
+        used.add(live.ref);
+        const f = live.frame;
+        const s = saved.frame;
+        if (f.x !== s.x || f.y !== s.y || f.width !== s.width || f.height !== s.height) moves.push({ ref: live.ref, frame: s });
+      }
+      if (!moves.length) return { ok: true, message: "Windows are already where they were" };
+      await hide();
+      const m = await ctx.helper.call("layouts.move", { moves });
+      return m.ok ? { ok: true, message: `Moved ${moves.length} window${moves.length === 1 ? "" : "s"} back` } : { ok: false, error: m.error ?? "Could not move the windows back" };
+    },
     findItem: (id) => deps.catalogue.find(id),
 
     async executeItem(id, argument) {
@@ -129,6 +160,17 @@ export function createCapabilities(deps: CapabilityDeps): AgentCapabilities {
       if (!note || typeof note.id !== "string") return { ok: false, error: "Could not create a note" };
       await method("notes", "save", note.id, text);
       return { ok: true, id: note.id };
+    },
+    async deleteNote(id) {
+      const ok = await method("notes", "remove", id);
+      return ok === false ? { ok: false, error: "That note no longer exists" } : { ok: true, message: "Note deleted" };
+    },
+    async timerIds() {
+      const s = (await method("timers", "state")) as { timers?: Array<{ id?: unknown }> } | null;
+      return (s?.timers ?? []).flatMap((t) => (typeof t.id === "string" ? [t.id] : []));
+    },
+    async stopTimer(id) {
+      return asOp(await method("timers", "stop", id), "Timer cancelled");
     },
     async searchNotes(query) {
       const list = (await method("notes", "search", query)) as Array<{ id: string; title: string; preview?: string }>;

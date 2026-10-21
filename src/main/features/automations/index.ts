@@ -3,6 +3,7 @@
  * model.ts (types/validation/matching) · schedule.ts (time math) · engine.ts (rate limit, ask, run, log)
  * · sources.ts (app/Wi-Fi/power/display/folder/hotkey watchers) · persist.ts (automations.json in dataDir).
  */
+import { currentWifiSsid } from "../../native/wifi";
 import os from "node:os";
 import { app, dialog, Notification, powerMonitor, screen } from "electron";
 import type { ExecuteResult, ItemAction } from "@shared/ipc";
@@ -189,6 +190,7 @@ export const feature: FeatureModule = {
       }
     });
     sources = new EventSources({
+      wifiSsid: () => currentWifiSsid(c.helper),
       emit: (e: TriggerEvent) => void engine?.handleEvent(e).then(notifyFailures),
       run: async (cmd, args) => {
         const res = await exec(cmd, args, { timeoutMs: 5000 });

@@ -1,0 +1,7 @@
+{
+  "note": "Search thresholds fail the run; startup/memory are reported as warnings unless --strict. Times in ms, memory in MB.",
+  "engineP95Ms": 30,
+  "ipcP95Ms": 60,
+  "startupFirstRenderMs": 5000,
+  "memoryTotalMb": 1500
+}

@@ -25,17 +25,19 @@ Press **⌘Space**, type a few letters, hit **⏎**. Glide finds apps, files, bo
 | 🔎 **Fast fuzzy search** | Subsequence matching, aliases and frecency ranking ([how it ranks](src/engine/README.md)) |
 | 🧩 **Workflows** | A Shortcuts-style visual builder: 17 actions, variables, conditions, hotkeys |
 | ⚡ **Automations** | Run workflows on a schedule, on app launch, Wi‑Fi change, battery, display, folder changes or a hotkey |
-| 🤖 **Glide Agent** | "Put Safari left, Notes right and start a 25 min timer". Claude plans it, you confirm, Glide does it |
+| 🤖 **Glide Agent** | "Put Safari left, Notes right and start a 25 min timer". Claude plans it, you confirm, Glide does it, with undo, conversations and Save as Workflow |
 | 🪟 **Windows & workspaces** | Snap windows, save and restore layouts, open whole workspaces in one keystroke |
-| 📋 **Clipboard history** | Text, images, files and colors, with pinning and privacy filters |
-| ✂️ **Snippets** | Expand as you type, from anywhere |
+| 📋 **Clipboard history** | List or image grid, filters, text search inside images, Paste Stack, merge, edit before pasting |
+| ✂️ **Snippets & quicklinks** | `{cursor}`, dates, nested snippets, rich text, keyword prefix; quicklinks with several arguments and open-with |
+| 🗓️ **Reminders & Finder** | "remind call mom tomorrow 9am", plus actions on the Finder selection (copy path, terminal here, move, compress) |
+| 📍 **Menu bar** | Live timers, CPU and memory, next meeting, clipboard and agent shortcuts |
 | 🔤 **Text transforms** | 34 transforms (case, JSON, Base64, hashes, JWT…) on your selection, pasted back |
 | 🔢 **Conversions** | Units, ~160 currencies, time zones and date math, right in the search bar |
 | 👁️ **Screen text & QR** | Capture any region and get the text (Apple Vision), or scan a QR code |
 | 🌐 **Bookmarks & history** | Chrome, Arc, Brave, Edge, Vivaldi, Firefox and Safari |
 | 🧰 **Dev tools** | Kill a process or a port, a live system monitor, script commands |
 | 🎨 **Themes** | 9 themes, custom accent, density, translucency, all live-previewed |
-| 🧱 **Extensions** | Glide's own API **and** Raycast-style React extensions (`@raycast/api`, `@raycast/utils`) |
+| 🧱 **Extensions & store** | Glide's own API **and** Raycast-style React extensions (menu bar, background refresh, OAuth, AI), plus an in-app store with checksum-verified installs |
 | 🔄 **Sync** | Settings sync and backup through any folder (iCloud Drive, Dropbox…), with no server |
 | ⌨️ **Vim mode** | `j`/`k`, `gg`/`G`, `/`, counts, plus normal and insert modes in every list |
 
@@ -77,9 +79,10 @@ For development:
 
 ```sh
 pnpm dev          # Vite + esbuild watch + Electron
-pnpm test         # 645 unit tests
+pnpm test         # 906 unit tests
 pnpm typecheck
-pnpm test:e2e     # drives the real app over the DevTools protocol with an isolated data dir
+pnpm test:e2e     # drives the real app headless (nothing appears on screen)
+pnpm test:quality # smoke, performance and accessibility suites; see docs/TESTING.md
 ```
 
 Some features need macOS permissions; Glide asks when you first use them:
@@ -109,11 +112,28 @@ More detail: [docs/INSTALL.md](docs/INSTALL.md) (signing, releases, auto-update,
 - [Features](docs/FEATURES.md): everything Glide does, with commands and shortcuts
 - [Architecture](docs/ARCHITECTURE.md): how the pieces fit together
 - [Writing extensions](src/extension-api/README.md): Glide API and Raycast-style React extensions
+- [Extension store](docs/EXTENSIONS-STORE.md) · [Testing](docs/TESTING.md)
 - [Search ranking](src/engine/README.md)
 - [Native helper protocol](src/native/PROTOCOL.md)
 - [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
-## Roadmap: the top 10 (all shipped in v0.2)
+## Roadmap
+
+**v0.3 (shipped):**
+- menu-bar mode
+- Clipboard 2.0
+- extension store
+- universal (Intel + Apple silicon) builds with tag-triggered GitHub releases
+- Raycast-compat (menu-bar commands, background refresh, OAuth, AI)
+- Quicklinks & Snippets 2.0
+- Reminders and Finder actions
+- Glide Agent 2.0
+- features as workflow steps
+- the Tab chooser
+- "Keep open after running"
+- headless testing with visual, accessibility and performance suites
+
+**v0.2, the top 10 (shipped):**
 
 Ranked by how much they change day-to-day use:
 
@@ -128,7 +148,7 @@ Ranked by how much they change day-to-day use:
 9. **System monitor**: live CPU, memory, disk, battery and network
 10. **Sync & backup**: through any synced folder, with deterministic merges
 
-Next up: a menu-bar mode for timers and the system monitor, Grid views for clipboard images, an extension store index, and Intel builds.
+Next up: ⌘V-driven Paste Stack and live snippet placeholders (needs a helper change), and notarized releases.
 
 ## Background
 

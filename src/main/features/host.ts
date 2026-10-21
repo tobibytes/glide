@@ -3,10 +3,13 @@ import path from "node:path";
 import { app, BrowserWindow, globalShortcut, ipcMain, type BrowserWindowConstructorOptions } from "electron";
 import { IPC, type ExecuteModifiers, type ExecuteResult, type FeatureEvent, type ItemAction, type ViewRequest } from "@shared/ipc";
 import type { ScoredItem, SearchItem } from "@shared/types";
+import { createSearchApi, type SearchProvider } from "@shared/search";
 import type { NativeHelper } from "../native/helper";
 import type { Store } from "../store";
 import { loadRenderer, webPreferences, type Windows } from "../window";
 import type { WorkflowRuntime } from "../workflows/runtime";
+import { registerFeatureAction } from "../workflows/feature-actions";
+import { builtinFeatureActions } from "../workflows/builtin-actions";
 import type { FeatureContext, FeatureModule } from "./types";
 
 export interface FeatureHostDeps {
@@ -27,13 +30,41 @@ export interface FeatureHost {
   actions(item: SearchItem): ItemAction[];
   runAction(item: ScoredItem, actionId: string, modifiers?: ExecuteModifiers): Promise<ExecuteResult>;
   openView(view: ViewRequest): void;
+  /**
+   * Wire FeatureContext.search/findItem to the launcher's search path (called by ipc.ts with the same
+   * function behind IPC.SEARCH_QUERY). Until then ctx.search ranks nothing and returns [].
+   */
+  provideSearch(provider: SearchProvider): void;
 }
 
 const DYNAMIC_TIMEOUT_MS = 250;
+/** Pseudo feature id for platform methods callable from the renderer. */
+export const PLATFORM_ID = "glide";
 
 export function createFeatureHost(modules: FeatureModule[], deps: FeatureHostDeps): FeatureHost {
   const byId = new Map(modules.map((m) => [m.id, m]));
   const hotkeys = new Map<string, string>(); // "<feature>:<key>" -> accelerator
+  let searchProvider: SearchProvider | null = null;
+  const searchApi = createSearchApi(() => searchProvider);
+  const contexts = new Map<string, FeatureContext>();
+
+  // Platform methods for the renderer (window.glide.feature("glide", …)); preload's search() takes only a query.
+  const platformMethods: Record<string, (...args: unknown[]) => unknown> = {
+    /** (query, { sectionLimit? }) → SearchResponse — the launcher's "show more". */
+    search: (query, opts) => {
+      const limit = typeof opts === "object" && opts !== null ? (opts as { sectionLimit?: unknown }).sectionLimit : undefined;
+      return searchApi.sections(typeof query === "string" ? query : "", { sectionLimit: typeof limit === "number" ? limit : undefined });
+    },
+    /** (query) → Suggestion | null */
+    didYouMean: (query) => searchApi.suggest(typeof query === "string" ? query : ""),
+    info: () => ({ sectionLimit: deps.store.getSettings().sectionLimit }),
+  };
+
+  const callFeature = async <T,>(featureId: string, method: string, ...args: unknown[]): Promise<T> => {
+    const fn = byId.get(featureId)?.methods?.[method] ?? (featureId === PLATFORM_ID && !byId.has(PLATFORM_ID) ? platformMethods[method] : undefined);
+    if (!fn) throw new Error(`Unknown feature method ${featureId}.${method}`);
+    return (await fn(...args)) as T;
+  };
 
   const openView = (view: ViewRequest) => {
     deps.windows.showLauncher();
@@ -41,7 +72,15 @@ export function createFeatureHost(modules: FeatureModule[], deps: FeatureHostDep
     setTimeout(() => deps.windows.sendToLauncher(IPC.EVT_OPEN_VIEW, view), 30);
   };
 
-  const contextFor = (m: FeatureModule): FeatureContext => ({
+  const contextFor = (m: FeatureModule): FeatureContext => {
+    const existing = contexts.get(m.id);
+    if (existing) return existing;
+    const ctx = makeContext(m);
+    contexts.set(m.id, ctx);
+    return ctx;
+  };
+
+  const makeContext = (m: FeatureModule): FeatureContext => ({
     id: m.id,
     store: deps.store,
     runtime: deps.runtime,
@@ -91,13 +130,33 @@ export function createFeatureHost(modules: FeatureModule[], deps: FeatureHostDep
     },
     executeItem: deps.executeItem,
     log: (...args) => console.log(`[${m.id}]`, ...args),
+    search: (query, opts) => searchApi.search(query, opts),
+    searchSections: (query) => searchApi.sections(query),
+    findItem: (id) => searchApi.findItem(id),
+    callFeature,
+    registerWorkflowAction: (action) => registerFeatureAction(m.id, action, contextFor(m)),
   });
+
+  const registerWorkflowActions = () => {
+    for (const m of modules) {
+      for (const a of m.workflowActions ?? []) {
+        try {
+          registerFeatureAction(m.id, a, contextFor(m));
+        } catch (err) {
+          console.warn(`[${m.id}] workflow action ${a.id} rejected:`, err);
+        }
+      }
+    }
+    // Actions Glide ships for existing features; only when that feature is installed.
+    for (const b of builtinFeatureActions()) {
+      const m = byId.get(b.feature);
+      if (m) registerFeatureAction(b.feature, b.def, contextFor(m));
+    }
+  };
 
   ipcMain.handle(IPC.FEATURE_INVOKE, async (_e, featureId: unknown, method: unknown, ...args: unknown[]) => {
     if (typeof featureId !== "string" || typeof method !== "string") throw new Error("Invalid feature call");
-    const fn = byId.get(featureId)?.methods?.[method];
-    if (!fn) throw new Error(`Unknown feature method ${featureId}.${method}`);
-    return fn(...args);
+    return callFeature(featureId, method, ...args);
   });
 
   const safe = <T>(m: FeatureModule, what: string, fn: () => T, fallback: T): T => {
@@ -118,6 +177,7 @@ export function createFeatureHost(modules: FeatureModule[], deps: FeatureHostDep
           console.warn(`[${m.id}] start failed:`, err);
         }
       }
+      registerWorkflowActions();
     },
     async stop() {
       for (const m of modules) await Promise.resolve(m.stop?.()).catch(() => undefined);
@@ -155,5 +215,8 @@ export function createFeatureHost(modules: FeatureModule[], deps: FeatureHostDep
       }
     },
     openView,
+    provideSearch: (provider) => {
+      searchProvider = provider;
+    },
   };
 }

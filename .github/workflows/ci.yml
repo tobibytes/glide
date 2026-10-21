@@ -18,3 +18,72 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
+  helper-universal:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the universal Swift helper
+        run: node scripts/build-helper.mjs --arch universal --out build/bin/glide-helper --force
+      - run: lipo build/bin/glide-helper -verify_arch arm64 x86_64 && lipo -info build/bin/glide-helper
+  # Quality harness (tests/harness): everything runs headless (GLIDE_HEADLESS=1) with an isolated
+  # data dir, fixture HOME and the native helper disabled. See docs/TESTING.md.
+  quality:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    env:
+      GLIDE_TEST_TMP: ${{ runner.temp }}/glide-tests
+      GLIDE_E2E_TMP: ${{ runner.temp }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The helper is not needed: the harness disables it so CI matches a machine without permissions.
+      - run: pnpm build:main && pnpm build:renderer
+      - name: Unit tests
+        run: pnpm test && pnpm test:harness
+      - name: Headless e2e (existing smoke + harness smoke)
+        run: node scripts/e2e.mjs && pnpm test:e2e:smoke
+      - name: Performance (fails if search p95 > 30 ms engine / 60 ms IPC)
+        run: pnpm test:perf
+      - name: Keyboard / accessibility audit (fails on violations not in tests/a11y/baseline.json)
+        run: pnpm test:a11y
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quality-reports
+          path: |
+            tests/perf/out
+            tests/a11y/out
+          if-no-files-found: ignore
+  # Pixel baselines are recorded on a developer Mac; CI fonts/antialiasing can differ, so this job
+  # is informative only. Download the diff images from the artifact when it fails.
+  visual:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    env:
+      GLIDE_TEST_TMP: ${{ runner.temp }}/glide-tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:main && pnpm build:renderer
+      - run: pnpm test:visual
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: visual-diffs
+          path: tests/visual/out
+          if-no-files-found: ignore

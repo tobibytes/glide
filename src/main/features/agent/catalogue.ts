@@ -1,11 +1,12 @@
 /**
- * Catalogue search for the agent. FeatureContext has no search hook (see CONTRACT-REQUESTS.md),
- * so this rebuilds the same item list the launcher's catalogue uses (same ids, so
- * ctx.executeItem resolves them) and ranks it with the shared pure engine.
+ * Catalogue search for the agent. Uses the host's ctx.search/ctx.findItem when the host provides
+ * them (same ranking and frecency as the launcher); otherwise rebuilds the same item list the
+ * launcher's catalogue uses (same ids, so ctx.executeItem resolves them) and ranks it with the
+ * shared pure engine.
  */
 import fsp from "node:fs/promises";
 import path from "node:path";
-import type { SearchItem } from "@shared/types";
+import type { ScoredItem, SearchItem } from "@shared/types";
 import { createEngine } from "@engine/index";
 import { quicklinkItemId, snippetItemId, workflowItemId } from "../../catalogue";
 import { settingItems, systemItems } from "../../sources/system";
@@ -52,7 +53,16 @@ async function scanApps(dirs: string[]): Promise<SearchItem[]> {
   return out;
 }
 
+/** Hooks newer hosts add to FeatureContext; feature-detected so older hosts keep working. */
+interface HostSearch {
+  search?: (query: string, opts?: { limit?: number }) => Promise<ScoredItem[]>;
+  findItem?: (id: string) => SearchItem | undefined;
+}
+
+const usable = (i: SearchItem) => i.kind !== "fallback" && !i.id.startsWith("agent:");
+
 export function createCatalogueSource(ctx: FeatureContext, features: () => Promise<FeatureModule[]>): CatalogueSource {
+  const host = ctx as Omit<FeatureContext, "search" | "findItem"> & HostSearch;
   let items: SearchItem[] = [];
   let itemsAt = 0;
   let apps: SearchItem[] = [];
@@ -91,6 +101,17 @@ export function createCatalogueSource(ctx: FeatureContext, features: () => Promi
 
   return {
     async search(query, limit) {
+      if (typeof host.search === "function") {
+        const res = await host.search(query, { limit: limit + 4 });
+        const seen = new Set<string>();
+        const hits: CatalogueHit[] = [];
+        for (const it of res)
+          if (usable(it.item) && !seen.has(it.item.id)) {
+            seen.add(it.item.id);
+            hits.push(toHit(it.item));
+          }
+        return hits.slice(0, limit);
+      }
       const all = await load();
       const engine = createEngine({ sectionLimit: limit, aliases: ctx.getData().aliases });
       engine.setItems(all);
@@ -107,6 +128,10 @@ export function createCatalogueSource(ctx: FeatureContext, features: () => Promi
       return hits.slice(0, limit);
     },
     async find(id) {
+      if (typeof host.findItem === "function") {
+        const item = host.findItem(id);
+        if (item) return toHit(item);
+      }
       const hit = (await load()).find((i) => i.id === id);
       return hit ? toHit(hit) : undefined;
     },

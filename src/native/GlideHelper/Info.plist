@@ -12,5 +12,15 @@
 	<string>Glide shows your upcoming events in the launcher.</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>Glide shows your upcoming events in the launcher.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Glide lists your reminders and creates new ones from the launcher.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>Glide lists your reminders and creates new ones from the launcher.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>macOS only reveals the Wi-Fi network name to apps with Location access. Glide uses it to show the current network; your location is never read or stored.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>macOS only reveals the Wi-Fi network name to apps with Location access. Glide uses it to show the current network; your location is never read or stored.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Glide asks Finder for the selected files when you turn on Finder automation.</string>
 </dict>
 </plist>

@@ -12,8 +12,8 @@ export function SaveLayout({ query, setPlaceholder, pop, toast }: ViewProps) {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => setPlaceholder("Name this layout (e.g. Coding, Writing)…"), [setPlaceholder]);
   useEffect(() => {
-    void call<Layout>("preview").then(
-      (l) => setPreview(l),
+    void call<Layout | { error: string }>("preview").then(
+      (l) => ("error" in l ? setError(l.error) : setPreview(l)),
       (e: unknown) => setError(errorText(e)),
     );
   }, []);

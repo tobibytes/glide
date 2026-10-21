@@ -31,6 +31,7 @@ export function ParamEditor({ param, value, onChange, variables, apps, mono }: P
     });
   };
 
+  if (param.kind === "hidden") return null;
   let control: React.ReactNode;
   switch (param.kind) {
     case "select":

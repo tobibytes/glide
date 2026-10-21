@@ -2,6 +2,7 @@ import { shell } from "electron";
 import type { ExecuteResult } from "@shared/ipc";
 import type { PermissionStatus } from "../../native/helper";
 import type { FeatureContext, FeatureModule } from "../types";
+import { onExpansionChange } from "../../snippets/live";
 import { KEYBOARD_DEFAULTS, SPOTLIGHT_HOTKEY, buildKeyConfig, hotkeyAfterTakeover, snippetKeywords, type KeyboardSettings } from "./config";
 
 const PANES = {
@@ -149,6 +150,8 @@ export const feature: FeatureModule = {
     );
     // Re-send whenever snippets or our settings change (configure() skips identical configs).
     c.store.on("change", () => void configure());
+    // Snippet prefix/exclusions/placeholders changed (src/main/snippets keeps them fresh).
+    unsubscribe.push(onExpansionChange(() => void configure()));
     setTimeout(() => {
       void (async () => {
         await refreshPermissions();

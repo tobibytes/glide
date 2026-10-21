@@ -46,7 +46,19 @@ export function GridBody({ view, info, query, run, emit }: { view: GridView; inf
   const cols = view.columns;
   const index = Math.max(0, selId ? items.findIndex((i) => i.id === selId) : 0);
   const selected = items[index] ?? null;
-  const actions = useMemo(() => navActions(selected?.actions ?? (items.length ? [] : (view.emptyView?.actions ?? view.actions ?? [])), run), [selected, items.length, view.emptyView, view.actions, run]);
+  const actions = useMemo(
+    () => navActions(selected?.actions ?? (items.length ? [] : (view.emptyView?.actions ?? view.actions ?? [])), run, selected ? { quickLook: selected.quickLook, title: selected.title } : undefined),
+    [selected, items.length, view.emptyView, view.actions, run],
+  );
+
+  // Raycast `selectedItemId`: select it whenever the value changes (or once the item shows up).
+  const applied = useRef<string | null>(null);
+  useEffect(() => {
+    const want = view.selectedItemId;
+    if (!want || applied.current === want || !items.some((i) => i.id === want)) return;
+    applied.current = want;
+    setSelId(want);
+  }, [view.selectedItemId, items]);
 
   const select = useCallback((i: number) => {
     const clamped = Math.max(0, Math.min(items.length - 1, i));

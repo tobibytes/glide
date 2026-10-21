@@ -52,13 +52,13 @@ export function raycastRuntime(nodeRequire: (id: string) => any, port: RaycastPo
   const React = mr.React;
   let init: InitPayload | null = null;
   let requestSeq = 0;
-  const pending = new Map<number, { resolve(v: unknown): void; reject(e: Error): void }>();
+  const pending = new Map<number, { resolve(v: unknown): void; reject(e: Error): void; onChunk?: (chunk: string) => void }>();
 
   const send = (msg: ChildMessage) => port.send(msg);
-  const request = (method: RequestMethod, params: JsonValue[]): Promise<unknown> =>
+  const request = (method: RequestMethod, params: JsonValue[], onChunk?: (chunk: string) => void): Promise<unknown> =>
     new Promise((resolve, reject) => {
       const id = ++requestSeq;
-      pending.set(id, { resolve, reject });
+      pending.set(id, { resolve, reject, onChunk });
       send({ type: "request", id, method, params });
     });
 
@@ -92,6 +92,18 @@ export function raycastRuntime(nodeRequire: (id: string) => any, port: RaycastPo
   const dropdownInit = new Set<number>();
   let formCache: any = null;
   const cache = () => (formCache ??= new api.Cache({ namespace: "glide-form-values" }));
+  let draftCache: any = null;
+  const drafts = () => (draftCache ??= new api.Cache({ namespace: "glide-form-drafts" }));
+  type Draft = Record<string, { type: FormFieldType; value: FormValue }>;
+  const readDrafts = (): Draft => {
+    try {
+      const raw = drafts().get(String(api.environment.commandName));
+      const d = raw ? JSON.parse(raw) : {};
+      return d && typeof d === "object" ? d : {};
+    } catch {
+      return {};
+    }
+  };
 
   function decodeValue(type: FormFieldType, v: FormValue | null | undefined): unknown {
     if (type === "checkbox") return v === true;
@@ -173,6 +185,9 @@ export function raycastRuntime(nodeRequire: (id: string) => any, port: RaycastPo
         }
       },
       storeValue: (id, v) => cache().set(`${api.environment.commandName}:${id}`, JSON.stringify(v)),
+      draftValue: (id) => readDrafts()[id]?.value,
+      saveDraft: (id, type, value) => drafts().set(String(api.environment.commandName), JSON.stringify({ ...readDrafts(), [id]: { type, value } })),
+      clearDrafts: () => void drafts().remove(String(api.environment.commandName)),
       unsupported: (feature) => void api.showToast({ style: "FAILURE", title: `${feature} is not supported in Glide yet` }),
     };
     let result;
@@ -285,7 +300,9 @@ export function raycastRuntime(nodeRequire: (id: string) => any, port: RaycastPo
     }
     const entry = mod && typeof mod === "object" && "default" in mod ? mod.default : mod;
     if (typeof entry !== "function") return fail(new TypeError(`${payload.commandPath} must export a default React component or function`));
-    const props = { arguments: payload.arguments ?? {}, launchType: payload.launchType ?? "userInitiated", launchContext: payload.launchContext ?? undefined, fallbackText: undefined };
+    const draft = readDrafts();
+    const draftValues = Object.keys(draft).length ? Object.fromEntries(Object.entries(draft).map(([k, d]) => [k, decodeValue(d.type, d.value)])) : undefined;
+    const props = { arguments: payload.arguments ?? {}, launchType: payload.launchType ?? "userInitiated", launchContext: payload.launchContext ?? undefined, fallbackText: undefined, draftValues };
     if (env.commandMode === "no-view") {
       Promise.resolve()
         .then(() => entry(props))
@@ -304,7 +321,7 @@ export function raycastRuntime(nodeRequire: (id: string) => any, port: RaycastPo
   }
 
   async function invoke(depth: number, handler: string, args: JsonValue[]) {
-    const fn = stack[depth]?.handlers.get(handler);
+    const fn = handler.startsWith("toast:") ? api.__glide.toastHandlers.get(handler) : stack[depth]?.handlers.get(handler);
     if (!fn) return; // stale handler from an unmounted view
     try {
       await fn(...args);
@@ -319,6 +336,7 @@ export function raycastRuntime(nodeRequire: (id: string) => any, port: RaycastPo
     if (msg.type === "init") start(msg.init);
     else if (msg.type === "invoke") void invoke(msg.depth, msg.handler, Array.isArray(msg.args) ? msg.args : []);
     else if (msg.type === "closeView") closeFrom(Math.max(1, msg.depth));
+    else if (msg.type === "stream") pending.get(msg.id)?.onChunk?.(String(msg.chunk ?? ""));
     else if (msg.type === "response") {
       const p = pending.get(msg.id);
       if (!p) return;

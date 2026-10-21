@@ -9,14 +9,17 @@ import type { FeatureContext, FeatureModule } from "../types";
 import { backupData, buildExport, freshData, parseImport, replaceData } from "./dataio";
 import { disposeHud, hud, initHud } from "./hud";
 import { parseFeed } from "./releases";
-import { createUpdater, type UpdateState, type Updater } from "./updater";
+import { backgroundChecksAllowed, createUpdater, type UpdateState, type Updater } from "./updater";
 
 export interface AppSettings extends Record<string, unknown> {
   /** "owner/repo" on GitHub; empty disables updates (and all update network traffic). */
   updateFeed: string;
   autoCheck: boolean;
 }
-export const APP_DEFAULTS: AppSettings = { updateFeed: "", autoCheck: true };
+/** The official release feed. Clearing it in Settings stores "" (which overrides this default). */
+export const DEFAULT_UPDATE_FEED = "tobibytes/glide";
+export const APP_DEFAULTS: AppSettings = { updateFeed: DEFAULT_UPDATE_FEED, autoCheck: true };
+
 
 export interface AppInfo {
   version: string;
@@ -196,7 +199,9 @@ export const feature: FeatureModule = {
     updater = createUpdater({
       currentVersion: app.getVersion(),
       getFeed: () => appSettings().updateFeed,
-      getAutoCheck: () => appSettings().autoCheck,
+      getAutoCheck: () =>
+        appSettings().autoCheck &&
+        backgroundChecksAllowed({ packaged: app.isPackaged, headless: process.env.GLIDE_HEADLESS === "1", testBaseUrl: process.env.GLIDE_UPDATE_BASE_URL }),
       currentAppPath: bundlePath,
       workDir: () => path.join(os.tmpdir(), `glide-update-${Date.now()}`),
       trash: (p) => shell.trashItem(p),

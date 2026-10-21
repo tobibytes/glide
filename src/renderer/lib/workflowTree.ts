@@ -1,4 +1,5 @@
 import type { ActionSpec, ActionType, Workflow, WorkflowAction } from "@shared/types";
+import { specForAction } from "@shared/workflow-specs";
 
 /**
  * Path addressing for the nested action tree.
@@ -152,7 +153,7 @@ export function availableVariables(root: WorkflowAction[], path: Path, specs: Ac
   walk(root, (a, p) => {
     if (pathKey(p) === target) reached = true;
     if (reached) return;
-    const spec = specs.find((s) => s.type === a.type);
+    const spec = specForAction(specs, a);
     if (a.type === "setVariable" && a.params.name?.trim()) {
       const name = a.params.name.trim();
       if (!seen.has(name)) {
@@ -193,5 +194,5 @@ export function emptyWorkflow(): Workflow {
 }
 
 export function actionTitle(a: WorkflowAction, specs: ActionSpec[]): string {
-  return a.label || specs.find((s) => s.type === a.type)?.title || (a.type as ActionType);
+  return a.label || specForAction(specs, a)?.title || (a.type as ActionType);
 }

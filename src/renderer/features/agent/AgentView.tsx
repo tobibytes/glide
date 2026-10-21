@@ -1,19 +1,22 @@
 /**
- * Launcher view "agent.run": the launcher search field is the request input; the transcript
- * (prompt, Claude's text, each tool call with its arguments and result) is a NavList so
- * j/k/⌃J/⌃K/gg/G and ⌘K work. While a confirmation is pending, ⏎ runs the listed actions,
- * ⌘⏎ runs them and stops asking for those tools, esc cancels. Esc while running stops the run.
- * Keys are taken in a window capture listener so they win over the launcher's own handlers.
+ * Launcher view "agent.run": a conversation with Glide Agent. The launcher search field is the
+ * request input (⏎ sends a follow-up that keeps the conversation's context); the transcript of
+ * every request (prompt, plan, Claude's text, each tool call with status, the summary) is a
+ * NavList so j/k/⌃J/⌃K/gg/G and ⌘K work.
+ * Keys (window capture listener, so they win over the launcher's own handlers):
+ *   confirmation pending: ⏎ run · ⌘⏎ run & don't ask again · esc cancel
+ *   running: esc stop
+ *   otherwise: ⌘N new conversation · ⌘Y history · ⌘Z undo the last request · ⌘S save it as a workflow
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Kbd } from "../../components/Kbd";
 import { NavList } from "../../components/NavList";
 import type { NavAction, NavItem, ViewProps } from "../types";
-import { agent, useAgentRun, type AgentStatus, type AgentStep, type RunSnapshot, type TranscriptEntry } from "./api";
+import { agent, useConversation, type AgentStatus, type AgentStep, type RunSnapshot, type TranscriptEntry } from "./api";
 
-type Row = NavItem & { entry: TranscriptEntry };
+type Row = NavItem & { entry: TranscriptEntry; run: RunSnapshot };
 
-const STATUS_ICON: Record<AgentStep["status"], string> = {
+export const STATUS_ICON: Record<AgentStep["status"], string> = {
   queued: "○",
   awaiting: "?",
   running: "◌",
@@ -23,8 +26,20 @@ const STATUS_ICON: Record<AgentStep["status"], string> = {
   skipped: "–",
 };
 
-function readProps(p: Record<string, unknown>): { prompt?: string; runId?: string } {
-  return { prompt: typeof p.prompt === "string" && p.prompt.trim() ? p.prompt : undefined, runId: typeof p.runId === "string" ? p.runId : undefined };
+interface Props {
+  prompt?: string;
+  runId?: string;
+  conversationId?: string;
+  fresh?: boolean;
+}
+
+function readProps(p: Record<string, unknown>): Props {
+  return {
+    prompt: typeof p.prompt === "string" && p.prompt.trim() ? p.prompt : undefined,
+    runId: typeof p.runId === "string" ? p.runId : undefined,
+    conversationId: typeof p.conversationId === "string" ? p.conversationId : undefined,
+    fresh: p.fresh === true,
+  };
 }
 
 function argsText(args: Record<string, unknown>): string {
@@ -33,44 +48,54 @@ function argsText(args: Record<string, unknown>): string {
   return keys.map((k) => `${k}: ${typeof args[k] === "string" ? (args[k] as string) : JSON.stringify(args[k])}`).join(" · ");
 }
 
+const stepsOf = (run: RunSnapshot): AgentStep[] => run.entries.flatMap((e) => (e.kind === "step" ? [e.step] : []));
+const undoableOf = (run: RunSnapshot) => stepsOf(run).filter((s) => s.undo?.state === "available").length;
+const isBusy = (run: RunSnapshot | undefined) => run?.status === "running" || run?.status === "confirming";
+
 const PLACEHOLDER_IDLE = "What should Glide do? e.g. put Safari left and Notes right, start a 25 min timer";
 
 export function AgentView(view: ViewProps) {
   const props = readProps(view.props);
   const [status, setStatus] = useState<AgentStatus | null>(null);
-  const { run, startError, start, attach } = useAgentRun();
+  const { conv, startError, start, attach, load, show, reset } = useConversation();
   const started = useRef(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     void agent.status().then(setStatus);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Start the prompt we were opened with, or re-attach to a run (view re-opened by main).
+  // Start the prompt we were opened with, resume a conversation, or re-attach to a run.
   useEffect(() => {
     if (!status || started.current) return;
     started.current = true;
     void (async () => {
       if (props.runId && (await attach(props.runId))) return;
-      if (props.prompt && status.hasKey) return start(props.prompt);
-      if (!props.prompt) {
-        const active = await agent.activeRun();
-        if (active) await attach(active.runId);
+      if (props.conversationId && (await load(props.conversationId))) {
+        if (props.prompt && status.hasKey) await start(props.prompt);
+        return;
       }
+      if (props.prompt) {
+        if (status.hasKey) await start(props.prompt);
+        return;
+      }
+      const active = await agent.activeRun();
+      if (active && (await attach(active.runId))) return;
+      // Reopening the agent keeps this session's conversation (⌘N starts a new one).
+      if (!props.fresh) show(await agent.latestConversation());
     })();
-  }, [status, props.runId, props.prompt, attach, start]);
+  }, [status, props.runId, props.prompt, props.conversationId, props.fresh, attach, load, show, start]);
 
-  const busy = run?.status === "running" || run?.status === "confirming";
-  const confirming = run?.status === "confirming" ? run.confirmation : undefined;
+  const last = conv.runs.at(-1);
+  const busy = isBusy(last);
+  const confirming = last?.status === "confirming" ? last.confirmation : undefined;
 
   useEffect(() => {
-    view.setPlaceholder(confirming ? "Press ⏎ to run these actions, esc to cancel" : busy ? "Working… (esc to stop)" : run ? "Ask Glide to do something else…" : PLACEHOLDER_IDLE);
+    view.setPlaceholder(confirming ? "Press ⏎ to run these actions, esc to cancel" : busy ? "Working… (esc to stop)" : conv.runs.length ? "Follow up, or ⌘N for a new conversation…" : PLACEHOLDER_IDLE);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [confirming, busy, !!run]);
+  }, [confirming, busy, conv.runs.length]);
 
-  const steps = useMemo(() => (run ? run.entries.flatMap((e) => (e.kind === "step" ? [e.step] : [])) : []), [run]);
-  const pendingSteps = useMemo(() => (confirming ? steps.filter((s) => confirming.stepIds.includes(s.id)) : []), [confirming, steps]);
+  const pendingSteps = useMemo(() => (confirming && last ? stepsOf(last).filter((s) => confirming.stepIds.includes(s.id)) : []), [confirming, last]);
 
   const submit = useCallback(
     (text: string) => {
@@ -82,21 +107,55 @@ export function AgentView(view: ViewProps) {
 
   const answer = useCallback(
     async (approve: boolean, always = false) => {
-      if (!run?.confirmation) return;
+      if (!last?.confirmation) return;
       if (approve && always) {
         const s = await agent.getSettings();
         const allow = { ...s.allow };
         for (const st of pendingSteps) allow[st.tool] = true;
-        await agent.setSettings({ allow });
-        view.toast(`Won't ask again for ${[...new Set(pendingSteps.map((s) => s.title))].join(", ")}`);
+        const saved = await agent.setSettings({ allow });
+        const skipped = pendingSteps.filter((st) => !saved.allow[st.tool]).map((st) => st.title);
+        view.toast(skipped.length ? `${[...new Set(skipped)].join(", ")} will always ask` : `Won't ask again for ${[...new Set(pendingSteps.map((st) => st.title))].join(", ")}`);
       }
-      await agent.respond(run.runId, run.confirmation.id, approve);
+      await agent.respond(last.runId, last.confirmation.id, approve);
     },
-    [run, pendingSteps, view],
+    [last, pendingSteps, view],
   );
 
-  const live = useRef({ run, confirming, busy, status, view, submit, answer });
-  live.current = { run, confirming, busy, status, view, submit, answer };
+  const newConversation = useCallback(() => {
+    if (busy && last) void agent.cancel(last.runId);
+    reset();
+    view.setQuery("");
+    view.toast("New conversation");
+  }, [busy, last, reset, view]);
+
+  const undoRun = useCallback(
+    async (run: RunSnapshot | undefined, stepId?: string) => {
+      const target = run ?? [...conv.runs].reverse().find((r) => undoableOf(r) > 0);
+      if (!target) return view.toast("Nothing to undo");
+      const r = await agent.undo(target.runId, stepId);
+      view.toast(r.message, r.ok ? "info" : "error");
+    },
+    [conv.runs, view],
+  );
+
+  const saveWorkflow = useCallback(
+    async (run: RunSnapshot | undefined) => {
+      const target = run ?? [...conv.runs].reverse().find((r) => r.status === "done");
+      if (!target) return view.toast("Nothing to save yet");
+      const name = view.query.trim();
+      const r = await agent.saveAsWorkflow(target.runId, name || undefined);
+      if (r.ok) {
+        if (name) view.setQuery("");
+        view.toast(`Saved workflow “${r.name}” (${r.actions} action${r.actions === 1 ? "" : "s"})`);
+      } else view.toast(r.error ?? "Couldn't save", "error");
+    },
+    [conv.runs, view],
+  );
+
+  const openHistory = useCallback(() => view.push({ id: "agent.history" }), [view]);
+
+  const live = useRef({ last, confirming, busy, status, view, submit, answer, newConversation, undoRun, saveWorkflow, openHistory });
+  live.current = { last, confirming, busy, status, view, submit, answer, newConversation, undoRun, saveWorkflow, openHistory };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -106,6 +165,8 @@ export function AgentView(view: ViewProps) {
         e.stopPropagation();
       };
       if (e.isComposing) return;
+      // Ignore keys while the ⌘K panel or another dialog is open.
+      if (document.querySelector(".actions[role='dialog']")) return;
       if (s.confirming) {
         if (e.key === "Enter" && !e.shiftKey && !e.altKey) {
           handled();
@@ -119,12 +180,19 @@ export function AgentView(view: ViewProps) {
       if (s.busy) {
         if (e.key === "Escape") {
           handled();
-          if (s.run) void agent.cancel(s.run.runId);
+          if (s.last) void agent.cancel(s.last.runId);
         } else if (e.key === "Enter" && s.view.query.trim()) {
           handled();
           s.view.toast("Glide Agent is still working — press esc to stop it first");
         }
         return;
+      }
+      if (e.metaKey && !e.altKey && !e.ctrlKey && !e.shiftKey) {
+        const k = e.key.toLowerCase();
+        if (k === "n") return handled(), s.newConversation();
+        if (k === "y") return handled(), s.openHistory();
+        if (k === "s") return handled(), void s.saveWorkflow(undefined);
+        if (k === "z" && !s.view.query) return handled(), void s.undoRun(undefined);
       }
       if (s.status && !s.status.hasKey && e.key === "Enter") {
         handled();
@@ -141,22 +209,29 @@ export function AgentView(view: ViewProps) {
   }, []);
 
   // Keep the newest entry in view while the run is going.
-  const count = run?.entries.length ?? 0;
-  const lastLen = run?.entries.at(-1)?.kind === "text" ? (run.entries.at(-1) as { text: string }).text.length : 0;
+  const count = conv.runs.reduce((n, r) => n + r.entries.length, 0);
+  const lastEntry = last?.entries.at(-1);
+  const lastLen = lastEntry?.kind === "text" ? lastEntry.text.length : 0;
   useEffect(() => {
     if (!busy) return;
     const list = rootRef.current?.querySelector(".navlist__items");
     if (list) list.scrollTop = list.scrollHeight;
   }, [busy, count, lastLen]);
 
-  const rows: Row[] = useMemo(() => (run ? run.entries.map((entry) => ({ id: entry.id, entry })) : []), [run]);
+  const rows: Row[] = useMemo(() => conv.runs.flatMap((run) => run.entries.map((entry) => ({ id: `${run.runId}:${entry.id}`, entry, run }))), [conv.runs]);
 
   const rowActions = useCallback(
     (row: Row): NavAction[] => {
       const list: NavAction[] = [];
       const e = row.entry;
-      const text = e.kind === "step" ? (e.step.result ?? "") : e.text;
+      const text = e.kind === "step" ? (e.step.result ?? "") : e.kind === "plan" ? e.items.map((i) => i.text).join("\n") : e.text;
       if (text) list.push({ id: "copy", title: e.kind === "step" ? "Copy Result" : "Copy Text", shortcut: "⌘C", icon: "📋", run: () => void navigator.clipboard.writeText(text).then(() => view.toast("Copied")) });
+      if (e.kind === "step" && e.step.undo?.state === "available") {
+        const st = e.step;
+        list.push({ id: "undo-step", title: `Undo: ${st.undo!.summary}`, icon: "↶", run: () => void undoRun(row.run, st.id) });
+      }
+      if (!isBusy(row.run) && undoableOf(row.run) > 0) list.push({ id: "undo", title: "Undo This Request", shortcut: "⌘Z", icon: "↶", run: () => void undoRun(row.run) });
+      if (row.run.status === "done") list.push({ id: "save", title: "Save as Workflow", shortcut: "⌘S", icon: "💾", run: () => void saveWorkflow(row.run) });
       if (e.kind === "step" && e.step.mutating) {
         const st = e.step;
         list.push({
@@ -165,16 +240,18 @@ export function AgentView(view: ViewProps) {
           icon: "✅",
           run: async () => {
             const s = await agent.getSettings();
-            await agent.setSettings({ allow: { ...s.allow, [st.tool]: true } });
-            view.toast(`“${st.title}” will run without asking`);
+            const saved = await agent.setSettings({ allow: { ...s.allow, [st.tool]: true } });
+            view.toast(saved.allow[st.tool] ? `“${st.title}” will run without asking` : `“${st.title}” always asks`);
           },
         });
       }
-      if (busy && run) list.push({ id: "stop", title: "Stop Agent", shortcut: "esc", icon: "■", destructive: true, run: () => void agent.cancel(run.runId) });
+      if (busy && last) list.push({ id: "stop", title: "Stop Agent", shortcut: "esc", icon: "■", destructive: true, run: () => void agent.cancel(last.runId) });
+      list.push({ id: "new", title: "New Conversation", shortcut: "⌘N", icon: "✚", run: () => newConversation() });
+      list.push({ id: "history", title: "Conversation History", shortcut: "⌘Y", icon: "🕘", run: () => openHistory() });
       list.push({ id: "settings", title: "Agent Settings…", icon: "⚙️", run: () => window.glide.openSettings("agent") });
       return list;
     },
-    [busy, run, view],
+    [busy, last, view, undoRun, saveWorkflow, newConversation, openHistory],
   );
 
   if (status && !status.hasKey) {
@@ -191,8 +268,8 @@ export function AgentView(view: ViewProps) {
   }
 
   return (
-    <div className="agent" ref={rootRef} data-testid="agent-view" data-status={run?.status ?? "idle"}>
-      {!run && !startError && <Intro />}
+    <div className="agent" ref={rootRef} data-testid="agent-view" data-status={last?.status ?? "idle"} data-conversation={conv.id ?? ""} data-runs={conv.runs.length}>
+      {!conv.runs.length && !startError && <Intro readOnly={!!status?.readOnly} />}
       {startError && (
         <div className="agent__error" role="alert" data-testid="agent-start-error">
           <span>{startError.message}</span>
@@ -203,14 +280,14 @@ export function AgentView(view: ViewProps) {
           )}
         </div>
       )}
-      {run && (
+      {conv.runs.length > 0 && (
         <NavList<Row>
           className="agent__list"
           items={rows}
-          renderItem={(row, selected) => <EntryRow entry={row.entry} selected={selected} />}
+          renderItem={(row, selected) => <EntryRow entry={row.entry} run={row.run} selected={selected} />}
           onActivate={(row) => {
             const e = row.entry;
-            const text = e.kind === "step" ? (e.step.result ?? "") : e.text;
+            const text = e.kind === "step" ? (e.step.result ?? "") : e.kind === "plan" ? "" : e.text;
             if (text) void navigator.clipboard.writeText(text).then(() => view.toast("Copied"));
           }}
           actions={rowActions}
@@ -218,12 +295,12 @@ export function AgentView(view: ViewProps) {
         />
       )}
       {confirming && <ConfirmCard steps={pendingSteps} />}
-      {run && <StatusBar run={run} />}
+      {last && <StatusBar run={last} turns={conv.runs.length} undoable={conv.runs.reduce((n, r) => n + undoableOf(r), 0)} />}
     </div>
   );
 }
 
-function Intro() {
+function Intro({ readOnly }: { readOnly: boolean }) {
   return (
     <div className="agent__intro" data-testid="agent-intro">
       <div className="agent__hero">🪄</div>
@@ -231,16 +308,51 @@ function Intro() {
       <ul className="agent__examples">
         <li>Put Safari on the left and Notes on the right</li>
         <li>Start a 25 minute focus timer and open my standup notes</li>
-        <li>What's on my calendar today?</li>
+        <li>What's using the most CPU right now?</li>
       </ul>
       <p className="agent__text">
-        Type a request and press <Kbd keys="⏎" />. Glide asks before doing anything that changes your Mac.
+        Type a request and press <Kbd keys="⏎" />. Follow-ups keep the context. Glide asks before doing anything that changes your Mac, and <Kbd keys="⌘Z" /> puts back what it can.
       </p>
+      {readOnly && <p className="agent__text agent__readonly">Read-only mode is on: the agent can only look things up.</p>}
+      <div className="agent__keys">
+        <span>
+          New <Kbd keys="⌘N" />
+        </span>
+        <span>
+          History <Kbd keys="⌘Y" />
+        </span>
+      </div>
     </div>
   );
 }
 
-function EntryRow({ entry, selected }: { entry: TranscriptEntry; selected: boolean }) {
+function PlanRow({ entry, run, cls }: { entry: Extract<TranscriptEntry, { kind: "plan" }>; run: RunSnapshot; cls: string }) {
+  const byId = new Map(stepsOf(run).map((s) => [s.id, s]));
+  const finished = !isBusy(run);
+  return (
+    <div className={`${cls} agent-row--plan`} data-testid="agent-plan">
+      <span className="agent-row__icon">☰</span>
+      <div className="agent-row__main">
+        <div className="agent-row__plan-title">{entry.title}</div>
+        <ol className="agent-plan">
+          {entry.items.map((item, i) => {
+            const st = item.stepId ? byId.get(item.stepId) : undefined;
+            const status = st?.status;
+            return (
+              <li key={i} className={`agent-plan__item agent-plan__item--${status ?? (finished ? "none" : "queued")}`} data-status={status ?? "pending"}>
+                <span className={`agent-status ${status ? `agent-status--${status}` : ""}`}>{status ? STATUS_ICON[status] : finished ? "·" : "○"}</span>
+                <span>{item.text}</span>
+                {st?.undo?.state === "done" && <span className="tag">undone</span>}
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+    </div>
+  );
+}
+
+function EntryRow({ entry, run, selected }: { entry: TranscriptEntry; run: RunSnapshot; selected: boolean }) {
   const cls = ["agent-row", `agent-row--${entry.kind}`, selected ? "agent-row--selected" : ""].filter(Boolean).join(" ");
   if (entry.kind === "prompt")
     return (
@@ -263,10 +375,32 @@ function EntryRow({ entry, selected }: { entry: TranscriptEntry; selected: boole
         <div className="agent-row__main">{entry.text}</div>
       </div>
     );
+  if (entry.kind === "plan") return <PlanRow entry={entry} run={run} cls={cls} />;
+  if (entry.kind === "summary") {
+    const undoable = undoableOf(run);
+    return (
+      <div className={cls} data-testid="agent-summary">
+        <span className="agent-row__icon">∎</span>
+        <div className="agent-row__main agent-row__summary-line">
+          <span>{entry.text}</span>
+          {undoable > 0 && (
+            <span className="agent-row__hint">
+              Undo {undoable} <Kbd keys="⌘Z" />
+            </span>
+          )}
+          {entry.saveable && run.status === "done" && (
+            <span className="agent-row__hint">
+              Save as Workflow <Kbd keys="⌘S" />
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
   const st = entry.step;
   const args = argsText(st.args);
   return (
-    <div className={`${cls} agent-row--${st.status}`} data-testid="agent-step" data-tool={st.tool} data-status={st.status}>
+    <div className={`${cls} agent-row--${st.status}`} data-testid="agent-step" data-tool={st.tool} data-status={st.status} data-undo={st.undo?.state ?? ""}>
       <span className={`agent-row__icon agent-status agent-status--${st.status}`} aria-label={st.status}>
         {STATUS_ICON[st.status]}
       </span>
@@ -275,6 +409,8 @@ function EntryRow({ entry, selected }: { entry: TranscriptEntry; selected: boole
           <span className="agent-row__tool">{st.title}</span>
           <span className="agent-row__summary">{st.summary}</span>
           {st.autoApproved && <span className="tag">allowed</span>}
+          {st.undo?.state === "done" && <span className="tag">undone</span>}
+          {st.undo?.state === "failed" && <span className="tag">undo failed</span>}
         </div>
         {selected && (
           <div className="agent-row__detail">
@@ -292,6 +428,12 @@ function EntryRow({ entry, selected }: { entry: TranscriptEntry; selected: boole
                 <span className="agent-row__label">result</span> {st.result.length > 600 ? `${st.result.slice(0, 600)}…` : st.result}
               </div>
             )}
+            {st.undo && (
+              <div>
+                <span className="agent-row__label">undo</span> {st.undo.summary}
+                {st.undo.error ? ` — ${st.undo.error}` : ""}
+              </div>
+            )}
           </div>
         )}
         {!selected && st.result && (st.status === "error" || st.status === "ok") && <div className="agent-row__brief">{st.result.split("\n")[0]?.slice(0, 140)}</div>}
@@ -301,6 +443,7 @@ function EntryRow({ entry, selected }: { entry: TranscriptEntry; selected: boole
 }
 
 function ConfirmCard({ steps }: { steps: AgentStep[] }) {
+  const always = steps.some((s) => s.tool === "kill_process" || s.tool === "run_shortcut");
   return (
     <div className="agent-confirm" role="alertdialog" aria-label="Confirm actions" data-testid="agent-confirm">
       <div className="agent-confirm__title">Glide Agent wants to:</div>
@@ -313,9 +456,11 @@ function ConfirmCard({ steps }: { steps: AgentStep[] }) {
         <span>
           Run <Kbd keys="⏎" />
         </span>
-        <span>
-          Run &amp; don't ask again <Kbd keys="⌘⏎" />
-        </span>
+        {!always && (
+          <span>
+            Run &amp; don't ask again <Kbd keys="⌘⏎" />
+          </span>
+        )}
         <span>
           Cancel <Kbd keys="esc" />
         </span>
@@ -324,7 +469,7 @@ function ConfirmCard({ steps }: { steps: AgentStep[] }) {
   );
 }
 
-function StatusBar({ run }: { run: RunSnapshot }) {
+function StatusBar({ run, turns, undoable }: { run: RunSnapshot; turns: number; undoable: number }) {
   const label =
     run.status === "running" ? "Working…" : run.status === "confirming" ? "Waiting for you" : run.status === "done" ? "Done" : run.status === "cancelled" ? "Stopped" : "Failed";
   return (
@@ -333,12 +478,28 @@ function StatusBar({ run }: { run: RunSnapshot }) {
       <span>
         {run.toolCalls}/{run.maxToolCalls} tool calls
       </span>
-      {run.model && <span className="agent-bar__model">{run.model}</span>}
-      {run.status === "running" && (
+      {turns > 1 && <span>{turns} requests</span>}
+      {run.readOnly && <span className="tag">read-only</span>}
+      {run.status === "running" ? (
         <span>
           Stop <Kbd keys="esc" />
         </span>
+      ) : (
+        <>
+          {undoable > 0 && (
+            <span>
+              Undo <Kbd keys="⌘Z" />
+            </span>
+          )}
+          <span>
+            New <Kbd keys="⌘N" />
+          </span>
+          <span>
+            History <Kbd keys="⌘Y" />
+          </span>
+        </>
       )}
+      {run.model && <span className="agent-bar__model">{run.model}</span>}
     </div>
   );
 }

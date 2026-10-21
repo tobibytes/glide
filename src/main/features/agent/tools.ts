@@ -1,16 +1,16 @@
 /**
- * The agent's tools: JSON schemas sent to Claude, input validation, a human summary of exactly
- * what each call will do (shown in the confirmation step) and the implementation over
- * AgentCapabilities (wired to real Glide features in capabilities.ts, faked in tests).
+ * The agent's core tools: JSON schemas sent to Claude, input validation, a human summary of exactly
+ * what each call will do (shown in the confirmation step), the implementation over
+ * AgentCapabilities (wired to real Glide features in capabilities.ts, faked in tests) and, where
+ * possible, an undo and a workflow equivalent. More tools live in tools-extra.ts.
  */
 import type { WindowAction } from "../../native/helper";
-import { WINDOW_COMMANDS } from "../windows/commands";
+import { EXTRA_TOOLS, type ExtraCapabilities } from "./tools-extra";
+import { itemId as windowItemId, WINDOW_COMMANDS } from "../windows/commands";
+import { clip, defineTool, featureStep, intArg, isErr, opText, quote, runItemStep, str, ToolFailure, type AgentToolOf, type OpResult, type WorkflowStep } from "./tooling";
 
-export interface OpResult {
-  ok: boolean;
-  message?: string;
-  error?: string;
-}
+export { clip, ToolFailure } from "./tooling";
+export type { JsonSchema, OpResult, PreparedCall, ToolOutput, Undo, WorkflowStep } from "./tooling";
 
 export interface CatalogueHit {
   id: string;
@@ -36,14 +36,31 @@ export interface CalendarItem {
   calendar?: string;
 }
 
+export interface WindowFrame {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Where every window was before the agent moved things (for undo). */
+export interface WindowSnapshot {
+  windows: Array<{ pid: number; bundleId: string | null; appName: string; title: string; order: number; frame: WindowFrame }>;
+}
+
 /** Everything the tools can do to Glide and the Mac. */
-export interface AgentCapabilities {
+export interface AgentCapabilities extends ExtraCapabilities {
   search(query: string, limit: number): Promise<CatalogueHit[]>;
   findItem(id: string): Promise<CatalogueHit | undefined>;
   executeItem(id: string, argument?: string): Promise<OpResult>;
+  /** The workflow action equivalent of running a catalogue item, when there is one. */
+  workflowForItem?(id: string, argument?: string, title?: string): WorkflowStep | null;
   listWorkflows(): WorkflowInfo[];
   runWorkflow(id: string, input?: string): Promise<OpResult & { result?: string }>;
   windowAction(action: WindowAction, app?: string): Promise<OpResult>;
+  /** Frames of every window right now; null when the helper can't read them. */
+  windowSnapshot?(): Promise<WindowSnapshot | null>;
+  restoreWindows?(snapshot: WindowSnapshot): Promise<OpResult>;
   openUrl(url: string): Promise<OpResult>;
   openApp(name: string): Promise<OpResult>;
   openFile(path: string): Promise<OpResult>;
@@ -51,7 +68,10 @@ export interface AgentCapabilities {
   copyText(text: string): Promise<OpResult>;
   selectedText(): Promise<{ text: string | null; error?: string }>;
   startTimer(ms: number, name: string): Promise<OpResult>;
+  timerIds?(): Promise<string[]>;
+  stopTimer?(id: string): Promise<OpResult>;
   createNote(text: string): Promise<OpResult & { id?: string }>;
+  deleteNote?(id: string): Promise<OpResult>;
   searchNotes(query: string): Promise<Array<{ id: string; title: string; preview?: string }>>;
   openNote(id: string): Promise<OpResult>;
   convert(query: string): Promise<Array<{ title: string; subtitle?: string }>>;
@@ -60,82 +80,9 @@ export interface AgentCapabilities {
   now(): number;
 }
 
-// A type alias (not an interface) so it is assignable to the SDK's index-signature InputSchema.
-export type JsonSchema = {
-  type: "object";
-  properties: Record<string, unknown>;
-  required?: string[];
-  additionalProperties: false;
-};
+export type AgentTool = AgentToolOf<AgentCapabilities>;
 
-interface ToolDef<A> {
-  name: string;
-  title: string;
-  description: string;
-  mutating: boolean;
-  schema: JsonSchema;
-  /** Returns the parsed arguments, or an error message for Claude. */
-  parse(input: Record<string, unknown>): A | string;
-  describe(args: A, caps: AgentCapabilities): string | Promise<string>;
-  run(args: A, caps: AgentCapabilities): Promise<string>;
-}
-
-export interface PreparedCall {
-  describe(): Promise<string>;
-  run(): Promise<string>;
-}
-
-export interface AgentTool {
-  name: string;
-  title: string;
-  description: string;
-  mutating: boolean;
-  schema: JsonSchema;
-  prepare(input: unknown, caps: AgentCapabilities): PreparedCall | { error: string };
-}
-
-/** Thrown by a tool's run() to produce an is_error tool result. */
-export class ToolFailure extends Error {}
-
-function define<A>(t: ToolDef<A>): AgentTool {
-  return {
-    name: t.name,
-    title: t.title,
-    description: t.description,
-    mutating: t.mutating,
-    schema: t.schema,
-    prepare(input, caps) {
-      if (!input || typeof input !== "object" || Array.isArray(input)) return { error: "Tool input must be a JSON object" };
-      const parsed = t.parse(input as Record<string, unknown>);
-      if (typeof parsed === "string") return { error: parsed };
-      return { describe: async () => t.describe(parsed, caps), run: () => t.run(parsed, caps) };
-    },
-  };
-}
-
-// --- argument helpers ----------------------------------------------------------
-
-const MAX_RESULT = 6000;
-
-export function clip(text: string, max = MAX_RESULT): string {
-  return text.length > max ? `${text.slice(0, max)}… [truncated ${text.length - max} characters]` : text;
-}
-
-function str(input: Record<string, unknown>, key: string, opts: { required?: boolean; max?: number } = {}): string | undefined | { error: string } {
-  const v = input[key];
-  if (v === undefined || v === null || v === "") return opts.required ? { error: `"${key}" is required` } : undefined;
-  if (typeof v !== "string") return { error: `"${key}" must be a string` };
-  if (opts.max && v.length > opts.max) return { error: `"${key}" is too long (max ${opts.max} characters)` };
-  return v;
-}
-
-const isErr = (v: unknown): v is { error: string } => typeof v === "object" && v !== null && "error" in v;
-const quote = (s: string) => `“${s.length > 80 ? `${s.slice(0, 80)}…` : s}”`;
-
-function opText(r: OpResult, fallback: string): string {
-  if (!r.ok) throw new ToolFailure(r.error || "Failed");
-  return r.message || fallback;
-}
+const define = defineTool<AgentCapabilities>();
 
 export function formatDuration(ms: number): string {
   const total = Math.round(ms / 1000);
@@ -147,6 +94,18 @@ export function formatDuration(ms: number): string {
 }
 
 const WINDOW_ACTIONS = WINDOW_COMMANDS.map((c) => c.action);
+
+/** "1h 5m 30s": the form the timers workflow action parses. */
+function timerDuration(ms: number): string {
+  const t = Math.round(ms / 1000);
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = t % 60;
+  return [h ? `${h}h` : "", m ? `${m}m` : "", s ? `${s}s` : ""].filter(Boolean).join(" ") || "1s";
+}
+
+/** The planning pseudo-tool: the loop shows its steps as the plan instead of running anything. */
+export const PLAN_TOOL = "plan";
 
 // --- tools -----------------------------------------------------------------------
 
@@ -168,9 +127,7 @@ const searchCatalogue = define<{ query: string; limit: number }>({
   parse(input) {
     const query = str(input, "query", { required: true, max: 200 });
     if (isErr(query) || query === undefined) return isErr(query) ? query.error : "query is required";
-    const raw = input.limit;
-    const limit = typeof raw === "number" && Number.isFinite(raw) ? Math.max(1, Math.min(20, Math.round(raw))) : 8;
-    return { query, limit };
+    return { query, limit: intArg(input, "limit", 8, 1, 20) };
   },
   describe: (a) => `Search Glide for ${quote(a.query)}`,
   async run(a, caps) {
@@ -209,8 +166,10 @@ const executeItem = define<{ id: string; argument?: string }>({
     return `Run ${name}${a.argument ? ` with ${quote(a.argument)}` : ""}`;
   },
   async run(a, caps) {
-    if (!(await caps.findItem(a.id))) throw new ToolFailure(`No item with id ${a.id}. Search the catalogue first.`);
-    return opText(await caps.executeItem(a.id, a.argument), "Done");
+    const hit = await caps.findItem(a.id);
+    if (!hit) throw new ToolFailure(`No item with id ${a.id}. Search the catalogue first.`);
+    const text = opText(await caps.executeItem(a.id, a.argument), "Done");
+    return { text, workflow: caps.workflowForItem?.(a.id, a.argument, hit.title) ?? undefined };
   },
 });
 
@@ -254,7 +213,8 @@ const runWorkflow = define<{ id: string; input?: string }>({
     if (!caps.listWorkflows().some((w) => w.id === a.id)) throw new ToolFailure(`No workflow with id ${a.id}`);
     const r = await caps.runWorkflow(a.id, a.input);
     if (!r.ok) throw new ToolFailure(r.error || "Workflow failed");
-    return r.result ? `Workflow finished. Result: ${clip(r.result, 2000)}` : "Workflow finished.";
+    const text = r.result ? `Workflow finished. Result: ${clip(r.result, 2000)}` : "Workflow finished.";
+    return { text, workflow: { type: "runWorkflow", params: { workflowId: a.id, input: a.input ?? "" } } };
   },
 });
 
@@ -285,7 +245,14 @@ const windowAction = define<{ action: WindowAction; app?: string }>({
     return `${a.app ? `Bring ${quote(a.app)} to the front and move its window` : "Move the front window"} to ${title}`;
   },
   async run(a, caps) {
-    return opText(await caps.windowAction(a.action, a.app), "Window moved");
+    // Capture first so undo can put every window back exactly where it was.
+    const before = (await caps.windowSnapshot?.().catch(() => null)) ?? null;
+    const text = opText(await caps.windowAction(a.action, a.app), "Window moved");
+    const restore = caps.restoreWindows;
+    const undo = before && restore ? { summary: "Put the windows back where they were", run: async () => opText(await restore(before), "Windows restored") } : undefined;
+    const title = WINDOW_COMMANDS.find((c) => c.action === a.action)?.title ?? a.action;
+    const workflow: WorkflowStep[] = [...(a.app ? [{ type: "openApp" as const, params: { app: a.app } }, { type: "wait" as const, params: { seconds: "0.5" } }] : []), runItemStep(windowItemId(a.action), undefined, title)];
+    return { text, undo, workflow };
   },
 });
 
@@ -309,7 +276,7 @@ const openUrl = define<{ url: string }>({
   },
   describe: (a) => `Open ${a.url}`,
   async run(a, caps) {
-    return opText(await caps.openUrl(a.url), `Opened ${a.url}`);
+    return { text: opText(await caps.openUrl(a.url), `Opened ${a.url}`), workflow: { type: "openUrl", params: { url: a.url } } };
   },
 });
 
@@ -326,7 +293,7 @@ const openApp = define<{ name: string }>({
   },
   describe: (a) => `Open the app ${quote(a.name)}`,
   async run(a, caps) {
-    return opText(await caps.openApp(a.name), `Opened ${a.name}`);
+    return { text: opText(await caps.openApp(a.name), `Opened ${a.name}`), workflow: { type: "openApp", params: { app: a.name } } };
   },
 });
 
@@ -344,7 +311,7 @@ const openFile = define<{ path: string }>({
   },
   describe: (a) => `Open ${a.path}`,
   async run(a, caps) {
-    return opText(await caps.openFile(a.path), `Opened ${a.path}`);
+    return { text: opText(await caps.openFile(a.path), `Opened ${a.path}`), workflow: { type: "openFile", params: { path: a.path } } };
   },
 });
 
@@ -353,6 +320,7 @@ const getClipboard = define<Record<string, never>>({
   title: "Read Clipboard",
   description: "Read the text currently on the clipboard.",
   mutating: false,
+  sensitiveResult: true,
   schema: { type: "object", properties: {}, additionalProperties: false },
   parse: () => ({}),
   describe: () => "Read the clipboard text",
@@ -367,6 +335,7 @@ const copyToClipboard = define<{ text: string }>({
   title: "Copy to Clipboard",
   description: "Replace the clipboard contents with text.",
   mutating: true,
+  sensitiveArgs: ["text"],
   schema: { type: "object", properties: { text: { type: "string" } }, required: ["text"], additionalProperties: false },
   parse(input) {
     const text = str(input, "text", { required: true, max: 100_000 });
@@ -375,7 +344,13 @@ const copyToClipboard = define<{ text: string }>({
   },
   describe: (a) => `Copy ${quote(a.text)} to the clipboard`,
   async run(a, caps) {
-    return opText(await caps.copyText(a.text), "Copied");
+    const previous = await caps.clipboardText().catch(() => "");
+    const text = opText(await caps.copyText(a.text), "Copied");
+    return {
+      text,
+      undo: { summary: "Put the previous clipboard text back", run: async () => opText(await caps.copyText(previous), "Clipboard restored") },
+      workflow: { type: "setClipboard", params: { text: a.text } },
+    };
   },
 });
 
@@ -384,6 +359,7 @@ const getSelectedText = define<Record<string, never>>({
   title: "Read Selected Text",
   description: "Read the text selected in the app that was frontmost before Glide opened.",
   mutating: false,
+  sensitiveResult: true,
   schema: { type: "object", properties: {}, additionalProperties: false },
   parse: () => ({}),
   describe: () => "Read the selected text",
@@ -419,7 +395,15 @@ const startTimer = define<{ ms: number; name: string }>({
   },
   describe: (a) => `Start a ${formatDuration(a.ms)} timer${a.name ? ` named ${quote(a.name)}` : ""}`,
   async run(a, caps) {
-    return opText(await caps.startTimer(a.ms, a.name), `Timer started (${formatDuration(a.ms)})`);
+    const before = new Set((await caps.timerIds?.().catch(() => [])) ?? []);
+    const text = opText(await caps.startTimer(a.ms, a.name), `Timer started (${formatDuration(a.ms)})`);
+    const created = ((await caps.timerIds?.().catch(() => [])) ?? []).filter((id) => !before.has(id));
+    const stop = caps.stopTimer;
+    const undo =
+      created.length === 1 && stop
+        ? { summary: `Cancel the ${formatDuration(a.ms)} timer`, run: async () => opText(await stop(created[0]!), "Timer cancelled") }
+        : undefined;
+    return { text, undo, workflow: featureStep("timers", "start", { duration: timerDuration(a.ms), name: a.name }) };
   },
 });
 
@@ -444,7 +428,10 @@ const createNote = define<{ text: string; open: boolean }>({
     const r = await caps.createNote(a.text);
     if (!r.ok || !r.id) throw new ToolFailure(r.error || "Could not create the note");
     if (a.open) await caps.openNote(r.id);
-    return `Created note ${r.id}`;
+    const id = r.id;
+    const del = caps.deleteNote;
+    const title = a.text.split("\n")[0] ?? "";
+    return { text: `Created note ${id}`, undo: del ? { summary: `Delete the note ${quote(title)}`, run: async () => opText(await del(id), "Note deleted") } : undefined };
   },
 });
 
@@ -527,8 +514,32 @@ const calendarEvents = define<{ daysAhead: number }>({
   },
 });
 
+const plan = define<{ steps: string[] }>({
+  name: PLAN_TOOL,
+  title: "Plan",
+  description:
+    "Show the user a short plan before a request that needs several actions (2-8 short steps, e.g. \"Find the Standup workflow\", \"Run it\"). Call it once, first, together with the first actions. Not needed for single actions or questions.",
+  mutating: false,
+  schema: {
+    type: "object",
+    properties: { steps: { type: "array", items: { type: "string" }, description: "Short imperative steps, in order" } },
+    required: ["steps"],
+    additionalProperties: false,
+  },
+  parse(input) {
+    const raw = input.steps;
+    if (!Array.isArray(raw)) return '"steps" must be an array of strings';
+    const steps = raw.filter((s): s is string => typeof s === "string" && !!s.trim()).map((s) => s.trim().slice(0, 160));
+    if (!steps.length) return "Give at least one step";
+    return { steps: steps.slice(0, 8) };
+  },
+  describe: (a) => `Plan ${a.steps.length} step${a.steps.length === 1 ? "" : "s"}`,
+  run: async () => "The plan is shown to the user. Carry it out now.",
+});
+
 /** Deterministic order: the tool list is part of the cached prompt prefix. */
 export const TOOLS: AgentTool[] = [
+  plan,
   searchCatalogue,
   executeItem,
   listWorkflows,
@@ -546,6 +557,7 @@ export const TOOLS: AgentTool[] = [
   getSelectedText,
   convert,
   calendarEvents,
+  ...EXTRA_TOOLS,
 ];
 
 export function toolByName(name: string, tools: AgentTool[] = TOOLS): AgentTool | undefined {

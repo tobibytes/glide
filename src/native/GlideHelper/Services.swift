@@ -4,7 +4,13 @@ import EventKit
 
 enum Permissions {
     static func status() -> [String: Any] {
-        ["accessibility": AXIsProcessTrusted(), "inputMonitoring": CGPreflightListenEventAccess(), "calendar": CalendarService.status()]
+        [
+            "accessibility": AXIsProcessTrusted(),
+            "inputMonitoring": CGPreflightListenEventAccess(),
+            "calendar": CalendarService.status(),
+            "reminders": RemindersService.status(),
+            "location": WiFi.locationStatus(),
+        ]
     }
 
     static func request(_ kind: String) throws -> [String: Any] {
@@ -15,6 +21,10 @@ enum Permissions {
             _ = CGRequestListenEventAccess()
         case "calendar":
             CalendarService.request()
+        case "reminders":
+            RemindersService.request()
+        case "location":
+            _ = WiFi.requestLocation()
         default:
             throw HelperError("Unknown permission \(kind)")
         }

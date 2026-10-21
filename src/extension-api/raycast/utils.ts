@@ -386,6 +386,143 @@ export function createRaycastUtils(React: Record<string, any>, api: Record<strin
     return p >= 1 ? api.Icon.CircleProgress100 : p >= 0.75 ? api.Icon.CircleProgress75 : p >= 0.5 ? api.Icon.CircleProgress50 : p > 0 ? api.Icon.CircleProgress25 : api.Icon.Circle;
   }
 
+  /** useAI: streams AI.ask into `data` (Glide's AI feature answers). */
+  function useAI(prompt: string, options: Record<string, any> = {}) {
+    const [data, setData] = useState("");
+    const latest = useLatest(options);
+    const res = usePromise(
+      async (p: string, creativity: unknown, model: unknown) => {
+        setData("");
+        const stream = options.stream !== false;
+        const task = api.AI.ask(p, { creativity, model });
+        if (stream) task.on("data", (chunk: string) => setData((d: string) => d + chunk));
+        const full = await task;
+        setData(full);
+        return full;
+      },
+      [prompt, options.creativity, options.model],
+      { execute: options.execute, onData: (d: string) => latest.current.onData?.(d), onError: options.onError, onWillExecute: options.onWillExecute, failureToastOptions: options.failureToastOptions },
+    );
+    return { ...res, data };
+  }
+
+  // --- OAuth -------------------------------------------------------------------------------------
+  const tokens: { current?: string; idToken?: string } = {};
+
+  /** Generic OAuthService (PKCE authorization code flow + refresh) on top of OAuth.PKCEClient. */
+  class OAuthService {
+    client: any;
+    clientId: string;
+    scope: string;
+    authorizeUrl: string;
+    tokenUrl: string;
+    refreshTokenUrl?: string;
+    personalAccessToken?: string;
+    extraParameters?: Record<string, string>;
+    bodyEncoding: "json" | "url-encoded";
+    onAuthorize?: (p: { token: string; type: string; idToken?: string }) => unknown;
+    tokenResponseParser: (r: unknown) => Record<string, any>;
+    tokenRefreshResponseParser: (r: unknown) => Record<string, any>;
+    constructor(o: Record<string, any>) {
+      this.client = o.client;
+      this.clientId = String(o.clientId ?? "");
+      this.scope = Array.isArray(o.scope) ? o.scope.join(" ") : String(o.scope ?? "");
+      this.authorizeUrl = String(o.authorizeUrl ?? "");
+      this.tokenUrl = String(o.tokenUrl ?? "");
+      if (o.refreshTokenUrl) this.refreshTokenUrl = String(o.refreshTokenUrl);
+      if (o.personalAccessToken) this.personalAccessToken = String(o.personalAccessToken);
+      this.extraParameters = o.extraParameters;
+      this.bodyEncoding = o.bodyEncoding === "url-encoded" ? "url-encoded" : "json";
+      this.onAuthorize = o.onAuthorize;
+      this.tokenResponseParser = o.tokenResponseParser ?? ((r: unknown) => r as Record<string, any>);
+      this.tokenRefreshResponseParser = o.tokenRefreshResponseParser ?? ((r: unknown) => r as Record<string, any>);
+    }
+    private async post(url: string, body: Record<string, string>) {
+      const json = this.bodyEncoding === "json";
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": json ? "application/json" : "application/x-www-form-urlencoded", Accept: "application/json" },
+        body: json ? JSON.stringify(body) : new URLSearchParams(body).toString(),
+      });
+      if (!res.ok) throw new Error(`Token request failed: ${res.status} ${await res.text().catch(() => "")}`.trim());
+      return res.json();
+    }
+    async authorize(): Promise<string> {
+      if (this.personalAccessToken) {
+        tokens.current = this.personalAccessToken;
+        await this.onAuthorize?.({ token: this.personalAccessToken, type: "personal" });
+        return this.personalAccessToken;
+      }
+      const set = await this.client.getTokens();
+      if (set?.accessToken) {
+        if (set.refreshToken && set.isExpired()) {
+          const raw = await this.post(this.refreshTokenUrl ?? this.tokenUrl, { client_id: this.clientId, refresh_token: set.refreshToken, grant_type: "refresh_token" });
+          const parsed = this.tokenRefreshResponseParser(raw);
+          await this.client.setTokens({ ...parsed, refresh_token: parsed.refresh_token ?? set.refreshToken });
+          const next = await this.client.getTokens();
+          tokens.current = next?.accessToken;
+          tokens.idToken = next?.idToken;
+          await this.onAuthorize?.({ token: next.accessToken, type: "oauth", idToken: next.idToken });
+          return next.accessToken;
+        }
+        tokens.current = set.accessToken;
+        tokens.idToken = set.idToken;
+        await this.onAuthorize?.({ token: set.accessToken, type: "oauth", idToken: set.idToken });
+        return set.accessToken;
+      }
+      const request = await this.client.authorizationRequest({ endpoint: this.authorizeUrl, clientId: this.clientId, scope: this.scope, extraParameters: this.extraParameters });
+      const { authorizationCode } = await this.client.authorize(request);
+      const raw = await this.post(this.tokenUrl, { client_id: this.clientId, code: authorizationCode, code_verifier: request.codeVerifier, grant_type: "authorization_code", redirect_uri: request.redirectURI });
+      await this.client.setTokens(this.tokenResponseParser(raw));
+      const next = await this.client.getTokens();
+      tokens.current = next?.accessToken;
+      tokens.idToken = next?.idToken;
+      await this.onAuthorize?.({ token: next.accessToken, type: "oauth", idToken: next.idToken });
+      return next.accessToken;
+    }
+  }
+
+  /**
+   * withAccessToken(service)(Component | async function): authorizes before the command renders
+   * (view commands) or runs (no-view), then getAccessToken() returns the token.
+   */
+  function withAccessToken(options: Record<string, any>) {
+    const authorize = () => (typeof options?.authorize === "function" ? options.authorize() : Promise.reject(new Error("withAccessToken needs an OAuthService or { authorize }")));
+    return (Command: any) => {
+      if (api.environment.commandMode === "no-view") {
+        return async (props: unknown) => {
+          const token = await authorize();
+          tokens.current = token;
+          await options.onAuthorize?.({ token, type: options.personalAccessToken ? "personal" : "oauth" });
+          return Command(props);
+        };
+      }
+      function WithAccessToken(props: Record<string, any>) {
+        const [token, setToken] = useState(tokens.current);
+        const [error, setError] = useState(undefined as unknown);
+        useEffect(() => {
+          if (token) return;
+          authorize().then(
+            (t: string) => {
+              tokens.current = t;
+              setToken(t);
+            },
+            (err: unknown) => setError(err),
+          );
+        }, []);
+        if (error) throw error;
+        if (!token) return React.createElement(api.Detail, { isLoading: true, markdown: "" });
+        return React.createElement(Command, props);
+      }
+      return WithAccessToken;
+    };
+  }
+
+  function getAccessToken() {
+    if (!tokens.current) throw new Error("getAccessToken must be used inside a command wrapped with withAccessToken(…)");
+    return { token: tokens.current, type: "oauth", idToken: tokens.idToken };
+  }
+
   const unsupported = (name: string) => () => {
     throw new Error(`${name} is not supported in Glide's Raycast compatibility layer yet`);
   };
@@ -407,15 +544,11 @@ export function createRaycastUtils(React: Record<string, any>, api: Record<strin
     createDeeplink: (o: { command?: string; extensionName?: string }) => `raycast://extensions/glide/${o?.extensionName ?? ""}/${o?.command ?? ""}`,
     useStreamJSON: unsupported("useStreamJSON"),
     useSQL: unsupported("useSQL"),
-    useAI: unsupported("useAI"),
+    useAI,
     useFrecencySorting: (data: unknown[] | undefined) => ({ data: data ?? [], visitItem: async () => undefined, resetRanking: async () => undefined }),
-    withAccessToken: () => (C: unknown) => C,
-    getAccessToken: unsupported("getAccessToken"),
-    OAuthService: class {
-      constructor() {
-        throw new Error("OAuthService is not supported in Glide's Raycast compatibility layer yet");
-      }
-    },
+    withAccessToken,
+    getAccessToken,
+    OAuthService,
   };
   utils.default = utils;
   return utils;

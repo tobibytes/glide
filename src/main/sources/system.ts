@@ -231,7 +231,7 @@ export function settingItems(): SearchItem[] {
   return [
     make("general", "Glide Settings", "settings/general", "⚙️", ["preferences", "settings", "options"]),
     make("createWorkflow", "Create Workflow", "settings/workflows/new", "🧩", ["new", "workflow", "automation", "shortcut"]),
-    make("createQuicklink", "Create Quicklink", "settings/quicklinks/new", "🔗", ["new", "quicklink", "link", "url"]),
+    // "Create Quicklink" is the quicklinks feature's in-launcher form (src/main/quicklinks/feature.ts).
     make("createSnippet", "Create Snippet", "settings/snippets/new", "✂️", ["new", "snippet", "text", "expansion"]),
     make("editHotkey", "Edit Hotkey", "settings/general#hotkey", "⌨️", ["hotkey", "shortcut", "keyboard", "trigger"]),
   ];

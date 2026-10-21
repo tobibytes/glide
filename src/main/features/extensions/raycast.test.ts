@@ -30,7 +30,7 @@ describe("Raycast manifest translation", () => {
   it("detects Raycast packages and maps commands, arguments and preferences", () => {
     expect(isRaycastPackage(pkg)).toBe(true);
     expect(isRaycastPackage({ name: "x", glide: { commands: [] }, commands: [] })).toBe(false);
-    const res = translateRaycastManifest(pkg, (p) => p === ".glide-build/browse-fruits.cjs" || p === ".glide-build/copy-fruit.cjs");
+    const res = translateRaycastManifest(pkg, (p) => [".glide-build/browse-fruits.cjs", ".glide-build/copy-fruit.cjs", ".glide-build/menu.cjs"].includes(p));
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     const m = res.manifest;
@@ -39,8 +39,9 @@ describe("Raycast manifest translation", () => {
     expect(m.commands.map((c) => [c.name, c.mode, c.entry])).toEqual([
       ["browse-fruits", "view", ".glide-build/browse-fruits.cjs"],
       ["copy-fruit", "no-view", ".glide-build/copy-fruit.cjs"],
+      ["menu", "menu-bar", ".glide-build/menu.cjs"],
     ]);
-    expect(m.warnings?.[0]).toMatch(/menu-bar/);
+    expect(m.warnings).toBeUndefined();
     expect(m.commands[1].arguments).toEqual([{ name: "fruit", placeholder: "Fruit", required: true, type: "text" }]);
     expect(m.preferences.map((p) => [p.name, p.type, p.required, p.default])).toEqual([
       ["greeting", "textfield", true, undefined],
@@ -72,7 +73,7 @@ describe("Raycast manifest translation", () => {
 
 describe("Raycast import (esbuild)", () => {
   it("imports every fixture, copying only package.json, assets and bundles", async () => {
-    for (const name of ["rc-fruits", "rc-notes", "rc-colors", "rc-fetch"]) {
+    for (const name of ["rc-fruits", "rc-notes", "rc-colors", "rc-fetch", "rc-compat"]) {
       const ext = await registry.installRaycastFolder(path.join(fixtures, name));
       expect(ext.manifest?.runtime).toBe("raycast");
       expect(ext.errors).toBeUndefined();
@@ -128,7 +129,7 @@ interface Running {
   invoke(depth: number, handler: string, args?: JsonValue[]): void;
 }
 
-function start(ext: string, command: string, prefs: Record<string, string | boolean> = {}, args: Record<string, string> = {}): Running {
+function start(ext: string, command: string, prefs: Record<string, string | boolean> = {}, args: Record<string, string> = {}, opts: { launchType?: "userInitiated" | "background"; saved?: Record<string, string | boolean> } = {}): Running {
   const installed = registry.get(ext)!;
   const cmd = installed.manifest!.commands.find((c) => c.name === command)!;
   const views = new Map<number, ViewModel>();
@@ -166,10 +167,11 @@ function start(ext: string, command: string, prefs: Record<string, string | bool
     runtime: "raycast",
     shimDir: runtimeDir,
     arguments: args,
-    preferences: { ...resolvePreferences(installed.manifest!, {}, command), ...prefs },
+    preferences: { ...resolvePreferences(installed.manifest!, opts.saved ?? {}, command), ...prefs },
+    launchType: opts.launchType,
     environment: { extensionName: ext, extensionTitle: installed.manifest!.title, commandName: command, commandMode: cmd.mode, assetsPath: path.join(installed.dir, "assets"), extensionPath: installed.dir, supportPath: registry.supportDir(ext), glideVersion: "test" },
   };
-  const info = manager.start({ extName: ext, extTitle: ext, commandName: command, commandTitle: command, mode: cmd.mode, runtime: "raycast" }, init);
+  const info = manager.start({ extName: ext, extTitle: ext, commandName: command, commandTitle: command, mode: cmd.mode, runtime: "raycast", launchType: opts.launchType }, init);
   manager.mountView(info.id, 0);
   running.push(manager);
   return {
@@ -199,7 +201,7 @@ afterAll(() => running.forEach((m) => m.killAll()));
 
 describe("Raycast commands in a child process", () => {
   beforeAll(async () => {
-    if (!registry.get("rc-fruits")) for (const n of ["rc-fruits", "rc-notes", "rc-colors", "rc-fetch"]) await registry.installRaycastFolder(path.join(fixtures, n));
+    for (const n of ["rc-fruits", "rc-notes", "rc-colors", "rc-fetch", "rc-compat"]) if (!registry.get(n)) await registry.installRaycastFolder(path.join(fixtures, n));
   });
 
   it("renders the fruit List, pushes a Detail and pops it", async () => {
@@ -366,5 +368,27 @@ describe("Raycast commands in a child process", () => {
     } finally {
       server.close();
     }
+  });
+
+  it("renders a menu-bar command's MenuBarExtra", async () => {
+    const r = start("rc-fruits", "menu", { greeting: "x" });
+    const v = await r.waitFor(() => {
+      const x = r.views.get(0);
+      return x?.type === "menubar" ? x : undefined;
+    });
+    expect(v).toMatchObject({ icon: "🍎", tooltip: "Fruit Basket" });
+    expect(v.items[0]).toMatchObject({ kind: "section", title: "Copy a fruit" });
+    expect(v.items[0].children?.map((c) => c.title)).toEqual(["Apple", "Cherry", "Strawberry"]);
+    r.invoke(0, v.items[0].children![0].handler!);
+    await r.waitFor(() => r.requests.find((q) => q.method === "clipboard.copy"));
+    expect(r.requests.find((q) => q.method === "clipboard.copy")?.params).toEqual(["Apple"]);
+  });
+
+  it("runs a no-view interval command in the background with its own command-scoped preference", async () => {
+    const log = path.join(registry.supportDir("rc-compat"), "tick.log");
+    fs.rmSync(log, { force: true });
+    const r = start("rc-compat", "tick", {}, {}, { launchType: "background", saved: { "tick/label": "T", "actions-demo/label": "A", label: "plain" } });
+    await r.waitFor(() => r.messages.some((m) => m.type === "done"));
+    expect(fs.readFileSync(log, "utf8").trim()).toBe("background background T");
   });
 });

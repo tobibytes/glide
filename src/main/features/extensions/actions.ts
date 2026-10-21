@@ -33,14 +33,20 @@ export function isSafeUrl(url: string): boolean {
   }
 }
 
-/** Every action of a view, including those of list items. */
+/** Actions with the ones nested in ActionPanel.Submenu, depth-first. */
+function flatten(list: ActionModel[]): ActionModel[] {
+  return list.flatMap((a) => (a.children?.length ? [a, ...flatten(a.children)] : [a]));
+}
+
+/** Every action of a view, including those of list items and submenus. */
 export function actionsOf(view: ViewModel): ActionModel[] {
   if (view.type === "list" || view.type === "grid") {
     const items: ActionModel[] = view.type === "list" ? view.items.flatMap((i) => i.actions) : view.items.flatMap((i) => i.actions);
-    return [...items, ...(view.actions ?? []), ...(view.emptyView?.actions ?? [])];
+    return flatten([...items, ...(view.actions ?? []), ...(view.emptyView?.actions ?? [])]);
   }
-  if (view.type === "detail") return view.actions;
-  return view.actions ?? [];
+  if (view.type === "detail") return flatten(view.actions);
+  if (view.type === "menubar") return [];
+  return flatten(view.actions ?? []);
 }
 
 export function findAction(view: ViewModel | undefined, actionId: string): ActionModel | undefined {
@@ -93,6 +99,13 @@ async function builtin(action: ActionModel, fx: ActionEffects): Promise<ActionOu
       return { ok: true };
     case "submit":
       return { ok: false, error: "Submit actions need the form's values" };
+    case "submenu":
+    case "pickDate":
+    case "quickLook":
+    case "createSnippet":
+    case "createQuicklink":
+      // Handled in the launcher (nested panel, date picker, preview, prefilled form).
+      return { ok: false, error: "This action runs in the launcher" };
     default:
       return { ok: false, error: `Unknown action kind` };
   }

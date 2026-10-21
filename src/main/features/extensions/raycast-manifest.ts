@@ -2,7 +2,7 @@
  * Translation of a Raycast extension's package.json (top-level `commands`, `preferences`, `icon`…)
  * into Glide's ExtensionManifest. Pure: file checks go through `exists`.
  */
-import { isValidName, type ArgumentManifest, type CommandManifest, type ExtensionManifest, type ManifestResult, type PreferenceManifest, type PreferenceType } from "./manifest";
+import { isValidName, parseInterval, type ArgumentManifest, type CommandManifest, type ExtensionManifest, type ManifestResult, type PreferenceManifest, type PreferenceType } from "./manifest";
 
 /** Where Glide writes each command's bundle when importing (relative to the installed extension). */
 export const RAYCAST_BUILD_DIR = ".glide-build";
@@ -115,8 +115,7 @@ export function translateRaycastManifest(pkg: unknown, exists: (relPath: string)
     if (names.has(c.name)) errors.push(`${at}.name "${c.name}" is duplicated`);
     names.add(c.name);
     const mode = c.mode ?? "view";
-    if (mode === "menu-bar") return void warnings.push(`"${c.name}" is a menu-bar command, which Glide does not support yet; it was skipped.`);
-    if (mode !== "view" && mode !== "no-view") return void errors.push(`${at}.mode must be "view", "no-view" or "menu-bar"`);
+    if (mode !== "view" && mode !== "no-view" && mode !== "menu-bar") return void errors.push(`${at}.mode must be "view", "no-view" or "menu-bar"`);
     const entry = raycastEntryCandidates(c.name).find(exists);
     if (!entry) errors.push(`${at}: "${c.name}" has not been built (re-import the extension folder)`);
     const cmd: CommandManifest = {
@@ -130,6 +129,15 @@ export function translateRaycastManifest(pkg: unknown, exists: (relPath: string)
       entry: entry ?? "",
     };
     if (optStr(c.icon)) cmd.icon = optStr(c.icon);
+    if (c.interval !== undefined) {
+      const ms = parseInterval(c.interval);
+      if (ms === null) warnings.push(`"${c.name}": interval ${JSON.stringify(c.interval)} is not valid (use e.g. "10s", "5m", "1h", "1d"; at least 10s); background refresh is off.`);
+      else if (mode === "view") warnings.push(`"${c.name}": interval only applies to no-view and menu-bar commands; it was ignored.`);
+      else {
+        cmd.intervalMs = ms;
+        cmd.interval = String(c.interval).trim();
+      }
+    }
     preferences.push(...translatePreferences(c.preferences, `${at}.preferences`, errors, c.name));
     commands.push(cmd);
   });

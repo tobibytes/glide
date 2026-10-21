@@ -54,6 +54,9 @@ export function GeneralPage({ data, anchor }: { data: UserData; anchor?: string 
             <option value="dark">Dark</option>
           </select>
         </Row>
+        <Row label="Keep open after running a command" hint="Glide stays open after a command runs. Commands that open an app, file or link still close it.">
+          <Toggle label="Keep open after running" checked={s.keepOpenAfterRun} onChange={(v) => void patch({ keepOpenAfterRun: v })} />
+        </Row>
         <Row label="Hide when it loses focus" hint="Clicking outside the launcher closes it">
           <Toggle label="Hide on blur" checked={s.hideOnBlur} onChange={(v) => void patch({ hideOnBlur: v })} />
         </Row>

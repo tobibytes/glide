@@ -1,62 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AgentClient, ContentBlock, TurnRequest, TurnResult } from "./client";
+import type { AgentClient, TurnRequest } from "./client";
 import { buildParams, createMockClient, parseMockScript } from "./client";
 import { DECLINED_RESULT, runAgent, type LoopOptions } from "./loop";
 import { TOOLS, type AgentCapabilities } from "./tools";
+import { fakeCaps, scripted } from "./test-fakes";
 import type { Confirmation, RunSnapshot } from "./types";
 
 // --- fakes ----------------------------------------------------------------------
-
-function fakeCaps(over: Partial<AgentCapabilities> = {}): AgentCapabilities & { calls: string[] } {
-  const calls: string[] = [];
-  const log = (s: string) => calls.push(s);
-  const caps: AgentCapabilities = {
-    now: () => new Date("2026-10-21T09:00:00").getTime(),
-    search: async (q) => (log(`search:${q}`), [{ id: "timers:start", title: "Start Timer", kind: "Timer" }]),
-    findItem: async (id) => (id === "app:/Applications/Safari.app" ? { id, title: "Safari", kind: "app" } : undefined),
-    executeItem: async (id) => (log(`exec:${id}`), { ok: true }),
-    listWorkflows: () => [{ id: "wf1", name: "Standup" }],
-    runWorkflow: async (id) => (log(`wf:${id}`), { ok: true, result: "ran" }),
-    windowAction: async (action, app) => (log(`win:${action}:${app ?? ""}`), { ok: true }),
-    openUrl: async (u) => (log(`url:${u}`), { ok: true }),
-    openApp: async (n) => (log(`app:${n}`), { ok: true }),
-    openFile: async (p) => (log(`file:${p}`), { ok: true }),
-    clipboardText: async () => "clip text",
-    copyText: async (t) => (log(`copy:${t}`), { ok: true }),
-    selectedText: async () => ({ text: "selected" }),
-    startTimer: async (ms, name) => (log(`timer:${ms}:${name}`), { ok: true, message: "Timer started" }),
-    createNote: async (t) => (log(`note:${t}`), { ok: true, id: "n1" }),
-    searchNotes: async () => [{ id: "n1", title: "Standup notes" }],
-    openNote: async (id) => (log(`open-note:${id}`), { ok: true }),
-    convert: async () => [{ title: "3.11 mi" }],
-    calendarEvents: async () => ({ ok: true, events: [] }),
-    ...over,
-  };
-  return Object.assign(caps, { calls });
-}
-
-type Turn = { text?: string; tools?: Array<{ name: string; input: Record<string, unknown> }>; stop?: string; thinking?: boolean };
-
-/** Scripted client that records every request it receives. */
-function scripted(turns: Array<Turn | Error>): AgentClient & { requests: TurnRequest[] } {
-  const requests: TurnRequest[] = [];
-  return {
-    requests,
-    async turn(req, onText): Promise<TurnResult> {
-      requests.push(JSON.parse(JSON.stringify(req, (k, v) => (k === "tools" ? undefined : v))) as TurnRequest);
-      const t = turns[requests.length - 1] ?? { text: "done" };
-      if (t instanceof Error) throw t;
-      const content: ContentBlock[] = [];
-      if (t.thinking) content.push({ type: "thinking", thinking: "", signature: "sig-1" } as ContentBlock);
-      if (t.text) {
-        onText(t.text);
-        content.push({ type: "text", text: t.text, citations: null });
-      }
-      (t.tools ?? []).forEach((c, i) => content.push({ type: "tool_use", id: `tu_${requests.length}_${i}`, name: c.name, input: c.input }));
-      return { content, stopReason: t.stop ?? (t.tools?.length ? "tool_use" : "end_turn"), model: "claude-opus-5-5" };
-    },
-  };
-}
 
 function options(client: AgentClient, caps: AgentCapabilities, over: Partial<LoopOptions> = {}): LoopOptions {
   return {
@@ -107,7 +57,7 @@ describe("agent loop", () => {
     expect(Array.isArray(assistant.content) && assistant.content[0]).toMatchObject({ type: "thinking", signature: "sig-1" });
     expect(toolResults(second)[0]).toMatchObject({ type: "tool_result", tool_use_id: "tu_1_0" });
     expect(JSON.stringify(toolResults(second)[0])).toContain("timers:start");
-    expect(snap.entries.map((e) => e.kind)).toEqual(["prompt", "text", "step", "text"]);
+    expect(snap.entries.map((e) => e.kind)).toEqual(["prompt", "text", "step", "text", "summary"]);
   });
 
   it("asks once for all state-changing calls of a turn and runs them in order after approval", async () => {
@@ -182,7 +132,7 @@ describe("agent loop", () => {
     expect(results[12]).toMatchObject({ is_error: true });
     expect(results[13]).toMatchObject({ type: "text" });
     expect(client.requests).toHaveLength(2);
-    expect(snap.entries.at(-1)).toMatchObject({ kind: "notice", tone: "warning" });
+    expect(snap.entries.at(-2)).toMatchObject({ kind: "notice", tone: "warning" });
     expect(snap.status).toBe("done");
   });
 
@@ -288,7 +238,8 @@ describe("scripted mock client (GLIDE_AGENT_MOCK)", () => {
     const caps = fakeCaps();
     const snap = await runAgent(options(client, caps));
     expect(caps.calls).toEqual([`timer:${25 * 60_000}:`]);
-    expect(snap.entries.at(-1)).toMatchObject({ kind: "text", text: "Started a 25 min timer." });
+    expect(snap.entries.at(-2)).toMatchObject({ kind: "text", text: "Started a 25 min timer." });
+    expect(snap.entries.at(-1)).toMatchObject({ kind: "summary", text: "Finished: 1 action done", undoable: 1, saveable: true });
   });
 
   it("rejects malformed scripts", () => {

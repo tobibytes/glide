@@ -18,6 +18,54 @@ export interface PermissionStatus {
   accessibility: boolean;
   inputMonitoring: boolean;
   calendar: "authorized" | "denied" | "notDetermined" | "restricted";
+  /** EventKit reminders (absent from helpers built before reminders support). */
+  reminders?: "authorized" | "denied" | "notDetermined" | "restricted";
+  /** Location Services, which macOS 14+ requires before CoreWLAN reveals the Wi-Fi name. */
+  location?: "authorized" | "denied" | "notDetermined" | "restricted";
+}
+
+/** finder.selection / finder.selectionViaAutomation. `folder` is the front Finder window's folder (Desktop when no window). */
+export interface FinderSelectionResult {
+  paths: string[];
+  folder?: string | null;
+  source?: "ax" | "automation" | "none";
+  error?: string;
+}
+
+export interface HelperReminderList {
+  id: string;
+  title: string;
+  color: string | null;
+  isDefault: boolean;
+  writable: boolean;
+}
+
+export interface HelperReminder {
+  id: string;
+  title: string;
+  completed: boolean;
+  /** 0 none, 1–4 high, 5 medium, 6–9 low (EventKit). */
+  priority: number;
+  listId: string;
+  listTitle: string;
+  color: string | null;
+  /** ISO 8601; local midnight when dueAllDay. */
+  due?: string;
+  dueAllDay?: boolean;
+  completionDate?: string;
+  notes?: string;
+  url?: string;
+}
+
+export interface WifiInfo {
+  ssid: string | null;
+  bssid: string | null;
+  interface: string | null;
+  poweredOn: boolean;
+  connected: boolean;
+  locationStatus: "authorized" | "denied" | "notDetermined" | "restricted";
+  /** Connected but the name is hidden until Glide has Location access. */
+  needsLocation: boolean;
 }
 
 export interface FrontmostApp {
@@ -110,7 +158,8 @@ export interface OcrBarcode {
 export interface HelperMethods {
   ping: { params: void; result: { version: string } };
   "permissions.status": { params: void; result: PermissionStatus };
-  "permissions.request": { params: { kind: "accessibility" | "inputMonitoring" | "calendar" }; result: PermissionStatus };
+  /** "reminders" and "location" show the system prompt the first time; call only from an explicit user action. */
+  "permissions.request": { params: { kind: "accessibility" | "inputMonitoring" | "calendar" | "reminders" | "location" }; result: PermissionStatus };
   "app.frontmost": { params: void; result: FrontmostApp | null };
   "selection.text": { params: void; result: { text: string | null } };
   "windows.apply": { params: { action: WindowAction }; result: { ok: boolean; error?: string } };
@@ -135,6 +184,18 @@ export interface HelperMethods {
   /** Vision text recognition on an image file. Empty languages = automatic detection. */
   "ocr.recognize": { params: { path: string; languages?: string[]; fast?: boolean; languageCorrection?: boolean }; result: { width: number; height: number; lines: OcrLine[] } };
   "ocr.barcodes": { params: { path: string }; result: { width: number; height: number; codes: OcrBarcode[] } };
+  /** Finder's selected items via Accessibility (no prompt; empty without the AX grant). */
+  "finder.selection": { params: void; result: FinderSelectionResult };
+  /** Same via Apple Events to Finder: the first call shows the Automation prompt, so only on user opt-in. */
+  "finder.selectionViaAutomation": { params: void; result: FinderSelectionResult };
+  /** Reminders methods throw "Reminders access has not been granted" until permissions.request {kind:"reminders"}. */
+  "reminders.lists": { params: void; result: HelperReminderList[] };
+  "reminders.list": { params: { listId?: string; includeCompleted?: boolean }; result: HelperReminder[] };
+  /** `due` ISO 8601; `allDay` stores only the date. Timed reminders get an alarm at the due time. */
+  "reminders.create": { params: { title: string; due?: string; allDay?: boolean; listId?: string; notes?: string }; result: HelperReminder };
+  "reminders.complete": { params: { id: string; completed?: boolean }; result: HelperReminder };
+  /** Read-only, never prompts. ssid/bssid are null without Location access on macOS 14+. */
+  "wifi.info": { params: void; result: WifiInfo };
 }
 
 export interface HelperEvents {
@@ -175,7 +236,7 @@ export interface HelperClientOptions {
 
 /** Calls that legitimately wait on the user (system permission prompts). */
 // OCR of a large Retina capture can take several seconds on the accurate path.
-const SLOW_METHODS: ReadonlySet<string> = new Set(["permissions.request", "color.pick", "ocr.recognize", "ocr.barcodes"]);
+const SLOW_METHODS: ReadonlySet<string> = new Set(["permissions.request", "color.pick", "ocr.recognize", "ocr.barcodes", "finder.selectionViaAutomation", "reminders.list"]);
 const SLOW_TIMEOUT_MS = 120_000;
 
 interface Pending {

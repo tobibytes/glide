@@ -57,3 +57,21 @@
 .agent-settings__value { font-size: 12.5px; color: var(--text-2); }
 .agent-badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--tag-bg); color: var(--text-2); margin-right: var(--s2); }
 .agent-badge--ok { background: color-mix(in srgb, var(--success) 16%, transparent); color: var(--success); }
+
+/* Agent 2.0: plan, summary, history. */
+.agent-row--plan .agent-row__icon { color: var(--accent-text); }
+.agent-row__plan-title { font-weight: 600; color: var(--text-2); font-size: 12.5px; }
+.agent-plan { margin: 2px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 1px; font-size: 13px; }
+.agent-plan__item { display: flex; gap: var(--s2); align-items: baseline; }
+.agent-plan__item .agent-status { width: 14px; flex: none; text-align: center; color: var(--text-3); }
+.agent-plan__item--declined span:nth-child(2), .agent-plan__item--skipped span:nth-child(2) { text-decoration: line-through; color: var(--text-3); }
+.agent-plan__item--none span:nth-child(2) { color: var(--text-3); }
+.agent-row--summary .agent-row__icon { color: var(--success); }
+.agent-row__summary-line { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: center; color: var(--text-2); font-size: 12.5px; }
+.agent-row__hint { display: inline-flex; gap: var(--s1); align-items: center; color: var(--text-3); font-size: 12px; }
+.agent__keys { display: flex; gap: var(--s4); font-size: 12px; color: var(--text-3); }
+.agent__keys span { display: inline-flex; gap: var(--s1); align-items: center; }
+.agent__readonly { color: var(--warning); }
+.agent-history { min-height: 220px; }
+.agent-history .row { display: flex; align-items: center; gap: var(--s2); }
+.agent-history__when { margin-left: auto; font-size: 11.5px; color: var(--text-3); flex: none; }

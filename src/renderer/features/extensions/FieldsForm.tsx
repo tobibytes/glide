@@ -11,6 +11,13 @@ import { useNavController, useNavHost } from "../../lib/navHost";
 import { eventMatchesShortcut } from "../../lib/keys";
 import { ext } from "./api";
 
+/** A Raycast field ref call (`ref.current.focus()` / `reset()`), applied to the field with that id. */
+export interface FieldCommand {
+  seq: number;
+  op: "focus" | "reset";
+  id: string;
+}
+
 export interface FormAction extends Omit<NavAction, "run"> {
   run(values: FormValues): void | Promise<void>;
 }
@@ -29,6 +36,8 @@ interface Props {
   /** Raycast onChange / onBlur of a field. */
   onFieldChange?(field: FormFieldModel, value: FormValue): void;
   onFieldBlur?(field: FormFieldModel, value: FormValue): void;
+  /** Latest field ref call from the extension. */
+  command?: FieldCommand | null;
 }
 
 const INPUT_TYPES = new Set(["text", "password", "textarea", "checkbox", "dropdown", "date", "datetime", "tags", "file"]);
@@ -68,7 +77,7 @@ function fromInputDate(v: string): string {
   return Number.isNaN(d.getTime()) ? "" : d.toISOString();
 }
 
-export function FieldsForm({ fields, submitTitle, description, busy, initial, onSubmit, onCancel, actions, onFieldChange, onFieldBlur }: Props) {
+export function FieldsForm({ fields, submitTitle, description, busy, initial, onSubmit, onCancel, actions, onFieldChange, onFieldBlur, command }: Props) {
   const host = useNavHost();
   const [values, setValues] = useState<FormValues>(() => initialValues(fields, initial));
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -103,6 +112,19 @@ export function FieldsForm({ fields, submitTitle, description, busy, initial, on
     el?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fieldKey]);
+
+  useEffect(() => {
+    if (!command) return;
+    const f = fields.find((x) => x.id === command.id);
+    if (!f) return;
+    if (command.op === "focus") rootRef.current?.querySelector<HTMLElement>(`[data-field="${CSS.escape(f.id)}"]`)?.focus();
+    else {
+      const v = f.resetTo ?? fallbackValue(f);
+      setValues((s) => ({ ...s, [f.id]: v }));
+      onFieldChange?.(f, v);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [command?.seq]);
 
   const primary = actions?.[0];
   const submit = async () => {

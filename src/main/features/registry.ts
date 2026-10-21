@@ -34,3 +34,10 @@ export const FEATURES: FeatureModule[] = [f_clipboard, f_keyboard, f_windows, f_
 FEATURES.push(f_convert, f_color, f_timers, f_syscmds);
 // Top-10 feature wave (one owner per folder).
 FEATURES.push(f_automations, f_agent, f_layouts, f_ocr, f_browser, f_processes, f_sysmon, f_appearance, f_transforms, f_sync);
+// Finder selection commands and Apple Reminders (S8).
+import { feature as f_finder } from "./finder";
+import { feature as f_reminders } from "./reminders";
+FEATURES.push(f_finder, f_reminders);
+// Menu-bar mode: status items, built-in extras and the Glide menu (started last; it reads other features).
+import { feature as f_menubar } from "./menubar";
+FEATURES.push(f_menubar);

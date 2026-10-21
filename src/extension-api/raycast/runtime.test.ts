@@ -221,8 +221,8 @@ describe("Raycast runtime: API shims", () => {
     toast.title = "Done";
     await new Promise((r) => setTimeout(r, 5));
     const toasts = sent.filter((m) => m.type === "request" && m.method === "showToast").map((m) => (m as { params: JsonValue[] }).params);
-    expect(toasts[0]).toEqual(["animated", "Loading", null, toast.id]);
-    expect(toasts[toasts.length - 1]).toEqual(["success", "Done", null, toast.id]);
+    expect(toasts[0]).toEqual(["animated", "Loading", null, toast.id, []]);
+    expect(toasts[toasts.length - 1]).toEqual(["success", "Done", null, toast.id, []]);
     await api.LocalStorage.setItem("k", "v");
     expect(await api.LocalStorage.getItem("k")).toBe("v");
     expect(await api.LocalStorage.getItem("missing")).toBeUndefined();

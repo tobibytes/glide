@@ -1,0 +1,32 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "rc-compat",
+  "title": "Compat Lab",
+  "description": "Menu bar, background interval, OAuth, AI, submenus, drafts, toast actions and more",
+  "icon": "🧪",
+  "author": "glide",
+  "license": "MIT",
+  "commands": [
+    { "name": "menu-status", "title": "Compat Menu Bar", "description": "A MenuBarExtra with sections, a submenu and a counter", "mode": "menu-bar", "interval": "10s" },
+    {
+      "name": "tick",
+      "title": "Compat Tick",
+      "description": "No-view command that records each background run",
+      "mode": "no-view",
+      "interval": "10s",
+      "preferences": [{ "name": "label", "title": "Label", "type": "textfield", "default": "tick-default", "required": false }]
+    },
+    {
+      "name": "actions-demo",
+      "title": "Compat Actions",
+      "description": "Submenus, Quick Look, PickDate, toast actions, CreateSnippet, selectedItemId",
+      "mode": "view",
+      "preferences": [{ "name": "label", "title": "Label", "type": "textfield", "default": "actions-default", "required": false }]
+    },
+    { "name": "draft-form", "title": "Compat Draft Form", "description": "Form with enableDrafts and field refs", "mode": "view" },
+    { "name": "ai-demo", "title": "Compat AI", "description": "useAI and AI.ask", "mode": "view" },
+    { "name": "oauth-demo", "title": "Compat OAuth", "description": "OAuthService + withAccessToken against a local server", "mode": "view" }
+  ],
+  "preferences": [{ "name": "server", "title": "OAuth server", "description": "Base URL of the OAuth test server", "type": "textfield", "default": "http://127.0.0.1:9", "required": false }],
+  "dependencies": { "@raycast/api": "^1.80.0", "@raycast/utils": "^1.16.0" }
+}

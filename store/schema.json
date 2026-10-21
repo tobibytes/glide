@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/tobibytes/glide/main/store/schema.json",
+  "title": "Glide extension store index",
+  "description": "Schema v1. Authoritative validation is src/main/features/extensions/store-schema.ts (invalid entries are dropped, not fatal).",
+  "type": "object",
+  "required": ["schemaVersion", "extensions"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "updatedAt": { "type": "string" },
+    "extensions": { "type": "array", "items": { "$ref": "#/$defs/entry" } }
+  },
+  "$defs": {
+    "semver": { "type": "string", "pattern": "^v?\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$" },
+    "entry": {
+      "type": "object",
+      "required": ["id", "name", "title", "description", "author", "version", "kind", "minGlideVersion", "commands"],
+      "anyOf": [{ "required": ["download"] }, { "required": ["source"] }],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
+        "name": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", "description": "package.json name; must match the package" },
+        "title": { "type": "string", "maxLength": 120 },
+        "description": { "type": "string", "maxLength": 4000 },
+        "author": { "type": "string", "maxLength": 120 },
+        "version": { "$ref": "#/$defs/semver" },
+        "minGlideVersion": { "$ref": "#/$defs/semver" },
+        "kind": { "enum": ["glide", "raycast"] },
+        "categories": { "type": "array", "items": { "type": "string", "maxLength": 40 }, "maxItems": 8 },
+        "icon": { "type": "string", "description": "Emoji or https image URL" },
+        "commands": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["name", "title"],
+            "properties": { "name": { "type": "string" }, "title": { "type": "string" }, "description": { "type": "string" }, "mode": { "enum": ["view", "no-view", "menu-bar"] } }
+          }
+        },
+        "download": {
+          "type": "object",
+          "required": ["url", "sha256", "size"],
+          "properties": {
+            "url": { "type": "string", "description": "https URL or a path relative to the index URL; http only for 127.0.0.1/localhost" },
+            "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+            "size": { "type": "integer", "minimum": 1, "maximum": 52428800 }
+          }
+        },
+        "source": {
+          "type": "object",
+          "required": ["bundled", "path"],
+          "properties": { "bundled": { "const": true }, "path": { "type": "string", "description": "Folder name in extensions-examples/" } }
+        },
+        "screenshots": { "type": "array", "items": { "type": "string" }, "maxItems": 10 },
+        "changelog": {
+          "type": "array",
+          "items": { "type": "object", "required": ["version", "notes"], "properties": { "version": { "$ref": "#/$defs/semver" }, "date": { "type": "string" }, "notes": { "type": "string" } } }
+        },
+        "homepage": { "type": "string" },
+        "license": { "type": "string" }
+      }
+    }
+  }
+}

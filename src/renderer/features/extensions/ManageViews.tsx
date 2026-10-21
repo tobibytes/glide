@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ExecuteResult } from "@shared/ipc";
 import type { FormFieldModel, FormValues } from "../../../extension-api/types";
 import type { ExtensionSummary, PreferencesState, RaycastSupport } from "../../../main/features/extensions/contract";
-import type { PreferenceManifest } from "../../../main/features/extensions/manifest";
+import { prefKey, type PreferenceManifest } from "../../../main/features/extensions/manifest";
 import type { NavAction, NavItem, ViewProps } from "../types";
 import { NavList } from "../../components/NavList";
 import { Icon } from "../../components/Icon";
@@ -11,10 +11,11 @@ import { glide } from "../../lib/glide";
 import { applyResult, errorText, ext, SECURITY_NOTE, useExtEvent } from "./api";
 import { FieldsForm } from "./FieldsForm";
 
-export function prefFields(prefs: PreferenceManifest[]): FormFieldModel[] {
+/** Preference form fields; command-scoped ones are keyed "<command>/<name>" and labelled with the command. */
+export function prefFields(prefs: PreferenceManifest[], commandTitle: (name: string) => string = (n) => n): FormFieldModel[] {
   return prefs.map((p) => ({
-    id: p.name,
-    title: p.title,
+    id: prefKey(p),
+    title: p.command ? `${p.title} (${commandTitle(p.command)})` : p.title,
     type: p.type === "textfield" ? "text" : p.type,
     required: p.required,
     default: p.default,
@@ -216,7 +217,7 @@ export function PreferencesView({ props, setPlaceholder, push, pop, close, toast
   if (!state) return <div className="extensions-loading"><div className="glide-loading" aria-hidden="true" /></div>;
   return (
     <FieldsForm
-      fields={prefFields(state.preferences)}
+      fields={prefFields(state.preferences, (n) => state.commands?.find((c) => c.name === n)?.title ?? n)}
       initial={state.values}
       busy={busy}
       submitTitle={then ? "Save and Run" : "Save Preferences"}

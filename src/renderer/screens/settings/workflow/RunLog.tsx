@@ -1,11 +1,12 @@
 import type { ActionSpec, RunResult, WorkflowAction } from "@shared/types";
+import { specForAction } from "@shared/workflow-specs";
 import { walk } from "../../../lib/workflowTree";
 
 export function RunLog({ result, actions, specs, running }: { result: RunResult | null; actions: WorkflowAction[]; specs: ActionSpec[]; running: boolean }) {
   if (running && !result) return <div className="empty">Running…</div>;
   if (!result) return <div className="empty">Run the workflow to see each action's status, duration and output here.</div>;
   const titles = new Map<string, string>();
-  walk(actions, (a) => titles.set(a.id, a.label || specs.find((s) => s.type === a.type)?.title || a.type));
+  walk(actions, (a) => titles.set(a.id, a.label || specForAction(specs, a)?.title || a.type));
   const total = result.log.reduce((n, e) => n + (e.endedAt - e.startedAt), 0);
   return (
     <div className="runlog">

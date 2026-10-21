@@ -1,0 +1,49 @@
+/* Quicklink multi-argument pills (next to the launcher search field). */
+.qlargs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 340px;
+  overflow: hidden;
+  flex-shrink: 1;
+}
+.qlargs__arg {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  height: 24px;
+  line-height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-xs);
+  background: var(--tag-bg);
+  color: var(--text-2);
+  font-size: 12px;
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 1px solid transparent;
+}
+.qlargs__arg--on {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+.qlargs__arg--missing .qlargs__value {
+  color: var(--text-3);
+}
+.qlargs__name {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
+}
+.qlargs__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qlargs__hint {
+  font-size: 11px;
+  color: var(--text-3);
+  padding: 0 2px;
+}

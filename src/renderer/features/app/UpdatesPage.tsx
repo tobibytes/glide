@@ -18,7 +18,7 @@ const PHASES: Record<string, string> = {
 function statusLine(u: UpdateState): string {
   switch (u.status) {
     case "disabled":
-      return u.error ?? "Updates are off. Enter a GitHub owner/repo to turn them on.";
+      return u.error ?? "Updates are off. Enter a GitHub owner/repo (e.g. tobibytes/glide) to turn them on.";
     case "idle":
       return "Not checked yet.";
     case "checking":
@@ -115,12 +115,12 @@ export function UpdatesPage() {
         title="Updates"
         footer={
           <>
-            Glide checks the latest GitHub release of this repository for <span className="mono">Glide-darwin-arm64.zip</span> and its <span className="mono">.sha256</span>, verifies the checksum, the code signature and
-            the bundle identifier, then replaces the app and relaunches. Nothing is sent anywhere while the feed is empty.
+            Glide checks the latest GitHub release of this repository for the build that matches this Mac (<span className="mono">Glide-darwin-&lt;arch&gt;.zip</span>, else the universal one) and its <span className="mono">.sha256</span>, verifies the checksum, the code signature and
+            the bundle identifier, then replaces the app and relaunches. By default the feed is tobibytes/glide (Glide’s own releases); clear it to turn update checks off, and nothing is sent anywhere.
           </>
         }
       >
-        <Row label="Update feed" hint="GitHub owner/repo, e.g. you/glide" htmlFor="app-feed">
+        <Row label="Update feed" hint="GitHub owner/repo (default tobibytes/glide); empty turns updates off" htmlFor="app-feed">
           <form
             className="app-updates__feed"
             onSubmit={(e) => {

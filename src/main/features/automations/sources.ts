@@ -26,6 +26,8 @@ export interface SourceDeps {
   home: string;
   log(...args: unknown[]): void;
   intervals?: Partial<Record<"app" | "wifi" | "power", number>>;
+  /** Wi‑Fi network name via the helper (null until Glide has Location access). */
+  wifiSsid?: () => Promise<string | null>;
 }
 
 /** Polls `read`, diffing each snapshot against the previous one. The first read is the baseline. */
@@ -245,6 +247,8 @@ export class EventSources {
   }
 
   private async readWifi(): Promise<{ id: string | null }> {
+    const ssid = await this.deps.wifiSsid?.().catch(() => null);
+    if (ssid) return { id: ssid };
     if (this.wifiDevice === undefined) {
       this.wifiDevice = await this.deps.run("networksetup", ["-listallhardwareports"]).then(parseWifiDevice, () => null);
     }

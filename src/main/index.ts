@@ -1,3 +1,4 @@
+import { HEADLESS, HEADLESS_HELPER_METHODS, installHeadless } from "./headless"; // must stay first: patches Electron/child_process
 import { app, globalShortcut } from "electron";
 import { IPC } from "@shared/ipc";
 import type { ScoredItem, SearchItem } from "@shared/types";
@@ -11,13 +12,13 @@ import { createPrompts } from "./prompts";
 import { createAppSource } from "./sources/apps";
 import { createFileSource } from "./sources/files";
 import { Store } from "./store";
-import { createTray } from "./tray";
+import { configureTray, createTray } from "./tray";
 import { createWindows } from "./window";
 import { createWorkflowRuntime } from "./workflows/runtime";
 import { createFeatureHost } from "./features/host";
 import { FEATURES } from "./features/registry";
+import "./quicklinks/register"; // adds the quicklinks + snippets feature modules to FEATURES
 import { createNativeHelper, type NativeHelper } from "./native/helper";
-import { HEADLESS, HEADLESS_HELPER_METHODS, installHeadless } from "./headless";
 
 installHeadless();
 
@@ -103,6 +104,7 @@ async function main(): Promise<void> {
   });
   Object.assign(executorDeps, { features });
   featureItems = () => features.items();
+  configureTray({ findItem: (id) => catalogue.find(id) });
 
   const syncShortcuts = () => {
     const failed = syncHotkeys([{ accel: settings().hotkey, handler: windows.toggleLauncher }, ...catalogue.hotkeyBindings()]);

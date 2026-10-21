@@ -1,0 +1,130 @@
+name: Release
+
+# Tag push (v1.2.3) -> build, verify and publish a GitHub Release.
+# Manual run (Actions > Release > Run workflow) -> the same build as a dry run: artifacts are
+# uploaded to the workflow run, nothing is released.
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      notarize:
+        description: "Notarize when the Apple secrets are configured"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      # Secrets cannot be read in `if:` expressions directly, so expose only whether they exist.
+      HAS_CERT: ${{ secrets.CSC_LINK != '' && secrets.CSC_KEY_PASSWORD != '' }}
+      HAS_NOTARY: ${{ secrets.APPLE_ID != '' && secrets.APPLE_TEAM_ID != '' && secrets.APPLE_APP_PASSWORD != '' }}
+      WANT_NOTARIZE: ${{ github.event_name == 'push' || inputs.notarize }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Check the tag matches package.json
+        if: github.event_name == 'push'
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match package.json version ${version}"
+            exit 1
+          fi
+
+      - run: pnpm typecheck
+      - run: pnpm test
+
+      - name: Import Developer ID certificate
+        if: env.HAS_CERT == 'true' && env.HAS_NOTARY == 'true' && env.WANT_NOTARIZE == 'true'
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/glide-release.keychain-db"
+          kc_pass="$(uuidgen)"
+          echo "$CSC_LINK" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$kc_pass" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$kc_pass" "$keychain"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$kc_pass" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security find-identity -v -p codesigning "$keychain"
+
+      - name: Build
+        run: pnpm build
+
+      # Ad-hoc signed (no Glide Local Signing keychain on CI). Downloads the x64 Electron zip.
+      - name: Package universal app
+        run: node scripts/package.mjs --arch universal --zip
+
+      - name: Notarize
+        if: env.HAS_CERT == 'true' && env.HAS_NOTARY == 'true' && env.WANT_NOTARIZE == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: node scripts/notarize.mjs --zip --arch universal
+
+      - name: Verify artifacts
+        run: |
+          app="release/Glide-darwin-universal/Glide.app"
+          lipo -info "$app/Contents/MacOS/Glide"
+          lipo -info "$app/Contents/Resources/bin/glide-helper"
+          lipo "$app/Contents/MacOS/Glide" -verify_arch arm64 x86_64
+          lipo "$app/Contents/Resources/bin/glide-helper" -verify_arch arm64 x86_64
+          codesign --verify --deep --strict --verbose=2 "$app"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$app/Contents/Info.plist"
+          (cd release && shasum -a 256 -c Glide-darwin-universal.zip.sha256)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: glide-darwin-universal
+          path: |
+            release/Glide-darwin-universal.zip
+            release/Glide-darwin-universal.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: glide-darwin-universal
+          path: dist
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Glide ${GITHUB_REF_NAME#v}" \
+            --generate-notes \
+            --verify-tag \
+            dist/Glide-darwin-universal.zip \
+            dist/Glide-darwin-universal.zip.sha256

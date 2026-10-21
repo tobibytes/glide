@@ -1,0 +1,17 @@
+.menubar-page__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.menubar-page__icon {
+  width: 20px;
+  text-align: center;
+}
+.menubar-page__kbd {
+  margin-right: 10px;
+  color: var(--kbd-text);
+  background: var(--kbd-bg);
+}
+.menubar-page__switch {
+  display: inline-flex;
+}

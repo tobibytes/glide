@@ -250,26 +250,97 @@ async function main() {
     await sleep(200);
     pv = await evaluate(`({ view: !!document.querySelector('.launcher__view'), mode: document.querySelector('.launcher')?.dataset.vimMode })`);
     check("in a view: Esc → NORMAL, h pops", vm === "normal" && !pv.view, JSON.stringify({ vm, ...pv }));
-    await press("i");
+    // Fix (S7): popping from NORMAL lands in INSERT with a writable, focused field.
+    pv = await evaluate(`({ mode: document.querySelector('.launcher')?.dataset.vimMode, readOnly: document.querySelector('input')?.readOnly, pill: !!document.querySelector('.vim-pill'), focused: document.activeElement === document.querySelector('.launcher input') })`);
+    check("after popping from NORMAL the launcher is back in INSERT (not read-only)", pv.mode === "insert" && !pv.readOnly && !pv.pill && pv.focused, JSON.stringify(pv));
+    await press("x");
+    await sleep(150);
+    const typed = await evaluate(`document.querySelector('input')?.value`);
+    check("…and typing works right away", typed === "safx", typed);
+    await key("Backspace", "Backspace", 8);
     await sleep(100);
+    // Same through ⌫ in NORMAL.
+    await evaluate(`window.__glideLauncher.openView({ id: ${JSON.stringify(viewId)} })`);
+    await sleep(300);
+    await key("Escape", "Escape", 27);
+    await sleep(80);
+    await key("Backspace", "Backspace", 8);
+    await sleep(200);
+    pv = await evaluate(`({ view: !!document.querySelector('.launcher__view'), mode: document.querySelector('.launcher')?.dataset.vimMode, readOnly: document.querySelector('input')?.readOnly })`);
+    check("NORMAL ⌫ pops a view and returns to INSERT", !pv.view && pv.mode === "insert" && !pv.readOnly, JSON.stringify(pv));
   } else check("view push (no feature views registered yet — skipped)", true, "");
 
-  // Quick AI: Tab on an item that takes no argument pushes ai.chat with the query (fresh data dir: no API key, no network).
-  if (views.includes("ai.chat")) {
+  // --- Tab chooser (S7): Tab on a free-text query offers Ask AI / Ask Glide Agent / first fallback ---
+  const chooserState = () =>
+    evaluate(`(() => { const c = document.querySelector('.tabchooser'); return c ? { open: true, options: [...c.querySelectorAll('[data-choice]')].map((o) => o.dataset.choice), selected: c.querySelector('[aria-selected="true"]')?.dataset.choice ?? null } : { open: false }; })()`);
+  const viewOnTop = () => evaluate(`document.querySelector('.launcher__view')?.dataset.view ?? null`);
+  const popToRoot = async () => {
+    for (let i = 0; i < 3 && (await viewOnTop()); i++) {
+      await evaluate(`document.querySelector('.launcher input')?.focus()`);
+      await key("Escape", "Escape", 27);
+      await sleep(60);
+      await press("h");
+      await sleep(200);
+    }
+  };
+  await clear();
+  await typeText("safari");
+  await sleep(400);
+  await key("Tab", "Tab", 9);
+  await sleep(200);
+  let ch = await chooserState();
+  check("Tab with a free-text query opens the chooser (AI / Agent / fallback)", ch.open && ch.options.length >= 2 && ch.options.includes("fallback"), JSON.stringify(ch));
+  if (ch.open) {
+    const first = ch.selected;
+    await key("Enter", "Enter", 13);
+    await sleep(400);
+    const v1 = await viewOnTop();
+    const expectView = { ai: "ai.chat", agent: "agent.run" }[first];
+    check("Enter runs the preselected choice", expectView ? v1 === expectView : v1 === null, JSON.stringify({ first, v1 }));
+    await popToRoot();
+    // Pick another option with ↓ and check it is remembered.
     await clear();
     await typeText("safari");
     await sleep(400);
     await key("Tab", "Tab", 9);
-    await sleep(400);
-    const qa = await evaluate(`({ view: document.querySelector('.launcher__view')?.dataset.view, crumb: document.querySelector('.crumb__title')?.textContent })`);
-    check("Tab with a query opens Quick AI (ai.chat)", qa.view === "ai.chat", JSON.stringify(qa));
-    await evaluate(`document.querySelector('.launcher input')?.focus()`);
-    await key("Escape", "Escape", 27);
-    await press("h");
-    await sleep(200);
-    await press("i");
+    await sleep(150);
+    ch = await chooserState();
+    const target = ch.options.find((o) => o !== "fallback" && o !== ch.selected) ?? ch.options[0];
+    const steps = (ch.options.indexOf(target) - ch.options.indexOf(ch.selected) + ch.options.length) % ch.options.length;
+    for (let i = 0; i < steps; i++) await key("ArrowDown", "ArrowDown", 40);
     await sleep(100);
-    check("…and h pops back to root", !(await evaluate(`!!document.querySelector('.launcher__view')`)), "");
+    await key("Enter", "Enter", 13);
+    await sleep(400);
+    const v2 = await viewOnTop();
+    check(`choosing “${target}” opens it`, v2 === ({ ai: "ai.chat", agent: "agent.run" }[target] ?? null), JSON.stringify({ target, v2 }));
+    await popToRoot();
+    await clear();
+    await typeText("safari");
+    await sleep(400);
+    await key("Tab", "Tab", 9);
+    await sleep(150);
+    ch = await chooserState();
+    check("the chooser remembers the last choice", ch.selected === target, JSON.stringify(ch));
+    await key("Escape", "Escape", 27);
+    await sleep(100);
+    const closed = await chooserState();
+    const mode = await evaluate(`document.querySelector('.launcher')?.dataset.vimMode`);
+    check("Esc closes the chooser without leaving INSERT", !closed.open && mode === "insert" && !(await viewOnTop()), JSON.stringify({ closed, mode }));
+    // The fallback choice runs the first fallback with the query (headless records the URL instead of opening it).
+    await key("Tab", "Tab", 9);
+    await sleep(150);
+    ch = await chooserState();
+    const fbIndex = ch.options.indexOf("fallback");
+    const before = appLog.length;
+    await press(String(fbIndex + 1));
+    await sleep(600);
+    const opened = appLog.slice(before).split("\n").find((l) => l.includes("[headless]") && /openExternal/i.test(l) && /safari/i.test(l));
+    check("chooser digit runs the first fallback with the query", !!opened, opened ?? appLog.slice(before).slice(-300));
+    await evaluate(`localStorage.removeItem("glide:tab-choice")`);
+    await clear();
+    await key("ArrowUp", "ArrowUp", 38);
+    await sleep(300);
+    check("↑ on an empty query restores the last search", (await state()).input === "safari", (await state()).input);
   }
 
   // --- kindLabel ---------------------------------------------------------------
@@ -294,6 +365,49 @@ async function main() {
   await sleep(400);
   s = await state();
   check("no-match query shows fallbacks or empty state without crashing", true, JSON.stringify(s.rows.slice(0, 3)));
+
+  // --- Launcher polish (S7): result count, per-section show more, did you mean ---
+  await clear();
+  await typeText("s");
+  await sleep(500);
+  const polish = await evaluate(`({
+    count: Number(document.querySelector('.launcher__count')?.dataset.count ?? -1),
+    rows: document.querySelectorAll('#glide-results [role="option"]').length,
+    sections: [...document.querySelectorAll('#glide-results .section')].map((h) => ({ id: h.dataset.section, n: Number(h.querySelector('.section__count')?.textContent), more: !!h.querySelector('.section__more') })),
+  })`);
+  check("result count matches the rows", polish.count === polish.rows && polish.rows > 0, JSON.stringify(polish));
+  const capped = polish.sections.find((x) => x.more);
+  if (capped) {
+    // Select the first row of the capped section, then ⇧⌘↓ expands it.
+    const firstOf = await evaluate(`[...document.querySelectorAll('#glide-results [role="option"]')].findIndex((r) => r.id.startsWith('row-${capped.id}:'))`);
+    for (let i = 0; i < firstOf; i++) await key("ArrowDown", "ArrowDown", 40);
+    await key("ArrowDown", "ArrowDown", 40, 4 | 8);
+    await sleep(500);
+    const after = await evaluate(`({ n: Number(document.querySelector('#glide-results .section[data-section="${capped.id}"] .section__count')?.textContent), more: !!document.querySelector('#glide-results .section[data-section="${capped.id}"] .section__more'), sel: document.querySelectorAll('#glide-results [aria-selected="true"]').length })`);
+    check(`⇧⌘↓ shows more of “${capped.id}”`, after.n > capped.n && !after.more && after.sel === 1, JSON.stringify({ capped, after }));
+  } else check("show more (no capped section for 's' — skipped)", true, JSON.stringify(polish.sections));
+  await clear();
+  await typeText("sfaari");
+  let dym = {};
+  for (let i = 0; i < 15; i++) {
+    await sleep(200);
+    dym = await evaluate(`({ header: document.querySelector('.section--dym')?.textContent ?? null, first: document.querySelector('#glide-results [role="option"] .row__title')?.textContent ?? null })`);
+    if (dym.header) break;
+  }
+  check("typo shows “Did you mean” with the corrected item first", /Did you mean/.test(dym.header ?? "") && dym.first === "Safari", JSON.stringify(dym));
+
+  // --- FeatureContext.search through the platform bridge (same path as the launcher) ---
+  const api = await evaluate(`(async () => {
+    const plain = await window.glide.search("saf");
+    const wide = await window.glide.feature("glide", "search", "s", { sectionLimit: 60 });
+    const narrow = await window.glide.search("s");
+    const sug = await window.glide.feature("glide", "didYouMean", "sfaari");
+    const viaPlatform = await window.glide.feature("glide", "search", "saf");
+    // File hits come from Spotlight asynchronously and may differ between two calls; compare the rest.
+    const ids = (r) => r.sections.filter((x) => x.id !== "files").flatMap((x) => x.items.map((i) => i.item.id));
+    return { same: JSON.stringify(ids(plain)) === JSON.stringify(ids(viaPlatform)), wide: ids(wide).length, narrow: ids(narrow).length, sug: sug?.items?.[0]?.item?.title ?? null };
+  })()`);
+  check("platform search = launcher search; sectionLimit widens; didYouMean", api.same && api.wide > api.narrow && api.sug === "Safari", JSON.stringify(api));
 
   // --- Workflows: create through the real bridge, run, then open in the editor ---
   const wfId = "e2e-wf";
@@ -320,6 +434,44 @@ async function main() {
   s = await state();
   check("new workflow is searchable immediately", s.rows[0]?.t === "E2E Greeting", JSON.stringify(s.rows.slice(0, 2)));
 
+  // --- Feature workflow actions (S7) ---
+  const specs = await evaluate(`window.glide.actionSpecs()`);
+  const featureSpecs = (specs ?? []).filter((x) => x.type === "feature");
+  const has = (k) => featureSpecs.some((x) => `${x.feature}.${x.action}` === k);
+  check(
+    "action library lists feature actions (34 transforms + timer/layout/OCR/automation/convert)",
+    featureSpecs.filter((x) => x.feature === "transforms").length >= 33 && ["timers.start", "layouts.restore", "ocr.captureText", "automations.runNow", "convert.convert"].every(has),
+    `${featureSpecs.length} feature specs`,
+  );
+  const fwf = await evaluate(`(async () => {
+    const now = Date.now();
+    for (const name of ["E2E Auto A", "E2E Auto B"]) {
+      const r = await window.glide.feature("automations", "save", { name, enabled: false, askBeforeRunning: false, trigger: { kind: "time", time: "03:00", days: [] }, target: { kind: "workflow", workflowId: "e2e-wf" } });
+      if (r && r.ok === false) throw new Error("automation save failed: " + r.error);
+    }
+    await window.glide.saveWorkflow({
+      id: "e2e-fwf", name: "Feature Action Check", icon: { kind: "emoji", value: "🔀" }, acceptsInput: true, createdAt: now, updatedAt: now,
+      actions: [
+        { id: "t1", type: "setVariable", params: { name: "t", value: "hello {{input}} world" } },
+        { id: "t2", type: "feature", params: { feature: "transforms", action: "snake", text: "{{t}}" } },
+        { id: "t3", type: "feature", params: { feature: "transforms", action: "upper", text: "{{result}}" } },
+        { id: "t4", type: "setVariable", params: { name: "shouted", value: "{{result}}" } },
+        { id: "t5", type: "feature", params: { feature: "convert", action: "convert", query: "10 km in mi", continueOnError: "true" } },
+        { id: "t6", type: "feature", params: { feature: "ocr", action: "captureText", source: "screen", continueOnError: "true" } },
+        { id: "t7", type: "feature", params: { feature: "automations", action: "runNow", automation: "E2E Auto A" } },
+      ],
+    });
+    const r = await window.glide.runWorkflow("e2e-fwf", "e2e");
+    return { ok: r.ok, shouted: r.variables.shouted, converted: r.variables.converted ?? null, log: r.log.map((l) => l.actionId + ":" + l.status + (l.error ? "(" + l.error + ")" : "")) };
+  })()`);
+  check("workflow with transform actions runs: snake → upper", fwf?.ok && fwf.shouted === "HELLO_E2E_WORLD", JSON.stringify(fwf));
+  check("convert action yields a number", /\d/.test(fwf?.converted ?? ""), JSON.stringify(fwf?.converted));
+  check("Run Automation Now action runs the automation", (fwf?.log ?? []).includes("t7:ok"), JSON.stringify(fwf?.log));
+  check("interactive OCR capture is refused headless (step error, run continues)", (fwf?.log ?? []).some((l) => l.startsWith("t6:error") && /headless/.test(l)), JSON.stringify(fwf?.log));
+  const legacyRun = await evaluate(`window.glide.runWorkflow("e2e-wf", "Again")`);
+  check("pre-existing workflow format still runs unchanged", legacyRun?.ok && legacyRun.variables.greeting === "Hello Again", JSON.stringify(legacyRun?.variables));
+
+
   await evaluate(`window.glide.openSettings("workflows/${"e2e-wf"}")`);
   let settingsPage = null;
   for (let i = 0; i < 25 && !settingsPage; i++) {
@@ -336,11 +488,13 @@ async function main() {
       name: [...document.querySelectorAll('input')].map((i) => i.value).find((v) => v === "E2E Greeting") ?? null,
       branches: document.querySelectorAll('.branch').length,
       library: /Add Action|Actions/i.test(document.body.textContent),
+      featureLib: document.querySelectorAll('[data-spec^="feature:transforms."]').length,
     }))()` });
     const v = r.result?.result?.value ?? {};
     check("workflow editor renders the saved workflow", v.name === "E2E Greeting", JSON.stringify(v));
     check("editor shows action cards incl. nested condition branches", v.cards >= 4 && v.branches >= 2, JSON.stringify(v));
     check("editor shows the action library", v.library, "");
+    check("editor library includes feature actions", v.featureLib >= 33, `${v.featureLib} transform actions`);
     const nav = (await sc.send("Runtime.evaluate", { returnByValue: true, expression: `({ items: document.querySelectorAll('.sidebar .navitem').length, features: document.querySelector('.sidebar__group') ? [...document.querySelectorAll('.sidebar .navitem')].slice(6).length : 0 })` })).result?.result?.value ?? {};
     check("settings sidebar lists core + feature pages", nav.items >= 6 && nav.features >= 0, JSON.stringify(nav));
     await sc.send("Input.dispatchKeyEvent", { type: "keyDown", key: "3", code: "Digit3", windowsVirtualKeyCode: 51, modifiers: 4 });
@@ -354,6 +508,23 @@ async function main() {
     await sleep(300);
     const hashJ = (await sc.send("Runtime.evaluate", { returnByValue: true, expression: "location.hash" })).result?.result?.value;
     check("j in the focused sidebar moves to the next page", hashJ === "#/settings/snippets", hashJ);
+    // NavList outside the launcher (S7): vim j/k move exactly one row on a settings page using NavList.
+    await sc.send("Runtime.evaluate", { expression: `location.hash = "#/settings/automations"` });
+    await sleep(800);
+    const navSel = async () => (await sc.send("Runtime.evaluate", { returnByValue: true, expression: `(() => { const rows = [...document.querySelectorAll('.navlist--standalone [role="option"]')]; return { n: rows.length, i: rows.findIndex((r) => r.getAttribute('aria-selected') === 'true'), vim: document.querySelector('.navlist--standalone')?.dataset.vim ?? null }; })()` })).result?.result?.value ?? {};
+    const k0 = await navSel();
+    if (k0.n >= 2) {
+      await sc.send("Runtime.evaluate", { expression: "document.activeElement?.blur()" });
+      await sc.send("Input.dispatchKeyEvent", { type: "keyDown", key: "j", code: "KeyJ", windowsVirtualKeyCode: 74, text: "j" });
+      await sc.send("Input.dispatchKeyEvent", { type: "keyUp", key: "j", code: "KeyJ", windowsVirtualKeyCode: 74 });
+      await sleep(250);
+      const k1 = await navSel();
+      await sc.send("Input.dispatchKeyEvent", { type: "keyDown", key: "k", code: "KeyK", windowsVirtualKeyCode: 75, text: "k" });
+      await sc.send("Input.dispatchKeyEvent", { type: "keyUp", key: "k", code: "KeyK", windowsVirtualKeyCode: 75 });
+      await sleep(250);
+      const k2 = await navSel();
+      check("standalone NavList (Automations): vim on, j/k move exactly one row", k0.vim === "normal" && k1.i === k0.i + 1 && k2.i === k0.i, JSON.stringify({ k0, k1, k2 }));
+    } else check("standalone NavList vim keys (fewer than 2 rows — skipped)", true, JSON.stringify(k0));
     sc.close();
   }
 
@@ -373,6 +544,9 @@ try {
   clearInterval(keepAlive);
   app.kill();
   await sleep(300);
+  // Electron can outlive SIGTERM while flushing; never leave our instance running.
+  for (let i = 0; i < 10 && app.exitCode === null && app.signalCode === null; i++) await sleep(200);
+  if (app.exitCode === null && app.signalCode === null) app.kill("SIGKILL");
   rmSync(dataDir, { recursive: true, force: true });
   for (const r of results) console.log(`${r.ok ? "PASS" : "FAIL"}  ${r.name}${r.detail ? `  — ${r.detail}` : ""}`);
   const failed = results.filter((r) => !r.ok).length;

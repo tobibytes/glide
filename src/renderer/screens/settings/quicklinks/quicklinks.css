@@ -1,0 +1,239 @@
+/* Quicklinks & Snippets pages, editors and launcher views (classes prefixed ql / sn). */
+.qlform__top {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.qlform__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -4px 0 10px;
+}
+.qlchip {
+  font: inherit;
+  font-size: 11.5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.qlchip:hover,
+.qlchip:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent-text);
+  outline: none;
+}
+.qlform__args {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 12px;
+  align-items: center;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.qlform__args-title {
+  grid-column: 1 / -1;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.qlform__arg {
+  display: contents;
+}
+.qlform__arg-name {
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.qlform__req {
+  color: var(--danger);
+  margin-left: 2px;
+}
+.qlform__preview {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  font-size: 12px;
+  overflow: hidden;
+}
+.qlform__preview code {
+  word-break: break-all;
+  color: var(--text);
+}
+.qlform__preview--error {
+  background: rgba(214, 59, 47, 0.08);
+}
+.qlform__preview-label {
+  flex: none;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.qlform__check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12.5px;
+  color: var(--text-2);
+  margin: 4px 0 12px;
+}
+.qlform--compact .field {
+  margin-bottom: 8px;
+}
+.qlview {
+  padding: 10px 16px 6px;
+  max-height: 560px;
+  overflow-y: auto;
+}
+.qltools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+.qlnotice {
+  padding: 9px 14px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  margin-bottom: 12px;
+  font-size: 12.5px;
+}
+.qlpaste {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+.qlpaste .textarea {
+  width: 100%;
+}
+
+/* Bookmark picker */
+.qlbm {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  margin-bottom: 14px;
+  background: var(--surface);
+}
+.qlbm__head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.qlbm__head .input {
+  flex: 1;
+}
+.qlbm__count {
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.qlbm__list {
+  max-height: 320px;
+  overflow-y: auto;
+}
+.qlbm__row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: var(--row-radius);
+  cursor: default;
+}
+.qlbm__row--cursor {
+  background: var(--selected);
+}
+.qlbm__row--exists {
+  opacity: 0.55;
+}
+.qlbm__main {
+  min-width: 0;
+  flex: 1;
+}
+.qlbm__title {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qlbm__sub {
+  font-size: 11.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Snippets */
+.snwarn {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(199, 119, 0, 0.1);
+  color: var(--warning);
+  font-size: 12.5px;
+  margin: -2px 0 12px;
+}
+.snpreview {
+  margin-bottom: 12px;
+}
+.snpreview__label {
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-bottom: 4px;
+}
+.snpreview__text,
+.snpreview__html {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 12.5px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+.snpreview__html {
+  white-space: normal;
+}
+.snpreview__caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  margin: 0 1px;
+  vertical-align: text-bottom;
+  background: var(--accent);
+  animation: sn-blink 1s steps(1) infinite;
+}
+@keyframes sn-blink {
+  50% {
+    opacity: 0;
+  }
+}
+.snsearch__detail-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.snsearch__meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  font-size: 12px;
+  color: var(--text-2);
+  margin: 10px 0 0;
+}
+.snsearch__meta dt {
+  color: var(--text-3);
+}
+.snsearch__meta dd {
+  margin: 0;
+}

@@ -21,6 +21,15 @@ export interface UpdateState {
   error?: string;
 }
 
+/**
+ * Background checks run only in a packaged Glide.app (a dev build cannot install updates), and never
+ * in headless test runs unless a test points the updater at a local fake API.
+ */
+export function backgroundChecksAllowed(env: { packaged: boolean; headless: boolean; testBaseUrl?: string }): boolean {
+  if (env.testBaseUrl) return true;
+  return env.packaged && !env.headless;
+}
+
 export interface UpdaterDeps {
   currentVersion: string;
   getFeed(): string;
@@ -35,6 +44,8 @@ export interface UpdaterDeps {
   onAvailable(version: string): void;
   baseUrl?: string;
   fetchImpl?: FetchLike;
+  /** process.arch of the running build; picks the release asset (default: process.arch). */
+  arch?: string;
   log(...args: unknown[]): void;
 }
 
@@ -72,7 +83,7 @@ export function createUpdater(deps: UpdaterDeps): Updater {
     set({ status: "checking", error: undefined });
     try {
       const release = await fetchLatestRelease(feed, { baseUrl: deps.baseUrl, fetchImpl: deps.fetchImpl, userAgent: `Glide/${deps.currentVersion}` });
-      candidate = pickUpdate(release, deps.currentVersion);
+      candidate = pickUpdate(release, deps.currentVersion, deps.arch ?? process.arch);
       if (candidate) {
         const r = candidate.release;
         set({ status: "available", latestVersion: r.version, releaseName: r.name, releaseNotes: r.notes, releaseUrl: r.pageUrl, lastChecked: Date.now() });

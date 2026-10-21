@@ -178,6 +178,9 @@ body.mode-launcher.dev-canvas {
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text);
+  /* The subtitle gives up its space first (shrink factor below), so titles stay readable. */
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .row__title mark {
@@ -194,7 +197,7 @@ body.mode-launcher.dev-canvas {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex: 0 1 auto;
+  flex: 0 1000 auto;
   min-width: 0;
 }
 

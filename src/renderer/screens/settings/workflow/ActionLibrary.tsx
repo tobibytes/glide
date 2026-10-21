@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { ActionSpec } from "@shared/types";
+import { specKey } from "@shared/workflow-specs";
 import { CATEGORY_COLORS, CATEGORY_LABELS } from "../../../lib/workflowTree";
 import { Icon } from "../../../components/Icon";
 
@@ -9,7 +10,7 @@ export function ActionLibrary({ specs, onPick, hint }: { specs: ActionSpec[]; on
   const [q, setQ] = useState("");
   const groups = useMemo(() => {
     const f = q.trim().toLowerCase();
-    const list = f ? specs.filter((s) => s.title.toLowerCase().includes(f) || s.description.toLowerCase().includes(f) || s.type.toLowerCase().includes(f)) : specs;
+    const list = f ? specs.filter((s) => s.title.toLowerCase().includes(f) || s.description.toLowerCase().includes(f) || specKey(s).toLowerCase().includes(f)) : specs;
     return ORDER.map((cat) => ({ cat, items: list.filter((s) => s.category === cat) })).filter((g) => g.items.length);
   }, [specs, q]);
   return (
@@ -21,7 +22,7 @@ export function ActionLibrary({ specs, onPick, hint }: { specs: ActionSpec[]; on
         <div key={g.cat}>
           <div className="lib__cat">{CATEGORY_LABELS[g.cat]}</div>
           {g.items.map((s) => (
-            <button key={s.type} type="button" className="lib__item" onClick={() => onPick(s)} title={s.description}>
+            <button key={specKey(s)} type="button" className="lib__item" data-spec={specKey(s)} onClick={() => onPick(s)} title={s.description}>
               <span className="lib__stripe" style={{ background: CATEGORY_COLORS[s.category] }} />
               <Icon icon={s.icon} />
               <span style={{ minWidth: 0 }}>

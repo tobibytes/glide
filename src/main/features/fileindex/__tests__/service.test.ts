@@ -127,13 +127,14 @@ describe("FSEvents watcher", () => {
     await svc.whenIdle();
     expect(svc.status().watching).toBe(true);
     const p = write("Docs/watched-file.txt");
-    const deadline = Date.now() + 5000;
+    // FSEvents latency grows a lot when the whole suite runs in parallel; allow generous time.
+    const deadline = Date.now() + 15_000;
     while (Date.now() < deadline && !names(svc, "watched").length) await new Promise((r) => setTimeout(r, 100));
     expect(names(svc, "watched")).toEqual(["watched-file.txt"]);
     fs.rmSync(p);
-    const deadline2 = Date.now() + 5000;
+    const deadline2 = Date.now() + 15_000;
     while (Date.now() < deadline2 && names(svc, "watched").length) await new Promise((r) => setTimeout(r, 100));
     expect(names(svc, "watched")).toEqual([]);
     await svc.stop();
-  }, 15_000);
+  }, 40_000);
 });

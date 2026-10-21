@@ -1,6 +1,8 @@
 import { clipboard, Notification, shell, systemPreferences } from "electron";
 import type { RunLogEntry, RunResult, Workflow, WorkflowAction } from "@shared/types";
 import { exec, execOk, expandHome, openApp, osascript, sleep, zsh } from "../util/exec";
+import { runFeatureAction } from "./feature-actions";
+import { migrateWorkflow } from "./migrate";
 import { builtinVariables, evaluateCondition, substituteParams } from "./template";
 
 const MAX_DEPTH = 5;
@@ -162,6 +164,12 @@ export function createWorkflowRuntime(deps: RuntimeDeps): WorkflowRuntime {
         if (err) throw new WorkflowError(err);
         return undefined;
       }
+      case "feature": {
+        const out = await runFeatureAction(p, { ...ctx.vars });
+        Object.assign(ctx.vars, out.vars);
+        if (out.outputVar && out.result !== undefined) ctx.vars[out.outputVar] = out.result;
+        return out.result;
+      }
       case "playSound": {
         const name = (p.name || "Glass").replace(/[^A-Za-z]/g, "");
         await execOk("afplay", [`/System/Library/Sounds/${name}.aiff`], { timeoutMs: 10_000 });
@@ -190,7 +198,8 @@ export function createWorkflowRuntime(deps: RuntimeDeps): WorkflowRuntime {
     }
   }
 
-  async function runWorkflow(wf: Workflow, input: string, depth: number): Promise<RunResult> {
+  async function runWorkflow(stored: Workflow, input: string, depth: number): Promise<RunResult> {
+    const wf = migrateWorkflow(stored);
     const ctx: Ctx = {
       vars: { ...builtinVariables(), input, clipboard: await clipboard.readText().catch(() => ""), selection: "", result: "" },
       log: [],

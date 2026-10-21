@@ -11,7 +11,8 @@
  * Every suppressed side effect is logged as `[headless] …` on stdout so tests can assert on it,
  * and kept in `globalThis.__glideHeadlessLog` (readable from main via the inspector).
  */
-import { app, BrowserWindow, clipboard, ClipboardItem, dialog, globalShortcut, Notification, shell, Tray } from "electron";
+import childProcess from "node:child_process";
+import { app, BrowserWindow, clipboard, ClipboardItem, dialog, globalShortcut, Notification, safeStorage, shell, Tray } from "electron";
 
 export const HEADLESS = process.env.GLIDE_HEADLESS === "1";
 
@@ -26,6 +27,7 @@ export const HEADLESS_HELPER_METHODS = new Set([
   "layouts.apps",
   "calendar.events",
   "system.spotlightShortcut",
+  "wifi.info",
 ]);
 
 type LogEntry = { at: number; kind: string; detail: unknown };
@@ -38,9 +40,79 @@ function record(kind: string, detail: unknown): void {
   console.log(`[headless] ${kind} ${typeof detail === "string" ? detail : JSON.stringify(detail)}`);
 }
 
-/** Patch Electron before anything else runs. No-op unless GLIDE_HEADLESS=1. */
+/** Commands that act on the user's session (activate apps, capture the screen, play sound, change settings). */
+const BLOCKED_COMMANDS = new Set(["osascript", "open", "screencapture", "afplay", "say", "shortcuts", "killall", "qlmanage", "hidutil", "shutdown", "reboot", "caffeinate", "tccutil"]);
+const SCRIPT_BLOCK = /(^|[\s;&|(`])(osascript|open|screencapture|afplay|say|shortcuts|killall|qlmanage|hidutil|defaults\s+(write|delete)|networksetup\s+-set|pmset\s+(?!-g))\b/;
+
+/** Why a command must not run headless, or null when it is safe (read-only tools, tests' own scripts). */
+export function headlessBlockReason(file: string, args: readonly string[] = []): string | null {
+  const base = file.split("/").pop() ?? file;
+  if (BLOCKED_COMMANDS.has(base)) return base;
+  if (base === "defaults" && /^(write|delete|import)$/.test(args[0] ?? "")) return `defaults ${args[0]}`;
+  if (base === "networksetup" && /^-set/.test(args[0] ?? "")) return `networksetup ${args[0]}`;
+  if (base === "pmset" && args[0] !== "-g") return "pmset";
+  if (/^(zsh|bash|sh)$/.test(base)) {
+    const script = args.find((a, i) => args[i - 1] === "-c" || args[i - 1] === "-lc") ?? "";
+    const m = SCRIPT_BLOCK.exec(script);
+    if (m) return `${base} -c …${m[2]}…`;
+  }
+  return null;
+}
+
+/** Swap blocked commands for /usr/bin/true so callers still get a real, successful child process. */
+function patchChildProcess(): void {
+  const cp = childProcess as unknown as Record<string, unknown>;
+  const guard = (name: string) => {
+    const original = cp[name] as (...a: unknown[]) => unknown;
+    if (typeof original !== "function") return;
+    const wrapped = function (this: unknown, file: unknown, ...rest: unknown[]) {
+      const isExec = name === "exec" || name === "execSync";
+      const args = !isExec && Array.isArray(rest[0]) ? (rest[0] as string[]) : [];
+      const reason = typeof file === "string" ? (isExec ? (SCRIPT_BLOCK.exec(` ${file}`)?.[2] ?? null) : headlessBlockReason(file, args)) : null;
+      if (reason) {
+        record("exec.blocked", { command: reason, file, args: args.slice(0, 6) });
+        if (isExec) return original.call(this, "/usr/bin/true", ...rest);
+        return original.call(this, "/usr/bin/true", ...(Array.isArray(rest[0]) ? [[], ...rest.slice(1)] : rest));
+      }
+      return original.call(this, file, ...rest);
+    };
+    const custom = (original as unknown as Record<symbol, unknown>)[Symbol.for("nodejs.util.promisify.custom")];
+    if (custom) {
+      Object.defineProperty(wrapped, Symbol.for("nodejs.util.promisify.custom"), {
+        value: (file: unknown, ...rest: unknown[]) => {
+          const args = Array.isArray(rest[0]) ? (rest[0] as string[]) : [];
+          const reason = typeof file === "string" ? (name === "exec" ? (SCRIPT_BLOCK.exec(` ${file}`)?.[2] ?? null) : headlessBlockReason(file, args)) : null;
+          if (reason) {
+            record("exec.blocked", { command: reason, file, args: args.slice(0, 6) });
+            return Promise.resolve({ stdout: "", stderr: "" });
+          }
+          return (custom as (...a: unknown[]) => unknown)(file, ...rest);
+        },
+      });
+    }
+    cp[name] = wrapped;
+  };
+  for (const name of ["execFile", "spawn", "exec", "execFileSync", "spawnSync", "execSync"]) guard(name);
+}
+
+let installed = false;
+
+/** Patch Electron and child_process before anything else runs. No-op unless GLIDE_HEADLESS=1. */
 export function installHeadless(): void {
-  if (!HEADLESS) return;
+  if (!HEADLESS || installed) return;
+  installed = true;
+  patchChildProcess();
+  // Never outlive the test: exit when the launching process is gone (reparented to launchd) or after
+  // GLIDE_HEADLESS_MAX_MS (default 20 min). Chromium swallows SIGTERM here, so runners also SIGKILL.
+  const startedBy = process.ppid;
+  const maxMs = Number(process.env.GLIDE_HEADLESS_MAX_MS ?? 20 * 60_000);
+  const watchdog = setInterval(() => {
+    if (process.ppid !== startedBy || process.ppid === 1 || process.uptime() * 1000 > maxMs) {
+      record("watchdog.exit", { ppid: process.ppid, uptimeSec: Math.round(process.uptime()) });
+      app.exit(0);
+    }
+  }, 2000);
+  watchdog.unref();
   record("start", { pid: process.pid });
 
   // Windows: track "visible" ourselves so launcher logic (toggle, hide-on-blur) still works.
@@ -78,6 +150,23 @@ export function installHeadless(): void {
   appAny.focus = () => undefined;
   appAny.hide = () => undefined;
   appAny.show = () => undefined;
+
+  // Keychain: safeStorage would ask macOS for the "Glide Safe Storage" item, which shows a keychain
+  // dialog on the user's screen. Use a reversible fake instead (test data only).
+  const ss = safeStorage as unknown as Record<string, unknown>;
+  const PREFIX = Buffer.from("glide-headless:");
+  const enc = (plain: string) => Buffer.concat([PREFIX, Buffer.from(String(plain), "utf8")]);
+  const dec = (buf: Buffer) => {
+    if (!Buffer.isBuffer(buf) || !buf.subarray(0, PREFIX.length).equals(PREFIX)) throw new Error("not encrypted by headless safeStorage");
+    return buf.subarray(PREFIX.length).toString("utf8");
+  };
+  ss.isEncryptionAvailable = () => true;
+  ss.encryptString = enc;
+  ss.decryptString = dec;
+  ss.isAsyncEncryptionAvailable = async () => true;
+  ss.encryptStringAsync = async (plain: string) => enc(plain);
+  ss.decryptStringAsync = async (buf: Buffer) => ({ shouldReEncrypt: false, result: dec(buf) });
+  ss.getSelectedStorageBackend = () => "headless-fake";
 
   // Global shortcuts: pretend to register so settings UIs behave, but never grab keys (e.g. ⌘Space).
   const gs = globalShortcut as unknown as Record<string, unknown>;
@@ -136,3 +225,7 @@ export function installHeadless(): void {
     items = [];
   };
 }
+
+// Install on import: modules that wrap execFile with promisify() at load time must see the patch,
+// so src/main/index.ts imports this module before anything else.
+installHeadless();

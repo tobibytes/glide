@@ -25,7 +25,12 @@ describe("agent tools", () => {
     expect(new Set(names).size).toBe(names.length);
     for (const t of TOOLS) expect(t.schema.type).toBe("object");
     const readOnly = TOOLS.filter((t) => !t.mutating).map((t) => t.name);
-    expect(readOnly.sort()).toEqual(["convert", "get_calendar_events", "get_clipboard", "get_selected_text", "list_workflows", "search_catalogue", "search_notes"]);
+    expect(readOnly.sort()).toEqual([
+      "clipboard_history_search", "convert", "get_calendar_events", "get_clipboard", "get_selected_text", "list_automations", "list_layouts", "list_processes",
+      "list_workflows", "plan", "search_bookmarks", "search_catalogue", "search_notes", "system_status", "transform_text",
+    ]);
+    expect(TOOLS.filter((t) => t.alwaysConfirm).map((t) => t.name).sort()).toEqual(["kill_process", "run_shortcut"]);
+    expect(TOOLS.filter((t) => t.destructive).map((t) => t.name).sort()).toEqual(["kill_process", "run_automation", "run_shortcut"]);
   });
 
   it("describe exactly what will happen", async () => {
@@ -53,7 +58,7 @@ describe("agent tools", () => {
   });
 
   it("reads calendar events from the start of today", async () => {
-    const out = await ok(prep("get_calendar_events", { days_ahead: 0 })).run();
+    const out = (await ok(prep("get_calendar_events", { days_ahead: 0 })).run()).text;
     const [from, to] = (JSON.parse(out) as Array<{ title: string }>)[0].title.split("|");
     expect(new Date(from).getHours()).toBe(0);
     expect(new Date(to).getTime() - new Date(from).getTime()).toBe(24 * 3_600_000);

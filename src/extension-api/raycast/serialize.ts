@@ -16,6 +16,7 @@ import type {
   FormValue,
   GridItemModel,
   ListItemModel,
+  MenuBarEntryModel,
   MetadataEntry,
   OptionModel,
   ViewModel,
@@ -40,6 +41,10 @@ export interface SerializeContext {
   /** Stored form value (Form fields with storeValue). */
   storedValue(fieldId: string): FormValue | undefined;
   storeValue(fieldId: string, value: FormValue): void;
+  /** Form `enableDrafts`: the saved draft of a field, saving one, and dropping them all after a submit. */
+  draftValue?(fieldId: string): FormValue | undefined;
+  saveDraft?(fieldId: string, type: FormFieldType, value: FormValue): void;
+  clearDrafts?(): void;
   unsupported(feature: string): void;
 }
 
@@ -298,16 +303,39 @@ export function createRaycastSerializer(): RaycastSerializer {
         }
         case "Action.SubmitForm": {
           const m = base("submit", "Submit Form");
-          m.handler = ctx.register(n.uid, "onSubmit", (values: Record<string, FormValue>) => p.onSubmit?.(ctx.decodeValues(values ?? {})));
+          m.handler = ctx.register(n.uid, "onSubmit", async (values: Record<string, FormValue>) => {
+            const r = await p.onSubmit?.(ctx.decodeValues(values ?? {}));
+            // Raycast keeps the draft when onSubmit explicitly returns false.
+            if (r !== false) ctx.clearDrafts?.();
+            return r;
+          });
           return m;
         }
-        case "Action.CreateSnippet":
-        case "Action.CreateQuicklink":
-        case "Action.ToggleQuickLook":
+        case "Action.CreateSnippet": {
+          const m = base("createSnippet", "Create Snippet");
+          const sn = isObj(p.snippet) ? p.snippet : {};
+          m.snippet = { text: str(sn.text) ?? "" };
+          if (str(sn.name)) m.snippet.name = str(sn.name);
+          if (str(sn.keyword)) m.snippet.keyword = str(sn.keyword);
+          return m;
+        }
+        case "Action.CreateQuicklink": {
+          const m = base("createQuicklink", "Create Quicklink");
+          const ql = isObj(p.quicklink) ? p.quicklink : {};
+          m.quicklink = { link: str(ql.link) ?? "" };
+          if (str(ql.name)) m.quicklink.name = str(ql.name);
+          return m;
+        }
+        case "Action.ToggleQuickLook": {
+          const m = base("quickLook", "Quick Look");
+          if (!m.shortcut) m.shortcut = "⌘Y";
+          return m;
+        }
         case "Action.PickDate": {
-          const label = n.type.slice(7);
-          const m = base("run", label.replace(/([a-z])([A-Z])/g, "$1 $2"));
-          m.handler = ctx.register(n.uid, "unsupported", () => ctx.unsupported(`Action.${label}`));
+          const m = base("pickDate", "Pick Date");
+          m.dateType = p.type === "date" ? "date" : "datetime";
+          const onChange = fnOf(p.onChange);
+          m.handler = ctx.register(n.uid, "onChange", (iso: string | null) => onChange?.(ctx.decodeValue(m.dateType ?? "datetime", iso)));
           return m;
         }
       }
@@ -320,8 +348,17 @@ export function createRaycastSerializer(): RaycastSerializer {
         for (const n of hosts(nodes)) {
           if (n.type === "ActionPanel") visit(n.children, section);
           else if (n.type === "ActionPanel.Section") visit(n.children, str(n.props.title) ?? section);
-          else if (n.type === "ActionPanel.Submenu") visit(n.children, str(n.props.title) ?? section);
-          else if (n.type.startsWith("Action")) {
+          else if (n.type === "ActionPanel.Submenu") {
+            const p = n.props;
+            const m: ActionModel = { id: `a${n.uid}`, kind: "submenu", title: str(p.title) ?? "More", children: actionsOf(n.children) };
+            const sc = shortcutDisplay(p.shortcut);
+            if (sc) m.shortcut = sc;
+            const icon = toIconSource(p.icon);
+            if (icon) m.icon = icon;
+            if (section) m.section = section;
+            m.callback = reg(n, "onOpen", fnOf(p.onOpen));
+            out.push(m);
+          } else if (n.type.startsWith("Action")) {
             const a = action(n, section);
             if (a) out.push(a);
           } else visit(n.children, section);
@@ -441,12 +478,15 @@ export function createRaycastSerializer(): RaycastSerializer {
       if (isObj(p.pagination)) out.pagination = { hasMore: !!p.pagination.hasMore, handler: reg(root, "onLoadMore", fnOf(p.pagination.onLoadMore)) };
       const sel = reg(root, "onSelectionChange", fnOf(p.onSelectionChange) && ((id: string | null) => p.onSelectionChange(id ?? null)));
       if (sel) out.selectionHandler = sel;
+      if (str(p.selectedItemId)) out.selectedItemId = str(p.selectedItemId);
       const ev = emptyView(root.children);
       if (ev) out.emptyView = ev;
       const acts = actionsOf(root.slots.actions);
       if (acts.length) out.actions = acts;
       return out;
     }
+
+    const quickLookOf = (q: unknown) => (isObj(q) && typeof q.path === "string" && q.path ? { path: q.path, ...(str(q.name) ? { name: str(q.name) } : {}) } : undefined);
 
     const idOf = (n: HostNode, seen: Set<string>) => {
       let id = str(n.props.id) ?? (n.key !== null ? `k${n.key}` : `u${n.uid}`);
@@ -472,6 +512,8 @@ export function createRaycastSerializer(): RaycastSerializer {
             if (Array.isArray(p.accessories)) item.accessories = p.accessories.map(accessory).filter((a: Accessory | null): a is Accessory => !!a);
             if (Array.isArray(p.keywords)) item.keywords = p.keywords.map(String);
             if (section) item.section = section;
+            const ql = quickLookOf(p.quickLook);
+            if (ql) item.quickLook = ql;
             const d = hosts(n.slots.detail)[0];
             if (d) item.detail = { markdown: str(d.props.markdown) ?? "", metadata: metadata(d.slots.metadata), isLoading: !!d.props.isLoading };
             items.push(item);
@@ -504,6 +546,8 @@ export function createRaycastSerializer(): RaycastSerializer {
               if (ai) item.accessoryIcon = ai;
             }
             if (section) item.section = section;
+            const ql = quickLookOf(q.quickLook);
+            if (ql) item.quickLook = ql;
             items.push(item);
           } else if (!n.type.endsWith("EmptyView") && !n.type.endsWith("Dropdown")) visit(n.children, section);
         }
@@ -549,6 +593,7 @@ export function createRaycastSerializer(): RaycastSerializer {
     function form(root: HostNode): ViewModel {
       const fields: FormFieldModel[] = [];
       let sepSeq = 0;
+      const drafts = !!root.props.enableDrafts && !!ctx.saveDraft;
       walk(root.children, (n) => {
         let type = FIELD_TYPES[n.type];
         if (!type) return;
@@ -570,15 +615,19 @@ export function createRaycastSerializer(): RaycastSerializer {
         const controlled = encode(type, p.value);
         if (controlled !== undefined) f.value = controlled;
         const stored = p.storeValue ? ctx.storedValue(id) : undefined;
-        const def = encode(type, p.defaultValue) ?? stored;
+        const draft = drafts ? ctx.draftValue?.(id) : undefined;
+        const original = encode(type, p.defaultValue) ?? stored;
+        const def = draft ?? original;
         if (def !== undefined) f.default = def;
+        if (draft !== undefined && type !== "separator" && type !== "description") f.resetTo = original ?? (type === "checkbox" ? false : type === "tags" || type === "file" ? [] : "");
         if (type !== "separator" && type !== "description") {
           fieldTypes[id] = type;
           const onChange = fnOf(p.onChange);
           const ft = type;
-          if (onChange || p.storeValue)
+          if (onChange || p.storeValue || drafts)
             f.changeHandler = ctx.register(n.uid, "onChange", (v: FormValue) => {
               if (p.storeValue) ctx.storeValue(id, v);
+              if (drafts) ctx.saveDraft?.(id, ft, v);
               return onChange?.(ctx.decodeValue(ft, v));
             });
           const onBlur = fnOf(p.onBlur);
@@ -590,6 +639,46 @@ export function createRaycastSerializer(): RaycastSerializer {
       const actions = actionsOf(root.slots.actions);
       const v: ViewModel = { type: "form", fields, submitTitle: actions[0]?.title ?? "Submit", isLoading: !!root.props.isLoading, actions };
       if (str(root.props.navigationTitle)) v.title = str(root.props.navigationTitle);
+      if (drafts) v.drafts = true;
+      return v;
+    }
+
+    function menuEntries(nodes: HostNode[] | undefined): MenuBarEntryModel[] {
+      const out: MenuBarEntryModel[] = [];
+      for (const n of hosts(nodes)) {
+        const p = n.props;
+        const common = (e: MenuBarEntryModel) => {
+          const t = textOf(p.title).text;
+          if (t) e.title = t;
+          const sub = textOf(p.subtitle).text;
+          if (sub) e.subtitle = sub;
+          const icon = toIconSource(p.icon);
+          if (icon) e.icon = icon;
+          if (str(p.tooltip)) e.tooltip = str(p.tooltip);
+          return e;
+        };
+        if (n.type === "MenuBarExtra.Item") {
+          const e = common({ kind: "item" });
+          const sc = shortcutDisplay(p.shortcut);
+          if (sc) e.shortcut = sc;
+          e.handler = reg(n, "onAction", fnOf(p.onAction));
+          out.push(e);
+        } else if (n.type === "MenuBarExtra.Section") out.push({ ...common({ kind: "section" }), children: menuEntries(n.children) });
+        else if (n.type === "MenuBarExtra.Submenu") out.push({ ...common({ kind: "submenu" }), children: menuEntries(n.children) });
+        else if (n.type === "MenuBarExtra.Separator") out.push({ kind: "separator" });
+        else out.push(...menuEntries(n.children));
+      }
+      return out;
+    }
+
+    function menubar(root: HostNode): ViewModel {
+      const p = root.props;
+      const v: ViewModel = { type: "menubar", isLoading: !!p.isLoading, items: menuEntries(root.children) };
+      const t = textOf(p.title).text;
+      if (t) v.title = t;
+      const icon = toIconSource(p.icon);
+      if (icon) v.icon = icon;
+      if (str(p.tooltip)) v.tooltip = str(p.tooltip);
       return v;
     }
 
@@ -600,7 +689,7 @@ export function createRaycastSerializer(): RaycastSerializer {
       else if (root.type === "Grid") view = grid(root);
       else if (root.type === "Detail") view = detail(root);
       else if (root.type === "Form") view = form(root);
-      else if (root.type === "MenuBarExtra") throw new Error("Menu bar commands (MenuBarExtra) are not supported in Glide yet");
+      else if (root.type === "MenuBarExtra") view = menubar(root);
       else throw new Error(`A command must render List, Grid, Detail or Form at the top level (got ${root.type})`);
     }
     void actionSeq;

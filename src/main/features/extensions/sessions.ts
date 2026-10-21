@@ -17,9 +17,25 @@ export interface SessionInfo {
   extTitle: string;
   commandName: string;
   commandTitle: string;
-  mode: "view" | "no-view";
+  mode: "view" | "no-view" | "menu-bar";
   /** "raycast" sessions run React components through the Raycast compatibility runtime. */
   runtime?: "glide" | "raycast";
+  launchType?: "userInitiated" | "background";
+}
+
+/** Raycast toast primary/secondary actions (handler ids live in the extension process). */
+export interface ToastActionModel {
+  slot: "primary" | "secondary";
+  title: string;
+  shortcut?: string;
+  handler: string;
+}
+
+export interface OAuthPrompt {
+  id: string;
+  providerName: string;
+  providerIcon?: string;
+  description?: string;
 }
 
 export interface AlertRequest {
@@ -35,14 +51,22 @@ export interface SessionEvent {
   sessionId: string;
   depth?: number;
   view?: ViewModel;
-  kind?: "render" | "push" | "pop" | "toast" | "ended" | "alert" | "popToRoot" | "clearSearch";
-  toast?: { style: string; title: string; message?: string; id?: string };
+  kind?: "render" | "push" | "pop" | "toast" | "toastHide" | "ended" | "alert" | "popToRoot" | "clearSearch" | "field" | "oauth" | "oauthDone";
+  toast?: { style: string; title: string; message?: string; id?: string; actions?: ToastActionModel[] };
+  /** toastHide: the toast id. */
+  toastId?: string;
   alert?: AlertRequest;
+  /** Form field ref call (focus()/reset()). */
+  field?: { op: "focus" | "reset"; id: string };
+  oauth?: OAuthPrompt;
+  /** oauthDone: the request id. */
+  oauthId?: string;
 }
 
 export interface SessionDeps {
   spawn(info: SessionInfo): ChildHandle;
-  onRequest(session: SessionInfo, method: RequestMethod, params: JsonValue[]): Promise<JsonValue | void>;
+  /** `stream` sends a partial result before the request settles (AI.ask "data"). */
+  onRequest(session: SessionInfo, method: RequestMethod, params: JsonValue[], stream: (chunk: string) => void): Promise<JsonValue | void>;
   emit(event: SessionEvent): void;
   log(...args: unknown[]): void;
   /** Idle limit in ms (no view mounted and no traffic). */
@@ -67,6 +91,10 @@ interface Session {
   completion: Promise<Completion>;
   complete(c: Completion): void;
   closeTimer?: ReturnType<typeof setTimeout>;
+  /** Requests in flight (OAuth, AI, alerts can take minutes): the idle sweep waits for them. */
+  inFlight: number;
+  /** Menu-bar commands stay alive while their status item is shown. */
+  keepAlive: boolean;
 }
 
 let seq = 0;
@@ -87,7 +115,7 @@ export class SessionManager {
     let complete!: (c: Completion) => void;
     const completion = new Promise<Completion>((r) => (complete = r));
     const child = this.deps.spawn(info);
-    const session: Session = { info, child, views: [], mounted: new Set(), lastActivity: Date.now(), alive: true, done: false, completion, complete };
+    const session: Session = { info, child, views: [], mounted: new Set(), lastActivity: Date.now(), alive: true, done: false, completion, complete, inFlight: 0, keepAlive: false };
     this.sessions.set(info.id, session);
     child.onMessage((msg) => this.onChildMessage(session, msg));
     child.onExit((code) => {
@@ -185,9 +213,16 @@ export class SessionManager {
     (this.sweeper as { unref?: () => void }).unref?.();
   }
 
+  /** Keep a session running without a mounted view (menu-bar commands). */
+  setKeepAlive(id: string, on: boolean) {
+    const s = this.sessions.get(id);
+    if (s) s.keepAlive = on;
+  }
+
   /** Kill sessions with no mounted view and no traffic for idleMs. */
   sweep(now = Date.now()) {
     for (const s of Array.from(this.sessions.values())) {
+      if (s.keepAlive || s.inFlight > 0) continue;
       if (s.mounted.size === 0 && now - s.lastActivity > this.idleMs) {
         this.deps.log(`stopping idle ${s.info.extName}/${s.info.commandName}`);
         this.kill(s.info.id);
@@ -218,17 +253,24 @@ export class SessionManager {
         return this.setView(s, msg.depth, msg.view, "push");
       case "pop":
         return this.deps.emit({ sessionId: s.info.id, depth: msg.depth, kind: "pop" });
-      case "request":
-        void this.deps
-          .onRequest(s.info, msg.method, msg.params)
+      case "request": {
+        s.inFlight++;
+        const stream = (chunk: string) => {
+          if (s.alive) s.child.postMessage({ type: "stream", id: msg.id, chunk });
+        };
+        void Promise.resolve()
+          .then(() => this.deps.onRequest(s.info, msg.method, msg.params, stream))
           .then(
             (result) => ({ type: "response" as const, id: msg.id, result: result ?? null }),
             (err: unknown) => ({ type: "response" as const, id: msg.id, error: err instanceof Error ? err.message : String(err) }),
           )
           .then((res) => {
+            s.inFlight--;
+            s.lastActivity = Date.now();
             if (s.alive) s.child.postMessage(res);
           });
         return;
+      }
       case "done":
         s.done = true;
         s.complete({ ok: true });

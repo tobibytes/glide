@@ -90,7 +90,7 @@ export function SettingsPage() {
             {openPrefs === e.name && (
               <div className="extensions-settings__prefs">
                 <FieldsForm
-                  fields={prefFields(e.preferences)}
+                  fields={prefFields(e.preferences, (n) => e.commands.find((c) => c.name === n)?.title ?? n)}
                   initial={prefValues}
                   submitTitle="Save Preferences"
                   onCancel={() => setOpenPrefs(null)}
@@ -138,10 +138,10 @@ export function SettingsPage() {
         </Row>
       </Group>
 
-      <Group title="Store" footer="Glide has no backend: the store lists the bundled examples plus, optionally, a registry index JSON (an array of {name, title, description, author, icon, repo, version, commands}). It is fetched only when you open the store.">
+      <Group title="Store" footer="The store lists the bundled examples plus Glide’s public index (store/index.json in tobibytes/glide), fetched only when you open the store. Leave the URL empty for the default; the index format is described in docs/EXTENSIONS-STORE.md.">
         <Row label="Store index URL" htmlFor="ext-store-url">
           <div className="extensions-settings__inline">
-            <input id="ext-store-url" className="input" placeholder="https://example.com/glide-index.json (optional)" value={storeUrl} onChange={(e) => setStoreUrl(e.target.value)} />
+            <input id="ext-store-url" className="input" placeholder="Empty = default GitHub index" value={storeUrl} onChange={(e) => setStoreUrl(e.target.value)} />
             <button
               type="button"
               className="btn"

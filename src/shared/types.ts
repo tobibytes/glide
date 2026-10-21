@@ -85,6 +85,8 @@ export interface ScoredItem {
   ranges: MatchRange[];
   /** argument text (anything after the matched item for acceptsArgument items) */
   argument?: string;
+  /** Named argument values from the launcher's multi-argument entry (quicklink `{argument name="…"}`). */
+  arguments?: Record<string, string>;
 }
 
 export type SectionId = "favorites" | "suggestions" | "results" | "workflows" | "apps" | "files" | "calculator" | "fallbacks";
@@ -134,7 +136,9 @@ export type ActionType =
   | "runWorkflow"
   | "showResult"
   | "openFile"
-  | "playSound";
+  | "playSound"
+  /** Contributed by a feature module: params.feature + params.action pick the handler (see FeatureWorkflowAction). */
+  | "feature";
 
 /**
  * Every action has a stable id, a type and a params bag. Params are strings
@@ -178,7 +182,8 @@ export interface ActionSpec {
   params: Array<{
     key: string;
     label: string;
-    kind: "text" | "multiline" | "number" | "select" | "app" | "file" | "url";
+    /** "hidden" params are stored on the action (defaults) but not shown in the editor. */
+    kind: "text" | "multiline" | "number" | "select" | "app" | "file" | "url" | "hidden";
     placeholder?: string;
     options?: string[];
     required?: boolean;
@@ -186,6 +191,9 @@ export interface ActionSpec {
   }>;
   /** variable produced by the action, if any (available as {{result}} and {{<outputVar>}}) */
   outputVar?: string;
+  /** For type "feature": the contributing feature id and its action id (also stored as hidden params). */
+  feature?: string;
+  action?: string;
 }
 
 export interface RunLogEntry {
@@ -226,6 +234,8 @@ export interface Settings {
   sectionLimit: number;
   /** hide window when it loses focus */
   hideOnBlur: boolean;
+  /** keep the launcher open after running a command (except ones that bring another app forward) */
+  keepOpenAfterRun: boolean;
   /** usage-decay half life in days (frecency) */
   frecencyHalfLifeDays: number;
   /** Vim-style navigation: Ctrl+J/K always; Esc enters normal mode where j/k/gg/G/… work. */
@@ -245,6 +255,7 @@ export const DEFAULT_SETTINGS: Settings = {
   calculator: true,
   sectionLimit: 8,
   hideOnBlur: true,
+  keepOpenAfterRun: true,
   frecencyHalfLifeDays: 10,
   vimMode: true,
   launchAtLogin: false,
@@ -258,6 +269,8 @@ export interface Quicklink {
   icon?: ItemIcon;
   alias?: string;
   keywords?: string[];
+  /** Open with this app instead of the default handler: an app bundle path or bundle id. */
+  openWith?: string;
 }
 
 export interface Snippet {
@@ -266,6 +279,10 @@ export interface Snippet {
   text: string;
   keyword?: string; // typed keyword that expands
   alias?: string;
+  /** Rich-text body (HTML). `text` stays the plain-text fallback. */
+  html?: string;
+  /** Bundle ids of apps where the keyword never expands. */
+  excludedApps?: string[];
 }
 
 /** Everything the renderer needs to render the settings screens. */
@@ -277,4 +294,13 @@ export interface UserData {
   favorites: string[]; // item ids
   aliases: Record<string, string>; // item id -> alias
   hotkeys: Record<string, string>; // item id -> accelerator
+}
+
+/**
+ * Running these brings another app to the front (an app, a file or folder, a web page), so the
+ * launcher steps aside even when Settings.keepOpenAfterRun is on. `actionId` is the ⌘K action, if any.
+ */
+export function switchesApp(item: Pick<SearchItem, "kind">, actionId?: string): boolean {
+  if (actionId && /^(copy|paste|reveal|pin|favorite|alias|hotkey|delete|remove)/i.test(actionId)) return false;
+  return item.kind === "app" || item.kind === "file" || item.kind === "quicklink";
 }

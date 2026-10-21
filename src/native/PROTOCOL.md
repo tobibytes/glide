@@ -52,3 +52,41 @@ The helper inherits the app's Accessibility / Input Monitoring / Calendar grants
   Vision's order with `confidence` and a normalised top-left-origin `box`; line/paragraph assembly is done in TypeScript.
 - `ocr.barcodes {path}`: `VNDetectBarcodesRequest`; de-duplicated `{payload, symbology, box}`.
 - Both read any ImageIO format; the caller owns (and deletes) the file. Both are in SLOW_METHODS.
+
+### Finder selection (finder.*)
+
+- `finder.selection` → `{paths, folder, source:"ax"|"none", error?}`. Needs **Accessibility** only (never prompts; without
+  the grant it returns `paths: []` and an `error`). Reads Finder's `AXFocusedUIElement` (falls back to the focused/main
+  window) and its `AXSelectedRows` / `AXSelectedChildren` / `AXSelectedCells`; if the focus is elsewhere it walks the
+  window (≤ 4000 elements) and keeps the deepest container with a selection (column view). Each item's path is its
+  `AXURL` when present, else the window's `AXDocument` folder + the item's displayed name (`AXFilename`, the first
+  text field's value, or the icon's title). Only existing paths are returned. `folder` is the window's `AXDocument`
+  folder, or ~/Desktop when Finder has no window (desktop selection). Used by S5's getSelectedFinderItems — keep the shape.
+- `finder.selectionViaAutomation` → same shape with `source:"automation"`: `NSAppleScript` asks Finder for
+  `selection as alias list` and `insertion location`. The first call shows the **Automation (Apple Events → Finder)**
+  prompt, so Glide only calls it when the user enabled "Ask Finder directly" in Settings. In SLOW_METHODS.
+
+### Reminders (reminders.*)
+
+- Needs **Reminders full access** (`EKEventStore.requestFullAccessToReminders`), requested only by
+  `permissions.request {kind:"reminders"}` from an explicit user action. `permissions.status` now includes
+  `reminders` (same values as `calendar`) and `location`; both fields are optional in TS for older helpers.
+- `reminders.lists` → `[{id, title, color, isDefault, writable}]`.
+- `reminders.list {listId?, includeCompleted?}` → reminders (`fetchReminders`, 15 s timeout; in SLOW_METHODS).
+  Each: `{id (calendarItemIdentifier), title, completed, priority, listId, listTitle, color, due?, dueAllDay?,
+  completionDate?, notes?, url?}`; `due` is ISO 8601 (local midnight when `dueAllDay`).
+- `reminders.create {title, due?, allDay?, listId?, notes?}`: list defaults to `defaultCalendarForNewReminders`;
+  `allDay` stores only y/m/d; timed reminders get an `EKAlarm` at the due time (like Reminders.app).
+- `reminders.complete {id, completed?=true}`.
+- All throw "Reminders access has not been granted" until authorized. The store is recreated after a grant.
+
+### Wi-Fi (wifi.info)
+
+- `wifi.info` → `{ssid, bssid, interface, poweredOn, connected, locationStatus, needsLocation}` via CoreWLAN. Read-only and
+  never prompts (it is in HEADLESS_HELPER_METHODS). On macOS 14+ `ssid`/`bssid` are null unless Glide has
+  **Location Services** access; `needsLocation` is true when associated but the name is hidden.
+- `permissions.request {kind:"location"}` shows the Location prompt (`CLLocationManager.requestWhenInUseAuthorization`
+  plus a briefly started update, which some macOS versions need before prompting); waits ≤ 120 s for an answer.
+  Glide calls it only from Settings → Finder & Wi‑Fi → "Allow Location Access…". TS wrapper: src/main/native/wifi.ts.
+- Usage strings (NSRemindersFullAccessUsageDescription, NSLocation*UsageDescription, NSAppleEventsUsageDescription) are in
+  the helper's embedded Info.plist.

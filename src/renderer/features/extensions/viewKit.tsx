@@ -1,6 +1,6 @@
 /** Shared pieces of the extension run views: action mapping, accessories, the search-bar dropdown, alerts. */
 import { useEffect, useRef, useState } from "react";
-import type { Accessory, ActionModel, DropdownModel, EmptyViewModel } from "../../../extension-api/types";
+import type { Accessory, ActionModel, DropdownModel, EmptyViewModel, QuickLookModel } from "../../../extension-api/types";
 import type { AlertRequest } from "../../../main/features/extensions/sessions";
 import type { NavAction } from "../types";
 import { iconFor } from "../../../extension-api/icons";
@@ -8,7 +8,13 @@ import { Icon } from "../../components/Icon";
 import { Kbd } from "../../components/Kbd";
 import { useNavHost } from "../../lib/navHost";
 
-export type Runner = (a: ActionModel | undefined) => void;
+/** What an action was run for (Action.ToggleQuickLook previews the item's `quickLook`). */
+export interface ActionTarget {
+  quickLook?: QuickLookModel;
+  title?: string;
+}
+
+export type Runner = (a: ActionModel | undefined, target?: ActionTarget) => void;
 /** Invoke a UI-event handler (dropdown/field change, selection, load more) in the extension. */
 export type Emit = (handler: string | undefined, args: unknown[]) => void;
 
@@ -18,16 +24,18 @@ export interface RunInfo {
 }
 
 /** First action runs on ⏎, the second on ⌘⏎ (unless it has its own shortcut), like Raycast. */
-export function navActions(actions: ActionModel[], run: Runner): NavAction[] {
+export function navActions(actions: ActionModel[], run: Runner, target?: ActionTarget, nested = false): NavAction[] {
   return actions.map((a, i) => {
     const icon = iconFor(a.icon);
+    const title = a.kind === "submenu" ? `${a.title}  ›` : a.title;
     return {
       id: a.id,
-      title: a.section && i > 0 && a.section !== actions[i - 1]?.section ? `${a.title}  ·  ${a.section}` : a.title,
-      shortcut: i === 0 ? "⏎" : i === 1 && !a.shortcut ? "⌘⏎" : a.shortcut,
-      icon: icon?.kind === "emoji" ? icon.value : undefined,
+      title: a.section && i > 0 && a.section !== actions[i - 1]?.section ? `${title}  ·  ${a.section}` : title,
+      // Inside a submenu panel nothing is bound to ⏎ / ⌘⏎ except the selected row.
+      shortcut: nested ? a.shortcut : i === 0 ? "⏎" : i === 1 && !a.shortcut ? "⌘⏎" : a.shortcut,
+      icon: icon?.kind === "emoji" ? icon.value : a.kind === "submenu" ? "▸" : undefined,
       destructive: a.destructive,
-      run: () => run(a),
+      run: () => run(a, target),
     };
   });
 }

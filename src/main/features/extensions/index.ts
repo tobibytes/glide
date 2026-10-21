@@ -17,11 +17,14 @@ import { pasteFromClipboard } from "../../workflows/runtime";
 import type { FeatureContext, FeatureModule } from "../types";
 import { dispatchAction, findAction, isSafeUrl, type ActionOutcome } from "./actions";
 import type { ExtensionSettings, ExtensionSummary, InstallRequest, PreferencesState, RaycastSupport, RunViewState, StoreListing, StoreResponse } from "./contract";
-import { missingPreferences, resolvePreferences, splitArguments, type CommandManifest } from "./manifest";
+import { missingPreferences, prefKey, resolvePreferences, splitArguments, type CommandManifest } from "./manifest";
+import type { LaunchType, RaycastCompat } from "./compat";
+import { wireCompat, type CompatWiring } from "./compat-feature";
 import { buildRaycastCommands, loadEsbuild, type EsbuildLike } from "./raycast-build";
 import { ExtensionRegistry, isRaycastFolder, type InstalledExtension } from "./registry";
-import { SessionManager, type AlertRequest, type ChildHandle, type SessionInfo } from "./sessions";
+import { SessionManager, type AlertRequest, type ChildHandle, type SessionInfo, type ToastActionModel } from "./sessions";
 import { bundledIndex, fetchIndex, type StoreEntry } from "./store-index";
+import { storeMethods } from "./store-feature";
 
 const ID = "extensions";
 const RAYCAST_STORE_URL = "https://www.raycast.com/store";
@@ -33,6 +36,9 @@ let registry: ExtensionRegistry | null = null;
 let sessions: SessionManager | null = null;
 let runtimeDir = "";
 let hudWindow: BrowserWindow | null = null;
+/** Raycast menu-bar / background / OAuth / AI services (compat.ts, compat-feature.ts). */
+let wiring: CompatWiring | null = null;
+const compat = (): RaycastCompat | null => wiring?.compat ?? null;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const errMsg = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -186,7 +192,9 @@ async function selectedText(): Promise<string | null> {
   }
 }
 
-async function onRequest(info: SessionInfo, method: RequestMethod, params: JsonValue[]): Promise<JsonValue | void> {
+async function onRequest(info: SessionInfo, method: RequestMethod, params: JsonValue[], stream: (chunk: string) => void = () => undefined): Promise<JsonValue | void> {
+  const handled = await compat()?.request(info, method, params, stream);
+  if (handled) return handled.value;
   const p0 = params[0];
   const s0 = typeof p0 === "string" ? p0 : "";
   const r = reg();
@@ -218,9 +226,10 @@ async function onRequest(info: SessionInfo, method: RequestMethod, params: JsonV
       const extName = typeof params[1] === "string" && params[1] ? params[1] : info.extName;
       const argsIn = params[2] && typeof params[2] === "object" && !Array.isArray(params[2]) ? (params[2] as Record<string, JsonValue>) : {};
       const args = Object.fromEntries(Object.entries(argsIn).map(([k, v]) => [k, String(v ?? "")]));
-      const res = await runCommand(extName, s0, args, params[3] ?? null);
+      const launchType: LaunchType = params[4] === "background" ? "background" : "userInitiated";
+      const res = await runCommand(extName, s0, args, params[3] ?? null, launchType);
       if (!res.ok) throw new Error(res.error ?? "launchCommand failed");
-      if (res.view) ctx?.openView(res.view);
+      if (res.view && launchType === "userInitiated") ctx?.openView(res.view);
       return;
     }
     case "popToRoot":
@@ -233,17 +242,23 @@ async function onRequest(info: SessionInfo, method: RequestMethod, params: JsonV
       ctx?.openView({ id: `${ID}.preferences`, props: { name: info.extName, title: `${info.extTitle} Preferences` } });
       return;
     case "toast.hide":
+      if (s0) ctx?.emit("session", { sessionId: info.id, kind: "toastHide", toastId: s0 });
       return;
     case "showHUD":
-      showHud(s0);
+      if (info.launchType !== "background") showHud(s0);
       return;
     case "closeMainWindow":
       ctx?.hideLauncher();
       return;
     case "showToast": {
       const [style, title, message] = params;
-      if (info.mode === "no-view") showHud(String(title));
-      else ctx?.emit("session", { sessionId: info.id, kind: "toast", toast: { style: String(style), title: String(title), message: typeof message === "string" ? message : undefined, id: typeof params[3] === "string" ? params[3] : undefined } });
+      if (info.mode !== "view") {
+        // Background runs stay silent; a user-run no-view / menu-bar command flashes a HUD.
+        if (info.launchType !== "background" && style !== "animated") showHud(String(title));
+        return;
+      }
+      const actions = Array.isArray(params[4]) ? toastActions(params[4]) : undefined;
+      ctx?.emit("session", { sessionId: info.id, kind: "toast", toast: { style: String(style), title: String(title), message: typeof message === "string" ? message : undefined, id: typeof params[3] === "string" ? params[3] : undefined, actions } });
       return;
     }
     case "storage.get":
@@ -263,6 +278,15 @@ async function onRequest(info: SessionInfo, method: RequestMethod, params: JsonV
       return;
   }
   throw new Error(`Unknown request ${String(method)}`);
+}
+
+function toastActions(list: JsonValue[]): ToastActionModel[] {
+  const out: ToastActionModel[] = [];
+  for (const a of list) {
+    if (!a || typeof a !== "object" || Array.isArray(a) || typeof a.handler !== "string") continue;
+    out.push({ slot: a.slot === "secondary" ? "secondary" : "primary", title: String(a.title ?? "Open"), shortcut: typeof a.shortcut === "string" ? a.shortcut : undefined, handler: a.handler });
+  }
+  return out;
 }
 
 function spawnChild(info: SessionInfo): ChildHandle {
@@ -355,7 +379,7 @@ const STATIC_ITEMS: SearchItem[] = [
 
 type ArgInput = string | Record<string, string> | undefined;
 
-async function runCommand(extName: string, cmdName: string, argInput: ArgInput, launchContext: JsonValue = null): Promise<ExecuteResult> {
+async function runCommand(extName: string, cmdName: string, argInput: ArgInput, launchContext: JsonValue = null, launchType: LaunchType = "userInitiated"): Promise<ExecuteResult> {
   const ext = reg().get(extName);
   if (!ext?.manifest) return { ok: false, error: `Extension ${extName} is not installed or is invalid` };
   if (!ext.enabled) return { ok: false, error: `${ext.manifest.title} is disabled (Manage Extensions to enable it)` };
@@ -364,24 +388,32 @@ async function runCommand(extName: string, cmdName: string, argInput: ArgInput, 
 
   const saved = reg().getPreferences(extName);
   const argumentText = typeof argInput === "string" ? argInput : undefined;
-  if (missingPreferences(ext.manifest, saved, cmd.name).length)
+  const background = launchType === "background";
+  if (missingPreferences(ext.manifest, saved, cmd.name).length) {
+    if (background) return { ok: false, error: `${cmd.title} needs its preferences set before it can run in the background` };
     return { ok: true, view: { id: `${ID}.preferences`, props: { name: extName, then: { command: cmdName, argument: argumentText ?? null } } } };
+  }
 
   const args = typeof argInput === "object" && argInput ? { ...argInput } : splitArguments(cmd.arguments, argumentText);
   const missingArg = cmd.arguments.find((a) => a.required && !args[a.name]?.trim());
-  if (missingArg) return { ok: true, view: { id: `${ID}.arguments`, props: { name: extName, command: cmdName, values: args } } };
+  if (missingArg) {
+    if (background) return { ok: false, error: `${cmd.title} needs arguments` };
+    return { ok: true, view: { id: `${ID}.arguments`, props: { name: extName, command: cmdName, values: args } } };
+  }
+  if (background && cmd.mode === "view") return { ok: false, error: `${cmd.title} is a view command and cannot run in the background` };
 
   const assetsPath = path.join(ext.dir, "assets");
   const runtime = ext.manifest.runtime ?? "glide";
   const info = sess().start(
-    { extName, extTitle: ext.manifest.title, commandName: cmd.name, commandTitle: cmd.title, mode: cmd.mode, runtime },
+    { extName, extTitle: ext.manifest.title, commandName: cmd.name, commandTitle: cmd.title, mode: cmd.mode, runtime, launchType },
     {
       commandPath: path.join(ext.dir, cmd.entry),
       apiPath: path.join(runtimeDir, "glide-api.cjs"),
       runtime,
       shimDir: runtimeDir,
       launchContext,
-      launchType: "userInitiated",
+      launchType,
+      capabilities: { ai: compat()?.aiAvailable() ?? false },
       arguments: args,
       preferences: resolvePreferences(ext.manifest, saved, cmd.name),
       environment: {
@@ -397,7 +429,14 @@ async function runCommand(extName: string, cmdName: string, argInput: ArgInput, 
     },
   );
   if (cmd.mode === "view") return { ok: true, view: { id: `${ID}.run`, props: { sessionId: info.id, title: cmd.title } } };
+  if (cmd.mode === "menu-bar") {
+    compat()?.menuSessionStarted(info);
+    if (!background) compat()?.userLaunched(extName, cmd);
+    return background ? { ok: true } : { ok: true, hide: true };
+  }
+  if (!background) compat()?.userLaunched(extName, cmd);
   const res = await sess().completion(info.id);
+  if (background) return res.ok ? { ok: true } : { ok: false, error: `${cmd.title}: ${res.error ?? "failed"}` };
   return res.ok ? { ok: true, hide: true } : { ok: false, error: `${cmd.title}: ${res.error ?? "failed"}` };
 }
 
@@ -488,6 +527,7 @@ function changed() {
   reg().invalidate();
   ctx?.refreshCatalogue();
   ctx?.emit("changed");
+  compat()?.sync();
 }
 
 // --- feature -------------------------------------------------------------------------
@@ -506,12 +546,23 @@ export const feature: FeatureModule = {
     sessions = new SessionManager({
       spawn: spawnChild,
       onRequest,
-      emit: (e) => c.emit("session", e),
+      emit: (e) => {
+        if (!compat()?.onSessionEvent(e)) c.emit("session", e);
+      },
       log: (...a) => c.log(...a),
     });
+    wiring = wireCompat({
+      ctx: c,
+      sessions: sess,
+      registry: reg,
+      launch: (ext, command, o) => runCommand(ext, command, o.args, o.launchContext ?? null, o.launchType),
+    });
     c.refreshCatalogue();
+    // Restore active menu-bar commands and background schedules once the app has settled.
+    setTimeout(() => compat()?.sync(), 1500).unref?.();
   },
   stop() {
+    compat()?.stopAll();
     sessions?.killAll();
   },
   items() {
@@ -529,6 +580,12 @@ export const feature: FeatureModule = {
       const ext = registry?.get(str(item.data?.ext));
       const list: ItemAction[] = [{ id: "run", title: "Run Command", shortcut: "⏎", icon: "▶️" }];
       if (ext?.manifest?.preferences.length) list.push({ id: "preferences", title: "Configure Extension", shortcut: "⌘,", icon: "⚙️" });
+      const cmd = ext?.manifest?.commands.find((c) => c.name === str(item.data?.command));
+      if (cmd && (cmd.mode === "menu-bar" || cmd.intervalMs)) {
+        const on = compat()?.isEnabled(`${ext!.name}/${cmd.name}`) ?? false;
+        const what = cmd.mode === "menu-bar" ? "Menu Bar Item" : `Background Refresh (${cmd.interval})`;
+        list.push({ id: on ? "background-off" : "background-on", title: `${on ? "Deactivate" : "Activate"} ${what}`, icon: on ? "⏹️" : "🔁" });
+      }
       list.push({ id: "manage", title: "Manage Extensions", icon: "🧩" }, { id: "disable", title: "Disable Extension", icon: "⏸️", destructive: true });
       return list;
     }
@@ -546,9 +603,32 @@ export const feature: FeatureModule = {
       changed();
       return { ok: true, message: "Extension disabled" };
     }
+    if (actionId === "background-on" || actionId === "background-off") {
+      compat()?.setEnabled(ext, str(item.data?.command), actionId === "background-on");
+      ctx?.refreshCatalogue();
+      return { ok: true, message: actionId === "background-on" ? "Activated" : "Deactivated" };
+    }
     return runCommand(ext, str(item.data?.command), scored.argument);
   },
   methods: {
+    // Extension store (store-*.ts): storeList / storeInstall / storeUpdate / storeUninstall / storeScreenshot.
+    ...storeMethods({
+      registry: reg,
+      ctx: () => ctx,
+      examplesDir,
+      changed: () => changed(),
+      beforeUninstall: (name) => {
+        for (const s of sessions?.running() ?? []) if (s.extName === name) sessions?.kill(s.id);
+        wiring?.tokens.clear(name);
+      },
+    }),
+    // Raycast compatibility: OAuth card, background toggles, menu-bar state, Quick Look, snippets/quicklinks.
+    ...(Object.fromEntries(
+      ["oauthOpen", "oauthCancel", "oauthPrompt", "oauthRedirect", "backgroundState", "setBackground", "menuBarState", "menuBarClick", "quickLook", "saveSnippet", "saveQuicklink"].map((m) => [m, (...a: unknown[]) => {
+        if (!wiring) throw new Error("Extensions are not ready yet");
+        return wiring.methods[m](...a);
+      }]),
+    ) as Record<string, (...args: unknown[]) => unknown>),
     getView: (sessionId: unknown, depth: unknown): RunViewState | null => {
       const info = sessions?.get(str(sessionId));
       if (!info) return null;
@@ -616,6 +696,7 @@ export const feature: FeatureModule = {
     },
     uninstall: (name: unknown) => {
       for (const s of sessions?.running() ?? []) if (s.extName === str(name)) sessions?.kill(s.id);
+      wiring?.tokens.clear(str(name));
       reg().uninstall(str(name));
       changed();
     },
@@ -635,17 +716,25 @@ export const feature: FeatureModule = {
     getPreferences: (name: unknown): PreferencesState | null => {
       const ext = reg().get(str(name));
       if (!ext?.manifest) return null;
-      return { name: ext.name, title: ext.manifest.title, preferences: ext.manifest.preferences, values: resolvePreferences(ext.manifest, reg().getPreferences(ext.name)) };
+      return {
+        name: ext.name,
+        title: ext.manifest.title,
+        preferences: ext.manifest.preferences,
+        values: resolvePreferences(ext.manifest, reg().getPreferences(ext.name)),
+        commands: ext.manifest.commands.map((c) => ({ name: c.name, title: c.title })),
+      };
     },
     setPreferences: (name: unknown, values: unknown) => {
       const ext = reg().get(str(name));
       if (!ext?.manifest) throw new Error("Unknown extension");
       const clean: Record<string, string | boolean> = {};
       const input = (values && typeof values === "object" ? values : {}) as Record<string, unknown>;
+      // Keys are prefKey(p): command-scoped preferences are namespaced "<command>/<name>".
       for (const p of ext.manifest.preferences) {
-        const v = input[p.name];
-        if (p.type === "checkbox") clean[p.name] = v === true;
-        else if (typeof v === "string") clean[p.name] = v;
+        const key = prefKey(p);
+        const v = input[key];
+        if (p.type === "checkbox") clean[key] = v === true;
+        else if (typeof v === "string") clean[key] = v;
       }
       reg().setPreferences(ext.name, clean);
       changed();

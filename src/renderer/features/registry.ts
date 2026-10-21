@@ -33,6 +33,10 @@ export const FEATURE_UIS: Record<string, FeatureUI> = { "clipboard": u_clipboard
 Object.assign(FEATURE_UIS, { convert: u_convert, color: u_color, timers: u_timers });
 Object.assign(FEATURE_UIS, { automations: u_automations, agent: u_agent, layouts: u_layouts, ocr: u_ocr, browser: u_browser, processes: u_processes, sysmon: u_sysmon, appearance: u_appearance, transforms: u_transforms, sync: u_sync });
 
+// Finder selection commands and Apple Reminders (S8).
+import { ui as u_finder } from "./finder";
+import { ui as u_reminders } from "./reminders";
+Object.assign(FEATURE_UIS, { finder: u_finder, reminders: u_reminders });
 /** Resolve "<featureId>.<view>" to its component. */
 export function resolveView(id: string): ComponentType<ViewProps> | undefined {
   const dot = id.indexOf(".");
@@ -49,3 +53,6 @@ export function resolveWindow(route: string): ComponentType | undefined {
 export function settingsPages(): Array<{ id: string; title: string; icon: string; component: ComponentType }> {
   return Object.entries(FEATURE_UIS).flatMap(([id, ui]) => (ui.settingsPage ? [{ id, ...ui.settingsPage }] : []));
 }
+// Menu-bar mode (Settings → Menu Bar).
+import { ui as u_menubar } from "./menubar";
+Object.assign(FEATURE_UIS, { menubar: u_menubar });

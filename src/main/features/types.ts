@@ -6,10 +6,17 @@
  */
 import type { BrowserWindow, BrowserWindowConstructorOptions } from "electron";
 import type { ExecuteModifiers, ExecuteResult, ItemAction, ViewRequest } from "@shared/ipc";
-import type { ScoredItem, SearchItem, Settings, UserData } from "@shared/types";
+import type { ScoredItem, SearchItem, SearchResponse, Settings, UserData } from "@shared/types";
+import type { SearchOptions } from "@shared/search";
 import type { NativeHelper } from "../native/helper";
 import type { Store } from "../store";
 import type { WorkflowRuntime } from "../workflows/runtime";
+import type { FeatureWorkflowAction as GenericWorkflowAction } from "../workflows/feature-actions";
+
+export type { SearchOptions } from "@shared/search";
+export type { FeatureActionOutput, ActionParamSpec } from "../workflows/feature-actions";
+/** A workflow action contributed by a feature (shown in the editor library, run by the workflow runtime). */
+export type FeatureWorkflowAction = GenericWorkflowAction<FeatureContext>;
 
 export interface FeatureContext {
   readonly id: string;
@@ -40,6 +47,19 @@ export interface FeatureContext {
   /** Run any catalogue item as if chosen in the launcher (records usage). */
   executeItem(itemId: string, argument?: string): Promise<ExecuteResult>;
   log(...args: unknown[]): void;
+  /**
+   * Search exactly like the launcher (catalogue + calculator + files + every feature's dynamic items,
+   * engine ranking with frecency), flattened in launcher order. Fallback rows are excluded unless asked.
+   */
+  search(query: string, opts?: SearchOptions): Promise<ScoredItem[]>;
+  /** The launcher's full sectioned response for `query`. */
+  searchSections(query: string): Promise<SearchResponse>;
+  /** A catalogue item by id (or a dynamic item returned by a recent search). */
+  findItem(id: string): SearchItem | undefined;
+  /** Call another feature's `methods[method]` (same as the renderer's window.glide.feature). Rejects if missing. */
+  callFeature<T = unknown>(featureId: string, method: string, ...args: unknown[]): Promise<T>;
+  /** Contribute a workflow action at runtime (replaces one with the same id); returns an unregister function. */
+  registerWorkflowAction(action: FeatureWorkflowAction): () => void;
 }
 
 export interface FeatureModule {
@@ -56,4 +76,6 @@ export interface FeatureModule {
   runAction?(item: ScoredItem, actionId: string, modifiers?: ExecuteModifiers): Promise<ExecuteResult>;
   /** Methods callable from the renderer: window.glide.feature(id, name, ...args). */
   methods?: Record<string, (...args: unknown[]) => unknown>;
+  /** Workflow actions this feature contributes; registered after start() with this feature's context. */
+  workflowActions?: FeatureWorkflowAction[];
 }
