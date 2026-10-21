@@ -104,7 +104,8 @@ try {
   });
 
   await r.step("welcome: renders 3 highlights, primary focused, all controls tabbable", async () => {
-    await sleep(200);
+    // Focus moves to the primary button after render; slow CI machines need more than a fixed pause.
+    await page.waitFor(() => /onboarding-foot__primary/.test(document.activeElement?.className ?? ""), { timeout: 3000 }).catch(() => {});
     const info = await page.eval(() => ({ h: document.querySelector(".onboarding-welcome__h")?.textContent, n: document.querySelectorAll(".onboarding-highlight").length, focus: document.activeElement?.className ?? "" }));
     await shot(page, "01-welcome");
     const missing = await unreachable(page);
@@ -277,7 +278,7 @@ try {
     await page.eval(() => document.activeElement?.blur());
     await page.press("Enter");
     await waitStep(page, "done");
-    await sleep(150);
+    await page.waitFor(() => /primary/.test(document.activeElement?.className ?? ""), { timeout: 3000 }).catch(() => {});
     const info = await page.eval(() => ({ rows: document.querySelectorAll(".onboarding-sheet__row").length, primary: document.querySelector(".onboarding-foot__primary")?.textContent, focus: document.activeElement?.className, first: document.querySelector(".onboarding-sheet__row")?.textContent }));
     await shot(page, "06-done");
     return { ok: info.rows === 8 && /Open Glide/.test(info.primary ?? "") && /primary/.test(info.focus ?? "") && /⌥/.test(info.first ?? ""), detail: info };
