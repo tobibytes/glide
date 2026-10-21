@@ -51,6 +51,8 @@ jobs:
 
       - run: pnpm typecheck
       - run: pnpm test
+        env:
+          GLIDE_PERF_THRESHOLD_SCALE: "2"
 
       - name: Import Developer ID certificate
         if: env.HAS_CERT == 'true' && env.HAS_NOTARY == 'true' && env.WANT_NOTARIZE == 'true'

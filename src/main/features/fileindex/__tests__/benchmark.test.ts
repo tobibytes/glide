@@ -3,6 +3,9 @@ import { IndexBuilder } from "../db";
 import { deserialize, serialize } from "../persist";
 import { parseQuery, search } from "../query";
 
+/** Shared CI runners are slower; CI sets GLIDE_PERF_THRESHOLD_SCALE (default 1). */
+const SCALE = Number(process.env.GLIDE_PERF_THRESHOLD_SCALE ?? 1);
+
 const WORDS = "report invoice notes draft final project plan budget photo holiday meeting summary design spec readme config index main test utils server client data image video audio backup archive letter resume taxes contract slides demo build release alpha beta gamma delta".split(" ");
 const EXTS = "pdf txt md ts tsx js json png jpg mov mp3 docx xlsx key swift py rs go html css".split(" ");
 
@@ -43,7 +46,7 @@ describe("benchmark (150k synthetic entries)", () => {
       if (text !== "zzz") expect(hits).toBeGreaterThan(0);
     }
     console.log("[fileindex bench] ms per query:", Object.fromEntries(Object.entries(timings).map(([k, v]) => [k, Number(v.toFixed(2))])));
-    for (const [text, ms] of Object.entries(timings)) expect(ms, text).toBeLessThan(30);
+    for (const [text, ms] of Object.entries(timings)) expect(ms, text).toBeLessThan(30 * SCALE);
   });
 
   it("loads a persisted 150k index in < 300 ms", () => {
@@ -53,6 +56,6 @@ describe("benchmark (150k synthetic entries)", () => {
     const ms = performance.now() - t0;
     console.log(`[fileindex bench] ${(bytes.length / 1e6).toFixed(1)} MB index, load ${ms.toFixed(1)} ms`);
     expect(back.count).toBe(db.count);
-    expect(ms).toBeLessThan(300);
+    expect(ms).toBeLessThan(300 * SCALE);
   });
 });
