@@ -16,7 +16,10 @@ import { createWindows } from "./window";
 import { createWorkflowRuntime } from "./workflows/runtime";
 import { createFeatureHost } from "./features/host";
 import { FEATURES } from "./features/registry";
-import { createNativeHelper } from "./native/helper";
+import { createNativeHelper, type NativeHelper } from "./native/helper";
+import { HEADLESS, HEADLESS_HELPER_METHODS, installHeadless } from "./headless";
+
+installHeadless();
 
 app.setName("Glide");
 // Test runs point this at a throwaway directory so they never touch real user data.
@@ -64,7 +67,7 @@ async function main(): Promise<void> {
     hideLauncher: windows.hideLauncher,
   });
 
-  const helper = createNativeHelper();
+  const helper = HEADLESS ? readOnlyHelper(createNativeHelper()) : createNativeHelper();
   // Late-bound: feature items feed the catalogue, and features need catalogue/executor.
   let featureItems: () => SearchItem[] = () => [];
   const scoredFrom = (item: SearchItem): ScoredItem => ({ item, score: 0, matchScore: 0, matchKind: "none", frecency: 0, ranges: [] });
@@ -126,7 +129,7 @@ async function main(): Promise<void> {
   registerIpc({ store, engine, apps, files, executor, windows, runtime, features });
   await features.start();
   catalogue.rebuild();
-  createTray(windows);
+  if (!HEADLESS) createTray(windows);
   windows.createLauncher();
   if (process.env.GLIDE_SHOW_ON_START) setTimeout(() => windows.showLauncher(), 800);
 
@@ -151,4 +154,20 @@ async function main(): Promise<void> {
       app.quit();
     });
   });
+}
+
+/** Headless test runs: the helper may read state but never move windows, type or tap the keyboard. */
+function readOnlyHelper(inner: NativeHelper): NativeHelper {
+  return {
+    available: () => inner.available(),
+    on: (event, cb) => inner.on(event, cb),
+    dispose: () => inner.dispose(),
+    call: ((method: string, ...params: unknown[]) => {
+      if (!HEADLESS_HELPER_METHODS.has(method)) {
+        console.log(`[headless] helper.blocked ${method}`);
+        return Promise.reject(new Error(`helper method ${method} is disabled in headless mode`));
+      }
+      return (inner.call as (m: string, ...p: unknown[]) => Promise<unknown>)(method, ...params);
+    }) as NativeHelper["call"],
+  };
 }

@@ -35,7 +35,7 @@ const serverUrl = `http://127.0.0.1:${server.address().port}`;
 
 const app = spawn(electronBin, [`--remote-debugging-port=${port}`, "."], {
   cwd: root,
-  env: { ...process.env, ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", GLIDE_USER_DATA: dataDir, GLIDE_SHOW_ON_START: "1" },
+  env: { ...process.env, ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", GLIDE_USER_DATA: dataDir, GLIDE_SHOW_ON_START: "1", GLIDE_HEADLESS: process.env.GLIDE_HEADLESS ?? "1" },
   stdio: ["ignore", "pipe", "pipe"],
 });
 let appLog = "";

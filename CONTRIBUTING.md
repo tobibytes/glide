@@ -11,6 +11,8 @@ pnpm typecheck && pnpm test
 pnpm test:e2e       # optional: drives a real instance with an isolated data dir
 ```
 
+End-to-end tests run Glide **headless** (`GLIDE_HEADLESS=1`, see `src/main/headless.ts`): windows render but never appear, the clipboard is faked in memory, and URLs, dialogs, notifications and global shortcuts are logged instead of performed, so tests never interfere with your desktop.
+
 ## Adding a feature
 
 1. Create `src/main/features/<id>/index.ts` exporting `feature: FeatureModule`, and `src/renderer/features/<id>/index.tsx` exporting `ui: FeatureUI`.
