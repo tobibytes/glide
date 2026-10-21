@@ -8,6 +8,7 @@
 //   --zip       also write release/Glide-darwin-<arch>.zip and .sha256 (the assets the updater downloads)
 //   --zip-only  only (re)zip an existing release/Glide-darwin-<arch>/Glide.app (used after notarizing)
 //   --install   copy the app to /Applications and delete release/ (one copy on disk)
+//   --dmg       also write release/Glide-<version>-<arch>.dmg (drag-to-Applications disk image) + .sha256
 import { packager } from "@electron/packager";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -221,8 +222,56 @@ function zip() {
   console.log(`Publish both files as assets of a GitHub release tagged v${pkg.version}.`);
 }
 
+/**
+ * A compressed drag-to-install disk image: Glide.app, an Applications shortcut and first-launch
+ * instructions. hdiutil builds it from a folder without mounting anything on screen.
+ */
+function dmg() {
+  if (!existsSync(appPath)) throw new Error(`${appPath} does not exist; run without --zip-only first`);
+  const name = `Glide-${pkg.version}-${ARCH}.dmg`;
+  const out = path.join(releaseDir, name);
+  const stage = path.join(releaseDir, ".stage-dmg");
+  rmSync(stage, { recursive: true, force: true });
+  mkdirSync(stage, { recursive: true });
+  try {
+    execFileSync("ditto", [appPath, path.join(stage, "Glide.app")]);
+    execFileSync("ln", ["-s", "/Applications", path.join(stage, "Applications")]);
+    writeFileSync(
+      path.join(stage, "Read Me First.txt"),
+      [
+        "Installing Glide",
+        "================",
+        "",
+        "1. Drag Glide onto the Applications folder.",
+        "2. Open Glide from Applications.",
+        "",
+        "macOS will say Glide \"can't be opened\" the first time, because it isn't from the App Store",
+        "or notarized by Apple. To allow it (once):",
+        "",
+        "  System Settings → Privacy & Security → scroll down → \"Glide was blocked…\" → Open Anyway",
+        "",
+        "  or, in Terminal:   xattr -dr com.apple.quarantine /Applications/Glide.app",
+        "",
+        "Glide then shows a short setup: pick a hotkey (⌥Space by default) and grant the permissions",
+        "you want. Everything stays on your Mac.",
+        "",
+        "Source, docs and updates: https://github.com/tobibytes/glide",
+        "",
+      ].join("\n"),
+    );
+    rmSync(out, { force: true });
+    execFileSync("hdiutil", ["create", "-volname", "Glide", "-srcfolder", stage, "-fs", "HFS+", "-format", "UDZO", "-imagekey", "zlib-level=9", "-ov", out], { stdio: "inherit" });
+  } finally {
+    rmSync(stage, { recursive: true, force: true });
+  }
+  const sha = createHash("sha256").update(readFileSync(out)).digest("hex");
+  writeFileSync(`${out}.sha256`, `${sha}  ${name}\n`);
+  console.log("dmg", out, sha);
+}
+
 if (!args.has("--zip-only")) await build();
 if (args.has("--zip") || args.has("--zip-only")) zip();
+if (args.has("--dmg")) dmg();
 
 if (args.has("--install")) {
   const target = "/Applications/Glide.app";

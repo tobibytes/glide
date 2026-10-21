@@ -64,7 +64,7 @@ Plus Quick AI and AI commands on selected text, menu-bar search for any app, a H
 
 ## Download
 
-Grab `Glide-darwin-universal.zip` from the [latest release](https://github.com/tobibytes/glide/releases/latest), unzip it, and move **Glide.app** to Applications.
+Grab **`Glide-<version>-universal.dmg`** from the [latest release](https://github.com/tobibytes/glide/releases/latest) (runs on Apple silicon and Intel Macs), open it, and drag **Glide** onto **Applications**.
 
 Release builds are not notarized by Apple yet, so the first launch is blocked with "Glide can't be opened". To allow it, choose one:
 

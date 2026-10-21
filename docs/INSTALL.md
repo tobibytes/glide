@@ -73,3 +73,11 @@ node scripts/setup-signing.mjs
 ```
 
 It creates a self-signed "Glide Local Signing" identity in its own keychain (`~/Library/Keychains/glide-signing.keychain-db`) and trusts it for code signing only; macOS asks you to approve that. `pnpm install:app` then signs with it automatically, and grants survive rebuilds.
+
+## Sharing a DMG
+
+```sh
+pnpm dmg   # → release/Glide-<version>-universal.dmg (+ .sha256)
+```
+
+The disk image contains Glide.app, an Applications shortcut and a "Read Me First.txt" explaining the one-time Gatekeeper step ("Open Anyway" in Privacy & Security, or `xattr -dr com.apple.quarantine /Applications/Glide.app`). Build DMGs on the same Mac with the same "Glide Local Signing" identity: macOS ties recipients' Accessibility and Input Monitoring grants to that certificate, so later versions keep them.
