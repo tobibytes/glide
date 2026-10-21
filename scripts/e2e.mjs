@@ -115,6 +115,16 @@ async function main() {
       footer: document.querySelector('[class*="footer"]')?.textContent?.trim() ?? null,
       highlights: document.querySelectorAll('.row--selected mark, .row--selected .hl').length,
     }))()`);
+  /** Re-read state until `pred` holds or `ms` passes; slow CI runners lag the keystrokes. */
+  const waitState = async (pred, ms = 5000) => {
+    const until = Date.now() + ms;
+    let st = await state();
+    while (!pred(st) && Date.now() < until) {
+      await sleep(150);
+      st = await state();
+    }
+    return st;
+  };
 
   await sleep(1500);
   // The launcher opens where the real cursor may be; a person moving the mouse during the run
@@ -126,8 +136,7 @@ async function main() {
   check("exactly one row selected on load", s.rows.filter((r) => r.sel).length === 1, JSON.stringify(s.rows.slice(0, 3)));
 
   await typeText("safari");
-  await sleep(400);
-  s = await state();
+  s = await waitState((x) => x.rows[0]?.t === "Safari", 8000);
   check("'safari' ranks Safari first", s.rows[0]?.t === "Safari", JSON.stringify(s.rows.slice(0, 3)));
   check("first result selected after typing", s.rows[0]?.sel, "");
 
@@ -139,8 +148,7 @@ async function main() {
 
   await clear();
   await typeText("12*(3+4)");
-  await sleep(400);
-  s = await state();
+  s = await waitState((x) => x.rows.some((r) => (r.t ?? "").includes("84")), 8000);
   check("calculator: 12*(3+4) = 84", s.rows.some((r) => (r.t ?? "").includes("84")), JSON.stringify(s.rows.slice(0, 2)));
 
   await clear();
