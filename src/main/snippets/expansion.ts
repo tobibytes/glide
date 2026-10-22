@@ -115,7 +115,8 @@ export function buildExpansionList(input: ExpansionInput): ExpansionEntry[] {
     const keyword = effectiveKeyword(raw, settings.keywordPrefix);
     const body = s.text || htmlToText(s.html ?? "");
     const { text } = renderSnippet({ text: body }, fullEnv);
-    if (!text) continue;
+    // A dynamic snippet may render empty now ({clipboard} with nothing copied) but not at expansion time.
+    if (!text && !isDynamic(body)) continue;
     const variants = settings.caseAdaptive ? caseVariants(keyword, text) : [{ keyword, text }];
     for (const v of variants) {
       if (seen.has(v.keyword)) continue;

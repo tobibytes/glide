@@ -37,6 +37,8 @@ export interface ToolMeta {
   alwaysConfirm?: boolean;
   /** Counted by the destructive-tool rate limit. */
   destructive?: boolean;
+  /** Not state-changing, but still confirmed unless allow-listed (read-only MCP tools of an untrusted server). */
+  askFirst?: boolean;
   /** Results are clipboard/selection content (redacted in saved history). */
   sensitiveResult?: boolean;
   /** Argument keys holding clipboard-like content (redacted in saved history). */

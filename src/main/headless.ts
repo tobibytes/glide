@@ -34,6 +34,11 @@ type LogEntry = { at: number; kind: string; detail: unknown };
 const log: LogEntry[] = [];
 (globalThis as { __glideHeadlessLog?: LogEntry[] }).__glideHeadlessLog = log;
 
+/** Record a suppressed side effect (also used by src/main/hotkeys.ts for native hotkey registrations). */
+export function recordHeadless(kind: string, detail: unknown): void {
+  record(kind, detail);
+}
+
 function record(kind: string, detail: unknown): void {
   log.push({ at: Date.now(), kind, detail });
   if (log.length > 500) log.shift();

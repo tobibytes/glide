@@ -34,6 +34,8 @@ export interface LoopOptions {
   context: string;
   signal: AbortSignal;
   maxToolCalls?: number;
+  /** Shown as warning notices before the first turn (e.g. an MCP server that couldn't connect). */
+  notices?: string[];
   /** Only read-only tools are offered; any other call is refused. */
   readOnly?: boolean;
   /** True when the user enabled "Allow without asking" for this tool. */
@@ -92,6 +94,7 @@ export async function runAgentFull(opts: LoopOptions): Promise<RunOutput> {
     if (opts.signal.aborted) throw new Aborted();
   };
 
+  for (const n of opts.notices ?? []) notice(n, "warning");
   const offered = opts.readOnly ? opts.tools.filter((t) => !t.mutating) : opts.tools;
   let messages: MessageParam[] = appendPrompt(repairTail(trimHistory(opts.history ?? [])), opts.prompt);
   const undos = new Map<string, Undo>();
@@ -220,8 +223,9 @@ export async function runAgentFull(opts: LoopOptions): Promise<RunOutput> {
       emit();
 
       // One confirmation for every state-changing call of this turn that isn't pre-approved.
-      const ask = calls.filter((c) => c.prepared && c.step.mutating && (c.tool?.alwaysConfirm || !opts.isAllowed(c.step.tool)));
-      for (const c of calls) if (c.prepared && c.step.mutating && !ask.includes(c)) c.step.autoApproved = true;
+      const confirmable = (c: Call) => !!c.prepared && (c.step.mutating || !!c.tool?.askFirst);
+      const ask = calls.filter((c) => confirmable(c) && (c.tool?.alwaysConfirm || !opts.isAllowed(c.step.tool)));
+      for (const c of calls) if (confirmable(c) && !ask.includes(c)) c.step.autoApproved = true;
       if (ask.length) {
         const confirmation: Confirmation = { id: nextId("c"), stepIds: ask.map((c) => c.step.id) };
         for (const c of ask) c.step.status = "awaiting";

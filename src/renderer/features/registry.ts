@@ -59,3 +59,6 @@ Object.assign(FEATURE_UIS, { menubar: u_menubar });
 // First-run onboarding window (#/onboarding/welcome).
 import { ui as u_onboarding } from "./onboarding";
 Object.assign(FEATURE_UIS, { onboarding: u_onboarding });
+// Glide as an MCP server: Settings → MCP Server + the launcher confirmation view.
+import { ui as u_mcpServer } from "./mcp-server";
+Object.assign(FEATURE_UIS, { "mcp-server": u_mcpServer });

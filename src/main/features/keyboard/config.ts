@@ -1,6 +1,6 @@
 import type { Snippet } from "@shared/types";
 import type { KeyConfig } from "../../native/helper";
-import { liveExpansionList } from "../../snippets/live";
+import { globalExcludedApps, liveExpansionList } from "../../snippets/live";
 
 export interface KeyboardSettings extends Record<string, unknown> {
   /** Expand snippet keywords as you type (takes effect once Accessibility is granted). */
@@ -30,12 +30,19 @@ export function snippetKeywords(snippets: Snippet[]): KeyConfig["snippets"] {
   return liveExpansionList(snippets);
 }
 
-/** The config to send to the helper. Without Accessibility nothing is enabled (the tap would fail). */
-export function buildKeyConfig(settings: KeyboardSettings, snippets: Snippet[], accessibility: boolean): KeyConfig {
+/**
+ * The config to send to the helper. Without Accessibility nothing is enabled (the tap would fail).
+ * `pasteStack`: the clipboard's Paste Stack has items, so ⌘V pastes the next one (see ./pasteStack.ts).
+ */
+export function buildKeyConfig(settings: KeyboardSettings, snippets: Snippet[], accessibility: boolean, pasteStack = false): KeyConfig {
   if (!accessibility) return { snippets: [], hyperKey: "off" };
+  const list = settings.expandSnippets ? snippetKeywords(snippets) : [];
+  const excluded = list.length ? globalExcludedApps() : [];
   return {
-    snippets: settings.expandSnippets ? snippetKeywords(snippets) : [],
+    snippets: list,
     hyperKey: settings.hyperKey === "capslock" ? "capslock" : "off",
+    ...(excluded.length ? { excludedBundleIds: excluded } : {}),
+    pasteStack,
   };
 }
 

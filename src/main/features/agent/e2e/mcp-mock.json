@@ -1,0 +1,10 @@
+{
+  "model": "mock-model",
+  "turns": [
+    { "text": "Checking the fixture server.", "delay_ms": 2, "tool_calls": [
+      { "name": "mcp__fixture__echo", "input": { "text": "hello from Glide" } },
+      { "name": "mcp__fixture__add_note", "input": { "text": "buy milk" } }
+    ] },
+    { "text": "Echoed your text and saved the note on the fixture server.", "delay_ms": 2 }
+  ]
+}

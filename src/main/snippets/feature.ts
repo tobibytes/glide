@@ -10,19 +10,18 @@ import type { ExecuteResult, ItemAction } from "@shared/ipc";
 import type { SearchItem, Snippet } from "@shared/types";
 import type { FeatureContext, FeatureModule } from "../features/types";
 import { usesPlaceholder } from "../quicklinks/placeholders";
-import { keywordWarning, needsFrontmost, needsRefresh, sanitizeSnippetSettings, SNIPPET_DEFAULTS, type SnippetSettings } from "./expansion";
+import { keywordWarning, needsRefresh, sanitizeSnippetSettings, SNIPPET_DEFAULTS, type SnippetSettings } from "./expansion";
 import { exportSnippets, mergeImported, parseSnippetImport } from "./io";
 import { notifyExpansionChange, setExpansionInputs } from "./live";
 import { copySnippet, pasteSnippet, renderForUse, setSnippetHelper } from "./paste";
+import { attachLiveRender } from "./responder";
 import { htmlToText, renderSnippet, sanitizeHtml, snippetLookup } from "./render";
 
 export const SNIPPETS_FEATURE = "snippets";
 const REFRESH_MS = 20_000;
-const FRONTMOST_MS = 1500;
 
 let ctx: FeatureContext | null = null;
 let refreshTimer: NodeJS.Timeout | undefined;
-let frontTimer: NodeJS.Timeout | undefined;
 const offs: Array<() => void> = [];
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -57,8 +56,7 @@ async function refreshClipboardSnapshot(): Promise<void> {
 }
 
 function schedule(): void {
-  const c = ctx;
-  if (!c) return;
+  if (!ctx) return;
   setExpansionInputs({ settings: snippetSettings() });
   const list = snippets();
   const dynamic = needsRefresh(list);
@@ -70,21 +68,6 @@ function schedule(): void {
   } else if (!dynamic && refreshTimer) {
     clearInterval(refreshTimer);
     refreshTimer = undefined;
-  }
-  const tracking = needsFrontmost(list, snippetSettings());
-  if (tracking && !frontTimer) {
-    frontTimer = setInterval(() => {
-      if (!c.helper.available()) return;
-      void c.helper
-        .call("app.frontmost")
-        .then((app) => setExpansionInputs({ frontmostBundleId: app?.bundleId ?? null }))
-        .catch(() => undefined);
-    }, FRONTMOST_MS);
-    frontTimer.unref?.();
-  } else if (!tracking && frontTimer) {
-    clearInterval(frontTimer);
-    frontTimer = undefined;
-    setExpansionInputs({ frontmostBundleId: null });
   }
 }
 
@@ -162,14 +145,24 @@ export const snippetsFeature: FeatureModule = {
     offs.push(() => c.store.off("change", onChange));
     // A fresh {uuid}/{time}/{clipboard} for the next expansion.
     offs.push(c.helper.on("snippet.expanded", () => setTimeout(() => void refreshClipboardSnapshot().finally(notifyExpansionChange), 400)));
+    // Live expansion: the helper's tap matched a keyword and waits ≤ 300 ms for this render.
+    offs.push(
+      attachLiveRender({
+        helper: c.helper,
+        snippets,
+        settings: snippetSettings,
+        readClipboard: async () => clipboard.readText(),
+        readSelection: async () => (c.helper.available() ? ((await c.helper.call("selection.text")).text ?? "") : ""),
+        log: (...a) => c.log(...a),
+      }),
+    );
     void refreshClipboardSnapshot();
     schedule();
   },
   stop() {
     for (const off of offs.splice(0)) off();
     if (refreshTimer) clearInterval(refreshTimer);
-    if (frontTimer) clearInterval(frontTimer);
-    refreshTimer = frontTimer = undefined;
+    refreshTimer = undefined;
     setSnippetHelper(null);
     ctx = null;
   },

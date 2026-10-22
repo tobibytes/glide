@@ -6,12 +6,22 @@ import Foundation
 
 let helperVersion = "1.0.0"
 
+// Offline self-test of the keyboard-tap decisions (no tap, no posting, no pasteboard): prints JSON and exits.
+if let i = CommandLine.arguments.firstIndex(of: "--selftest-keys") {
+    exit(KeysSelfTest.run(path: CommandLine.arguments.dropFirst(i + 1).first))
+}
+
+// Offline self-test of the hotkey accelerator parser (no registration, no tap): prints JSON and exits.
+if let i = CommandLine.arguments.firstIndex(of: "--selftest-hotkeys") {
+    exit(Hotkeys.selftest(casesPath: CommandLine.arguments.dropFirst(i + 1).first))
+}
+
 signal(SIGPIPE, SIG_IGN)
 _ = NSApplication.shared
 NSApp.setActivationPolicy(.prohibited)
 
 func cleanupAndExit(_ code: Int32) -> Never {
-    onMain { Keys.shared.shutdown() }
+    onMain { Keys.shared.shutdown(); Hotkeys.shared.unregisterAll() }
     exit(code)
 }
 
@@ -41,17 +51,33 @@ func dispatch(_ method: String, _ p: Params) throws -> Any {
         return Menus.press(pid: int32(p["pid"]), path: path)
     case "keys.configure":
         let raw = (p["snippets"] as? [[String: Any]]) ?? []
-        let snippets = raw.compactMap { s -> (String, String)? in
+        let snippets = raw.compactMap { s -> SnippetEntry? in
             guard let k = s["keyword"] as? String, let t = s["text"] as? String else { return nil }
-            return (k, t)
+            return SnippetEntry(keyword: k, text: t, id: s["id"] as? String, excludedBundleIds: (s["excludedBundleIds"] as? [String]) ?? [])
         }
         let hyper = (p["hyperKey"] as? String) == "capslock"
-        let error = onMain { Keys.shared.configure(snippets: snippets, hyper: hyper) }
+        let stack = (p["pasteStack"] as? Bool) ?? false
+        let excluded = (p["excludedBundleIds"] as? [String]) ?? []
+        let error = onMain { Keys.shared.configure(snippets: snippets, hyper: hyper, pasteStack: stack, excluded: excluded) }
         return error.map { ["ok": false, "error": $0] } ?? ["ok": true]
     case "keys.paste":
         guard let text = p["text"] as? String else { throw HelperError("Missing text") }
-        onMain { Paste.paste(text) }
+        let html = p["html"] as? String
+        onMain { Paste.paste(text, html: html) }
         return ["ok": true]
+    case "snippet.render":
+        guard let reqId = (p["reqId"] as? NSNumber)?.intValue else { throw HelperError("Missing reqId") }
+        let text = p["text"] as? String, html = p["html"] as? String, left = (p["cursorLeft"] as? NSNumber)?.intValue
+        let applied = onMain { Keys.shared.finishExpansion(reqId, text: text, html: html, cursorLeft: left) }
+        return ["ok": true, "applied": applied]
+    case "stack.reply":
+        guard let reqId = (p["reqId"] as? NSNumber)?.intValue else { throw HelperError("Missing reqId") }
+        let applied = onMain {
+            Keys.shared.applyStackReply(reqId, text: p["text"] as? String, html: p["html"] as? String,
+                                        passthrough: (p["passthrough"] as? Bool) ?? false, empty: (p["empty"] as? Bool) ?? false,
+                                        active: p["active"] as? Bool)
+        }
+        return ["ok": true, "applied": applied]
     case "calendar.events":
         guard let from = p["from"] as? String, let to = p["to"] as? String else { throw HelperError("Missing from/to") }
         return try CalendarService.events(from: from, to: to)
@@ -95,6 +121,13 @@ func dispatch(_ method: String, _ p: Params) throws -> Any {
     case "ocr.barcodes":
         guard let path = p["path"] as? String else { throw HelperError("Missing path") }
         return try OCR.barcodes(path: path)
+    case "hotkeys.set":
+        guard let raw = p["bindings"] as? [[String: Any]] else { throw HelperError("Missing bindings") }
+        let bindings = raw.compactMap { b -> (id: String, accelerator: String)? in
+            guard let id = b["id"] as? String, let accel = b["accelerator"] as? String else { return nil }
+            return (id, accel)
+        }
+        return onMain { Hotkeys.shared.set(bindings) }
     case "debug.hyperDryRun" where HID.dryRun:
         // Test hook: exercises enable → disable without touching the real key mapping.
         return onMain { () -> [String: Any] in

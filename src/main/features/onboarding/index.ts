@@ -5,7 +5,8 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { app, BrowserWindow, globalShortcut, nativeTheme, shell, systemPreferences } from "electron";
+import { app, BrowserWindow, nativeTheme, shell, systemPreferences } from "electron";
+import { hotkeysSettled, isHotkeyActive } from "../../hotkeys";
 import type { ExecuteResult } from "@shared/ipc";
 import type { SearchItem } from "@shared/types";
 import { HEADLESS } from "../../headless";
@@ -143,8 +144,9 @@ async function setHotkey(accel: unknown): Promise<{ ok: boolean; hotkey: string;
   // Leaving ⌘Space: give Spotlight its shortcut back (the user picked another hotkey on purpose).
   if (state().spotlightTakeover) await c.callFeature("keyboard", "setUseCommandSpace", false).catch((err) => c.log("restore Spotlight failed", err));
   c.store.setSettings({ hotkey: next });
-  // index.ts re-registers shortcuts synchronously on store change.
-  if (!globalShortcut.isRegistered(next)) {
+  // index.ts re-registers shortcuts on store change; native registration answers asynchronously.
+  await hotkeysSettled();
+  if (!isHotkeyActive(next)) {
     c.store.setSettings({ hotkey: previous });
     return { ok: false, hotkey: previous, error: "Another app already uses that shortcut. Try a different combination." };
   }
@@ -161,7 +163,8 @@ async function useCommandSpace(): Promise<{ ok: boolean; hotkey: string; error?:
     return { ok: false, hotkey: c.getGlobalSettings().hotkey, error: err instanceof Error ? err.message : String(err) };
   }
   const hotkey = c.getGlobalSettings().hotkey;
-  if (!globalShortcut.isRegistered(hotkey)) return { ok: false, hotkey, error: "⌘Space is still taken. Turn off Spotlight's shortcut in System Settings → Keyboard → Keyboard Shortcuts." };
+  await hotkeysSettled();
+  if (!isHotkeyActive(hotkey)) return { ok: false, hotkey, error: "⌘Space is still taken. Turn off Spotlight's shortcut in System Settings → Keyboard → Keyboard Shortcuts." };
   return { ok: true, hotkey };
 }
 

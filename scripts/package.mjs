@@ -132,7 +132,7 @@ function signingIdentity() {
 async function build() {
   // Bundled extension store (read by src/main/features/extensions from <Resources>/extensions-examples).
   // store/ holds the extension-store index (categories, changelogs) read from <Resources>/store.
-  const extraResource = [...stageHelper(), ...stageEsbuild(), path.join(root, "extensions-examples"), path.join(root, "store")];
+  const extraResource = [...stageHelper(), ...stageEsbuild(), path.join(root, "extensions-examples"), path.join(root, "store"), ...["dist/mcp/glide-mcp", "dist/mcp/glide-mcp.cjs"].map((f) => path.join(root, f)).filter((f) => existsSync(f))];
   const cleanStages = () => {
     rmSync(path.join(releaseDir, ".stage"), { recursive: true, force: true });
     rmSync(path.join(releaseDir, ".stage-esbuild"), { recursive: true, force: true });

@@ -88,3 +88,13 @@ export function normalizeStack(raw: unknown): PasteStack {
     items: Array.isArray(r.items) ? r.items.filter((x): x is string => typeof x === "string") : [],
   };
 }
+
+/** ⌘V pastes from the stack while something is waiting (the keyboard tap swallows it then). */
+export function interceptsPaste(s: PasteStack): boolean {
+  return s.items.length > 0;
+}
+
+/** Put an id back at the head (a ⌘V reply that arrived after the helper's watchdog). */
+export function restoreHead(s: PasteStack, id: string): PasteStack {
+  return { ...s, items: [id, ...s.items.filter((x) => x !== id)] };
+}

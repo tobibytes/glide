@@ -44,3 +44,6 @@ FEATURES.push(f_menubar);
 // First-run onboarding window + "Welcome to Glide" command.
 import { feature as f_onboarding } from "./onboarding";
 FEATURES.push(f_onboarding);
+// Glide as an MCP server for external agents (Settings → MCP Server; off by default).
+import { feature as f_mcpServer } from "./mcp-server";
+FEATURES.push(f_mcpServer);

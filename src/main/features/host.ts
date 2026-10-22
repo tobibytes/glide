@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { app, BrowserWindow, globalShortcut, ipcMain, type BrowserWindowConstructorOptions } from "electron";
+import { app, BrowserWindow, ipcMain, type BrowserWindowConstructorOptions } from "electron";
 import { IPC, type ExecuteModifiers, type ExecuteResult, type FeatureEvent, type ItemAction, type ViewRequest } from "@shared/ipc";
 import type { ScoredItem, SearchItem } from "@shared/types";
 import { createSearchApi, type SearchProvider } from "@shared/search";
@@ -11,6 +11,7 @@ import type { WorkflowRuntime } from "../workflows/runtime";
 import { registerFeatureAction } from "../workflows/feature-actions";
 import { builtinFeatureActions } from "../workflows/builtin-actions";
 import type { FeatureContext, FeatureModule } from "./types";
+import { hotkeyStatus, hotkeysSettled, registerFeatureHotkey } from "../hotkeys";
 
 export interface FeatureHostDeps {
   store: Store;
@@ -43,7 +44,6 @@ export const PLATFORM_ID = "glide";
 
 export function createFeatureHost(modules: FeatureModule[], deps: FeatureHostDeps): FeatureHost {
   const byId = new Map(modules.map((m) => [m.id, m]));
-  const hotkeys = new Map<string, string>(); // "<feature>:<key>" -> accelerator
   let searchProvider: SearchProvider | null = null;
   const searchApi = createSearchApi(() => searchProvider);
   const contexts = new Map<string, FeatureContext>();
@@ -58,6 +58,11 @@ export function createFeatureHost(modules: FeatureModule[], deps: FeatureHostDep
     /** (query) → Suggestion | null */
     didYouMean: (query) => searchApi.suggest(typeof query === "string" ? query : ""),
     info: () => ({ sectionLimit: deps.store.getSettings().sectionLimit }),
+    /** () → HotkeyStatus: backend ("native" | "electron" | "pending") and every hotkey's state/reason. */
+    hotkeyStatus: async () => {
+      await hotkeysSettled();
+      return hotkeyStatus();
+    },
   };
 
   const callFeature = async <T,>(featureId: string, method: string, ...args: unknown[]): Promise<T> => {
@@ -112,22 +117,8 @@ export function createFeatureHost(modules: FeatureModule[], deps: FeatureHostDep
       void loadRenderer(win, `/${route.replace(/^[#/]+/, "")}`);
       return win;
     },
-    registerHotkey: (key, accelerator, handler) => {
-      const slot = `${m.id}:${key}`;
-      const previous = hotkeys.get(slot);
-      if (previous) {
-        globalShortcut.unregister(previous);
-        hotkeys.delete(slot);
-      }
-      if (!accelerator) return true;
-      try {
-        const ok = globalShortcut.register(accelerator, handler);
-        if (ok) hotkeys.set(slot, accelerator);
-        return ok;
-      } catch {
-        return false;
-      }
-    },
+    // Native (helper/Carbon) when available, Electron otherwise; see src/main/hotkeys.ts.
+    registerHotkey: (key, accelerator, handler) => registerFeatureHotkey(`${m.id}:${key}`, accelerator, handler),
     executeItem: deps.executeItem,
     log: (...args) => console.log(`[${m.id}]`, ...args),
     search: (query, opts) => searchApi.search(query, opts),

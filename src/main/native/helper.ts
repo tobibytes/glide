@@ -96,11 +96,25 @@ export interface CalendarEvent {
   color?: string; // #rrggbb
 }
 
+export interface KeyConfigSnippet {
+  keyword: string;
+  /** Pre-rendered text: pasted directly (no id) or as the fallback when snippet.render does not arrive within 300 ms. */
+  text: string;
+  /** Snippet id: the helper emits snippet.matched and pastes what main answers with snippet.render. */
+  id?: string;
+  /** Bundle ids where this keyword never expands (checked against the frontmost app by the tap). */
+  excludedBundleIds?: string[];
+}
+
 export interface KeyConfig {
   /** Typed keyword (e.g. ";sig") replaced by text anywhere. Empty array disables expansion. */
-  snippets: Array<{ keyword: string; text: string }>;
+  snippets: KeyConfigSnippet[];
   /** "capslock": Caps Lock acts as ⌃⌥⇧⌘ while held (and Escape when tapped alone). */
   hyperKey: "off" | "capslock";
+  /** Bundle ids where no snippet expands. */
+  excludedBundleIds?: string[];
+  /** The Paste Stack has items: a plain ⌘V is swallowed and answered via stack.next / stack.reply. */
+  pasteStack?: boolean;
 }
 
 export interface HelperRect {
@@ -166,7 +180,12 @@ export interface HelperMethods {
   "menus.list": { params: { pid?: number }; result: MenuItemInfo[] };
   "menus.press": { params: { pid?: number; path: string[] }; result: { ok: boolean; error?: string } };
   "keys.configure": { params: KeyConfig; result: { ok: boolean; error?: string } };
-  "keys.paste": { params: { text: string }; result: { ok: boolean } };
+  /** Paste through a transient pasteboard write (restored after 300 ms); with html the paste is rich text. */
+  "keys.paste": { params: { text: string; html?: string }; result: { ok: boolean } };
+  /** Answer to snippet.matched. Without text (or after 300 ms) the helper pastes the pre-rendered text. */
+  "snippet.render": { params: { reqId: number; text?: string; html?: string; cursorLeft?: number }; result: { ok: boolean; applied: boolean } };
+  /** Answer to stack.next: paste text/html, or let the original ⌘V through (passthrough: main prepared the clipboard; empty: stop intercepting). */
+  "stack.reply": { params: { reqId: number; text?: string; html?: string; passthrough?: boolean; empty?: boolean; active?: boolean }; result: { ok: boolean; applied: boolean } };
   "calendar.events": { params: { from: string; to: string }; result: CalendarEvent[] };
   "system.spotlightShortcut": { params: void; result: { enabled: boolean } };
   "system.setSpotlightShortcut": { params: { enabled: boolean }; result: { ok: boolean; error?: string } };
@@ -196,10 +215,27 @@ export interface HelperMethods {
   "reminders.complete": { params: { id: string; completed?: boolean }; result: HelperReminder };
   /** Read-only, never prompts. ssid/bssid are null without Location access on macOS 14+. */
   "wifi.info": { params: void; result: WifiInfo };
+  /** Replaces the whole set of global hotkeys (Carbon; modifier-only via a listen-only tap). Not allowed in headless. */
+  "hotkeys.set": { params: { bindings: Array<{ id: string; accelerator: string }> }; result: HotkeySetResult };
+}
+
+export interface HotkeySetResult {
+  registered: string[];
+  failed: Array<{ id: string; reason: string }>;
+  /** Registered, but an enabled macOS shortcut uses the same keys and may win. */
+  conflicts?: Array<{ id: string; reason: string }>;
 }
 
 export interface HelperEvents {
-  "snippet.expanded": { keyword: string };
+  "hotkey.pressed": { id: string };
+  /** The helper re-registered after a keyboard layout change. */
+  "hotkeys.changed": HotkeySetResult;
+  /** live: main's render was pasted (false: the pre-rendered fallback). */
+  "snippet.expanded": { keyword: string; live?: boolean };
+  /** A live keyword was typed; answer with snippet.render {reqId, …} within 300 ms. */
+  "snippet.matched": { reqId: number; keyword: string; id: string; bundleId: string | null };
+  /** ⌘V while the Paste Stack is active; answer with stack.reply {reqId, …} within 500 ms. */
+  "stack.next": { reqId: number };
   "keys.tapFailed": { reason: string };
   "permissions.changed": PermissionStatus;
 }

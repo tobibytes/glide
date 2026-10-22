@@ -13,7 +13,7 @@
   "type": "module",
   "scripts": {
     "build:helper": "node scripts/build-helper.mjs",
-    "build:main": "node scripts/build-main.mjs && node scripts/build-fileindex-worker.mjs",
+    "build:main": "node scripts/build-main.mjs && node scripts/build-fileindex-worker.mjs && node scripts/glide-mcp.mjs",
     "build:renderer": "vite build",
     "build": "pnpm build:helper && pnpm build:main && pnpm build:renderer",
     "dev": "node scripts/dev.mjs",
@@ -35,7 +35,8 @@
     "test:perf": "node scripts/perf-search.mjs",
     "test:quality": "pnpm test:harness && pnpm test:e2e:smoke && pnpm test:perf && pnpm test:a11y",
     "test:e2e:onboarding": "node tests/e2e/onboarding.mjs",
-    "dmg": "pnpm build && node scripts/package.mjs --arch universal --dmg"
+    "dmg": "pnpm build && node scripts/package.mjs --arch universal --dmg",
+    "test:e2e:mcp": "node src/main/features/mcp-server/e2e/mcp-e2e.mjs"
   },
   "devDependencies": {
     "@electron/packager": "^20.3.0",

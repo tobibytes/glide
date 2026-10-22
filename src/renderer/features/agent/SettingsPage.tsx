@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Group, Row, Toggle } from "../../components/form";
 import { Kbd } from "../../components/Kbd";
 import { agent, type AgentSettings, type AgentStatus, type ToolInfo } from "./api";
+import { McpServersSection } from "./McpServers";
 
 export function AgentSettingsPage() {
   const [tools, setTools] = useState<ToolInfo[]>([]);
@@ -97,6 +98,8 @@ export function AgentSettingsPage() {
           </Row>
         ))}
       </Group>
+
+      <McpServersSection settings={settings} onAllow={setAllow} />
 
       <Group title="Read-only tools (always allowed)">
         {readOnly.map((t) => (

@@ -16,8 +16,10 @@ describe("keyboard config", () => {
     expect(buildKeyConfig({ ...KEYBOARD_DEFAULTS, hyperKey: "capslock" }, [snip("a", ";a")], false)).toEqual({ snippets: [], hyperKey: "off" });
   });
 
-  it("respects the expansion toggle and hyper key", () => {
-    expect(buildKeyConfig({ ...KEYBOARD_DEFAULTS, expandSnippets: false, hyperKey: "capslock" }, [snip("a", ";a")], true)).toEqual({ snippets: [], hyperKey: "capslock" });
+  it("respects the expansion toggle, hyper key and paste stack", () => {
+    expect(buildKeyConfig({ ...KEYBOARD_DEFAULTS, expandSnippets: false, hyperKey: "capslock" }, [snip("a", ";a")], true)).toEqual({ snippets: [], hyperKey: "capslock", pasteStack: false });
+    expect(buildKeyConfig({ ...KEYBOARD_DEFAULTS, expandSnippets: false }, [], true, true)).toEqual({ snippets: [], hyperKey: "off", pasteStack: true });
+    expect(buildKeyConfig(KEYBOARD_DEFAULTS, [], false, true)).toEqual({ snippets: [], hyperKey: "off" });
     expect(buildKeyConfig(KEYBOARD_DEFAULTS, [snip("a", ";a")], true).snippets).toHaveLength(1);
   });
 

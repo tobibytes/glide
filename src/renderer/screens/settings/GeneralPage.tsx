@@ -15,8 +15,36 @@ const SOURCES: Array<{ id: string; label: string }> = [
   { id: "calculator", label: "Calculator" },
 ];
 
+interface HotkeyStatus {
+  backend: "pending" | "native" | "electron";
+  hotkeys: Array<{ id: string; accelerator: string; state: "pending" | "active" | "failed"; reason?: string; warning?: string }>;
+}
+
+/** Problem with the launcher hotkey (e.g. "in use by another app"), from main's hotkey manager. */
+function useLauncherHotkeyProblem(hotkey: string): { text: string; severity: "error" | "warning" } | null {
+  const [problem, setProblem] = useState<{ text: string; severity: "error" | "warning" } | null>(null);
+  useEffect(() => {
+    let live = true;
+    void glide()
+      .feature<HotkeyStatus>("glide", "hotkeyStatus")
+      .then((st) => {
+        if (!live) return;
+        const h = st.hotkeys.find((x) => x.id.startsWith("core:") && x.accelerator === hotkey);
+        if (h?.state === "failed") setProblem({ text: h.reason === "in use by another app" ? "In use by another app — choose a different shortcut." : `Not registered: ${h.reason ?? "unknown error"}`, severity: "error" });
+        else if (h?.warning) setProblem({ text: `${h.warning}`, severity: "warning" });
+        else setProblem(null);
+      })
+      .catch(() => live && setProblem(null));
+    return () => {
+      live = false;
+    };
+  }, [hotkey]);
+  return problem;
+}
+
 export function GeneralPage({ data, anchor }: { data: UserData; anchor?: string }) {
   const s = data.settings;
+  const hotkeyProblem = useLauncherHotkeyProblem(s.hotkey);
   const [newDir, setNewDir] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -44,8 +72,20 @@ export function GeneralPage({ data, anchor }: { data: UserData; anchor?: string 
     <div className="page">
       {error && <div className="error-banner">{error}</div>}
       <Group title="Launcher">
-        <Row label="Global hotkey" hint="Press a combination to open Glide from anywhere" htmlFor="hotkey-recorder">
-          <HotkeyRecorder id="hotkey-recorder" value={s.hotkey} onChange={(accel) => void patch({ hotkey: accel ?? "Alt+Space" })} />
+        <Row
+          label="Global hotkey"
+          hint={
+            hotkeyProblem ? (
+              <span role="status" style={{ color: hotkeyProblem.severity === "error" ? "var(--danger)" : "var(--warning)" }}>
+                {hotkeyProblem.text}
+              </span>
+            ) : (
+              "Press a combination, or tap a modifier alone (Right ⌥) or twice (Double ⌘)"
+            )
+          }
+          htmlFor="hotkey-recorder"
+        >
+          <HotkeyRecorder id="hotkey-recorder" allowModifierOnly value={s.hotkey} onChange={(accel) => void patch({ hotkey: accel ?? "Alt+Space" })} />
         </Row>
         <Row label="Appearance" htmlFor="theme">
           <select id="theme" className="select" value={s.theme} onChange={(e) => void patch({ theme: e.target.value as Settings["theme"] })}>

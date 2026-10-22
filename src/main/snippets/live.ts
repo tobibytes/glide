@@ -5,15 +5,16 @@
  */
 import { randomUUID } from "node:crypto";
 import type { Snippet } from "@shared/types";
+import type { KeyConfigSnippet } from "../native/helper";
+import { isDynamic, usesPlaceholder } from "../quicklinks/placeholders";
 import { buildExpansionList, SNIPPET_DEFAULTS, type SnippetSettings } from "./expansion";
 
 interface LiveState {
   settings: SnippetSettings;
-  frontmostBundleId: string | null;
   clipboard: string;
 }
 
-const state: LiveState = { settings: SNIPPET_DEFAULTS, frontmostBundleId: null, clipboard: "" };
+const state: LiveState = { settings: SNIPPET_DEFAULTS, clipboard: "" };
 const listeners = new Set<() => void>();
 
 /** Update inputs; listeners run only when something changed. */
@@ -44,12 +45,31 @@ export function expansionSettings(): SnippetSettings {
   return state.settings;
 }
 
-/** What the helper should watch for right now: prefix, case variants, exclusions and placeholders applied. */
-export function liveExpansionList(snippets: Snippet[], now = new Date()): Array<{ keyword: string; text: string }> {
+/** True when the snippet must be rendered at expansion time (placeholders, {cursor}, rich text). */
+export function needsLiveRender(s: Snippet): boolean {
+  const src = `${s.text}\n${s.html ?? ""}`;
+  return !!s.html?.trim() || isDynamic(src) || usesPlaceholder(src, "cursor");
+}
+
+/**
+ * What the helper should watch for: prefix and case variants applied, `text` pre-rendered as the fallback.
+ * Live entries carry the snippet id (the helper asks main via snippet.matched); exclusions are checked by the tap.
+ */
+export function liveExpansionList(snippets: Snippet[], now = new Date()): KeyConfigSnippet[] {
+  const byId = new Map(snippets.map((s) => [s.id, s]));
   return buildExpansionList({
     snippets,
     settings: state.settings,
     env: { now, clipboard: state.clipboard, uuid: randomUUID },
-    frontmostBundleId: state.frontmostBundleId,
-  }).map(({ keyword, text }) => ({ keyword, text }));
+    frontmostBundleId: null,
+  }).map(({ keyword, text, snippetId }) => {
+    const s = byId.get(snippetId);
+    const excluded = s?.excludedApps?.filter((x) => !!x.trim()) ?? [];
+    return { keyword, text, ...(s && needsLiveRender(s) ? { id: snippetId } : {}), ...(excluded.length ? { excludedBundleIds: excluded } : {}) };
+  });
+}
+
+/** Bundle ids where no snippet expands (Snippet settings → excluded apps). */
+export function globalExcludedApps(): string[] {
+  return state.settings.excludedApps;
 }

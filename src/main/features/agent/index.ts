@@ -19,11 +19,13 @@ import { createCatalogueSource } from "./catalogue";
 import { createAnthropicClient, createMockClient, loadMockScript, type AgentClient } from "./client";
 import { ConversationStore } from "./history";
 import { MAX_TOOL_CALLS, runAgentFull } from "./loop";
+import { McpManager } from "./mcp-manager";
+import { isMcpToolName } from "./mcp-schema";
 import { AGENT_SYSTEM_PROMPT, requestContext } from "./prompt";
 import { RateLimiter, sensitivity } from "./safety";
 import { Sessions, type LiveConversation } from "./sessions";
 import { RUN_ITEM_ACTION } from "./tooling";
-import { TOOLS, type AgentTool } from "./tools";
+import { TOOLS, type AgentCapabilities, type AgentTool } from "./tools";
 import type { AgentErrorKind, AgentSettings, AgentStatus, AgentViewProps, RunSnapshot, SaveWorkflowResult, StartResult, ToolInfo, UndoResult } from "./types";
 import { buildWorkflow, planWorkflow } from "./workflow";
 
@@ -50,12 +52,18 @@ let ctx: FeatureContext | undefined;
 let catalogue: ReturnType<typeof createCatalogueSource>;
 let sessions: Sessions | undefined;
 let store: ConversationStore | undefined;
+let mcp: McpManager | undefined;
+let mcpEmitTimer: NodeJS.Timeout | undefined;
 const runs = new Map<string, Run>();
 const limiter = new RateLimiter();
 
 function need(): FeatureContext {
   if (!ctx) throw new Error("Agent feature not started");
   return ctx;
+}
+function mcpm(): McpManager {
+  if (!mcp) throw new Error("Agent feature not started");
+  return mcp;
 }
 function sess(): Sessions {
   if (!sessions) throw new Error("Agent feature not started");
@@ -72,7 +80,7 @@ const SENSITIVITY = sensitivity(TOOLS);
 
 function cleanAllow(raw: unknown): Record<string, boolean> {
   const allow: Record<string, boolean> = {};
-  if (raw && typeof raw === "object") for (const [k, v] of Object.entries(raw)) if (ALLOWABLE.has(k) && v === true) allow[k] = true;
+  if (raw && typeof raw === "object") for (const [k, v] of Object.entries(raw)) if ((ALLOWABLE.has(k) || isMcpToolName(k)) && v === true) allow[k] = true;
   return allow;
 }
 
@@ -211,13 +219,18 @@ async function start(raw: unknown): Promise<StartResult> {
   const context = [requestContext(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone), s.readOnly ? "Read-only mode is on: only look things up; you can't change anything." : ""].filter(Boolean).join("\n");
   let lastStatus = run.snapshot.status;
   let lastCount = 0;
-  void runAgentFull({
+  // MCP servers connect lazily here, after start() has returned to the view.
+  const mcpTools = async () => (mcp ? mcp.agentTools<AgentCapabilities>() : { tools: [], problems: [] });
+  void mcpTools()
+    .catch((err: unknown) => ({ tools: [] as AgentTool[], problems: [`MCP tools unavailable: ${err instanceof Error ? err.message : String(err)}`] }))
+    .then((extra) => runAgentFull({
     runId,
     conversationId: conv.id,
     prompt,
     history: conv.messages,
     client,
-    tools: availableTools(ids),
+    tools: [...availableTools(ids), ...extra.tools],
+    notices: extra.problems,
     caps,
     model,
     effort,
@@ -252,7 +265,7 @@ async function start(raw: unknown): Promise<StartResult> {
     },
     describeError,
     isAbort,
-  })
+  }))
     .then((out) => {
       run.snapshot = out.snapshot;
       run.pending = undefined;
@@ -448,6 +461,18 @@ export const feature: FeatureModule = {
     catalogue = createCatalogueSource(c, loadFeatures);
     store = new ConversationStore(() => path.join(c.dataDir(), "conversations.json"));
     sessions = new Sessions({ store, sensitivity: () => SENSITIVITY, keepSensitive: () => settings().keepSensitive, saveHistory: () => settings().saveHistory });
+    mcp = new McpManager({
+      file: () => path.join(c.dataDir(), "mcp-servers.json"),
+      cipher: safeStorage,
+      log: (...a) => c.log(...a),
+      onChange: () => {
+        if (mcpEmitTimer) return;
+        mcpEmitTimer = setTimeout(() => {
+          mcpEmitTimer = undefined;
+          if (mcp) c.emit("mcp", mcp.list());
+        }, 50);
+      },
+    });
     void refreshFeatureIds();
     if (mockPath()) c.log(`using scripted mock client from ${mockPath()}`);
   },
@@ -455,6 +480,7 @@ export const feature: FeatureModule = {
     for (const r of runs.values()) r.controller.abort();
     runs.clear();
     store?.flush();
+    mcp?.killAll();
   },
   items,
   actions,
@@ -507,5 +533,13 @@ export const feature: FeatureModule = {
       return toolInfo();
     },
     openAiSettings: () => need().openSettings("ai"),
+    // MCP servers (Settings → Agent → MCP Servers). Secrets never come back to the renderer.
+    mcpList: () => mcpm().list(),
+    mcpSave: (server) => mcpm().save(server),
+    mcpSetEnabled: (id, enabled) => (typeof id === "string" ? mcpm().setEnabled(id, enabled === true) : { ok: false, error: "Unknown server" }),
+    mcpRemove: (id) => (typeof id === "string" ? mcpm().remove(id) : false),
+    mcpTest: (server) => mcpm().test(server),
+    mcpReconnect: (id) => (typeof id === "string" ? mcpm().reconnect(id) : { ok: false, error: "Unknown server", tools: [], ms: 0 }),
+    mcpImport: (text, apply) => mcpm().import(text, apply === true),
   },
 };

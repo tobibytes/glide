@@ -1,0 +1,119 @@
+/* Settings → MCP Server and the launcher confirmation view */
+.mcp-server-page code,
+.mcp-server-confirm code {
+  font-family: var(--mono);
+  font-size: 0.92em;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--tag-bg);
+}
+.mcp-server-port {
+  width: 90px;
+}
+.mcp-server-error,
+.mcp-server-message--error {
+  color: var(--danger);
+}
+.mcp-server-message {
+  margin: -12px 0 18px 12px;
+  font-size: 12.5px;
+  color: var(--success);
+}
+.mcp-server-snippet {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.mcp-server-snippet:last-child {
+  border-bottom: none;
+}
+.mcp-server-snippet__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+.mcp-server-snippet__title {
+  font-weight: 600;
+}
+.mcp-server-snippet__btns {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.mcp-server-snippet__code {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--tag-bg);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+}
+.mcp-server-name {
+  font-size: 11px;
+}
+.mcp-server-badge {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 10.5px;
+  line-height: 16px;
+  background: var(--tag-bg);
+}
+.mcp-server-badge--write {
+  color: var(--danger);
+}
+.mcp-server-badge--sensitive {
+  color: var(--warning, var(--danger));
+}
+.mcp-server-none {
+  padding: 10px 12px;
+}
+.mcp-server-log {
+  max-height: 320px;
+  overflow-y: auto;
+}
+.mcp-server-log__row {
+  display: grid;
+  grid-template-columns: 130px 120px 1fr 120px;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.mcp-server-log__summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mcp-server-log__outcome--ok {
+  color: var(--success);
+}
+.mcp-server-log__outcome--error,
+.mcp-server-log__outcome--denied,
+.mcp-server-log__outcome--timeout,
+.mcp-server-log__outcome--rate-limited {
+  color: var(--danger);
+}
+.mcp-server-confirm__head {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.mcp-server-confirm__title {
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+.mcp-server-confirm__summary {
+  font-size: 13.5px;
+  margin-bottom: 6px;
+  word-break: break-word;
+}
+.mcp-server-confirm__meta {
+  font-size: 12px;
+}
+.mcp-server-empty {
+  padding: 24px;
+}

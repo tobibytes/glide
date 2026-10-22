@@ -44,7 +44,9 @@ import {
 } from "./model";
 import { deleteImage, imagePaths, readImagePng, readSnapshot, saveImage, sha1, writeEntry } from "./pasteboard";
 import { createWriter, loadHistory, writeAtomic, type HistoryWriter } from "./persist";
-import { addToStack, clearStack, EMPTY_STACK, moveInStack, normalizeStack, pushStack, removeFromStack, setStackOrder, startStack, stopStack, takeNext, type PasteStack } from "./stack";
+import { addToStack, clearStack, EMPTY_STACK, interceptsPaste, moveInStack, normalizeStack, pushStack, removeFromStack, restoreHead, setStackOrder, startStack, stopStack, takeNext, type PasteStack } from "./stack";
+import { attachStackPaste, stackReplyParams, type StackNext } from "./stackNative";
+import { setPasteStackIntercept } from "../keyboard/pasteStack";
 
 const ID = "clipboard";
 const POLL_MS = 400;
@@ -102,6 +104,7 @@ function saveStack() {
   }
   ctx?.emit("stack", stackState());
   ctx?.refreshCatalogue();
+  setPasteStackIntercept(interceptsPaste(stack));
 }
 
 function applyRetention(now = Date.now()) {
@@ -415,6 +418,33 @@ async function pasteNextFromStack(): Promise<ExecuteResult> {
   return { ...res, message: left ? `Pasted — ${left} left in Paste Stack` : "Pasted the last Paste Stack item" };
 }
 
+/** ⌘V with a non-empty stack (keyboard tap → stack.next): take the next item for the helper to paste. */
+async function nextForNativePaste(): Promise<StackNext> {
+  const r = takeNext(stack, (id) => !!find(id));
+  stack = r.stack;
+  const e = r.id ? find(r.id) : undefined;
+  if (!e) {
+    saveStack();
+    return { reply: { empty: true }, active: false };
+  }
+  saveStack();
+  const undo = () => {
+    stack = restoreHead(stack, e.id);
+    saveStack();
+  };
+  const active = interceptsPaste(stack);
+  if (e.type === "image" || e.type === "file") {
+    // The helper only pastes text: put the entry on the clipboard and let the original ⌘V through.
+    await putOnClipboard(e, false);
+    return { reply: { passthrough: true }, active, undo };
+  }
+  entries = touch(entries, e.id, Date.now());
+  save();
+  return { reply: { text: e.text ?? "" }, active, undo };
+}
+
+let offStackPaste: (() => void) | null = null;
+
 function startPasteStack(limit: number): ExecuteResult {
   stack = startStack(settings.stackOrder, limit);
   saveStack();
@@ -465,6 +495,8 @@ export const feature: FeatureModule = {
     applyRetention();
     registerHotkeys();
     schedulePauseEnd();
+    setPasteStackIntercept(interceptsPaste(stack));
+    offStackPaste = attachStackPaste(c.helper, nextForNativePaste, (...a) => c.log(...a));
     if (settings.enabled) startPolling();
     // Backfill OCR for images captured before OCR existed (or while the helper was missing).
     setTimeout(() => {
@@ -478,6 +510,9 @@ export const feature: FeatureModule = {
     writer?.flush();
     ctx?.registerHotkey("open", null, () => undefined);
     ctx?.registerHotkey("stack-next", null, () => undefined);
+    offStackPaste?.();
+    offStackPaste = null;
+    setPasteStackIntercept(false);
   },
 
   items() {
@@ -750,6 +785,12 @@ export const feature: FeatureModule = {
     },
     stackPasteNext() {
       return pasteNextFromStack();
+    },
+    /** Headless tests only: what the ⌘V path would answer the helper (consumes the item like a real ⌘V). */
+    async debugStackNext(reqId: unknown) {
+      if (!HEADLESS) return { ok: false, error: "Only available with GLIDE_HEADLESS=1" };
+      const next = await nextForNativePaste();
+      return { ok: true, params: stackReplyParams(typeof reqId === "number" ? reqId : 0, next), stack: stackState() };
     },
 
     /** Headless tests only: put content on the (fake, in-memory) clipboard as if another app copied it. */

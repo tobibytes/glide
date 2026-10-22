@@ -3,6 +3,7 @@ import type { ExecuteResult } from "@shared/ipc";
 import type { PermissionStatus } from "../../native/helper";
 import type { FeatureContext, FeatureModule } from "../types";
 import { onExpansionChange } from "../../snippets/live";
+import { onPasteStackInterceptChange, pasteStackIntercept } from "./pasteStack";
 import { KEYBOARD_DEFAULTS, SPOTLIGHT_HOTKEY, buildKeyConfig, hotkeyAfterTakeover, snippetKeywords, type KeyboardSettings } from "./config";
 
 const PANES = {
@@ -24,6 +25,8 @@ export interface KeyboardState {
   hotkey: string;
   lastError: string | null;
   expansions: number;
+  /** ⌘V currently pastes the next Paste Stack item. */
+  pasteStack: boolean;
 }
 
 let ctx: FeatureContext | null = null;
@@ -32,6 +35,7 @@ let lastSent = "";
 let active = false;
 let lastError: string | null = null;
 let expansions = 0;
+let sentPasteStack = false;
 let spotlightEnabled: boolean | null = null;
 let retryTimer: NodeJS.Timeout | undefined;
 const unsubscribe: Array<() => void> = [];
@@ -49,6 +53,7 @@ function state(): KeyboardState {
     hotkey: ctx?.getGlobalSettings().hotkey ?? "",
     lastError,
     expansions,
+    pasteStack: active && sentPasteStack,
   };
 }
 
@@ -69,14 +74,15 @@ async function configure(force = false): Promise<void> {
     return;
   }
   if (!permissions) await refreshPermissions();
-  const config = buildKeyConfig(settings(), c.getData().snippets, permissions?.accessibility === true);
+  const config = buildKeyConfig(settings(), c.getData().snippets, permissions?.accessibility === true, pasteStackIntercept());
   const key = JSON.stringify(config);
   if (!force && key === lastSent) return;
   lastSent = key;
   try {
     const r = await c.helper.call("keys.configure", config);
-    const wanted = config.snippets.length > 0 || config.hyperKey !== "off";
+    const wanted = config.snippets.length > 0 || config.hyperKey !== "off" || config.pasteStack === true;
     active = r.ok && wanted;
+    sentPasteStack = r.ok && config.pasteStack === true;
     lastError = r.ok ? null : (r.error ?? "Keyboard tap failed");
     if (!r.ok) lastSent = ""; // retry on the next change
   } catch (err) {
@@ -152,6 +158,8 @@ export const feature: FeatureModule = {
     c.store.on("change", () => void configure());
     // Snippet prefix/exclusions/placeholders changed (src/main/snippets keeps them fresh).
     unsubscribe.push(onExpansionChange(() => void configure()));
+    // The Paste Stack gained its first item or ran empty: start/stop intercepting ⌘V.
+    unsubscribe.push(onPasteStackInterceptChange(() => void configure()));
     setTimeout(() => {
       void (async () => {
         await refreshPermissions();

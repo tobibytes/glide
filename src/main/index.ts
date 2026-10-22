@@ -5,7 +5,7 @@ import type { ScoredItem, SearchItem } from "@shared/types";
 import { createEngine } from "@engine/index";
 import { createCatalogue } from "./catalogue";
 import { createExecutor } from "./execute";
-import { syncHotkeys } from "./hotkeys";
+import { configureHotkeys, disposeHotkeys, syncHotkeys } from "./hotkeys";
 import { installIconProtocol, registerIconScheme } from "./icons";
 import { registerIpc } from "./ipc";
 import { createPrompts } from "./prompts";
@@ -69,6 +69,8 @@ async function main(): Promise<void> {
   });
 
   const helper = HEADLESS ? readOnlyHelper(createNativeHelper()) : createNativeHelper();
+  // Native (Carbon) hotkeys via the helper; Electron globalShortcut when the helper is missing.
+  configureHotkeys(helper);
   // Late-bound: feature items feed the catalogue, and features need catalogue/executor.
   let featureItems: () => SearchItem[] = () => [];
   const scoredFrom = (item: SearchItem): ScoredItem => ({ item, score: 0, matchScore: 0, matchKind: "none", frecency: 0, ranges: [] });
@@ -139,6 +141,7 @@ async function main(): Promise<void> {
   app.on("activate", () => windows.showLauncher());
   app.on("window-all-closed", () => undefined); // menu-bar app: keep running
   app.on("will-quit", () => {
+    disposeHotkeys();
     globalShortcut.unregisterAll();
     void features.stop();
     helper.dispose();

@@ -24,9 +24,27 @@ const KEY_GLYPH: Record<string, string> = {
 };
 const MOD_ORDER = ["⌃", "⌥", "⇧", "⌘"];
 
-/** "Alt+Space" -> "⌥ Space"; "Cmd+Shift+K" -> "⇧⌘K". */
+const SIDE_MODS: Record<string, string> = { cmd: "⌘", command: "⌘", alt: "⌥", option: "⌥", ctrl: "⌃", control: "⌃", shift: "⇧", hyper: "Hyper" };
+
+/** Modifier-only shortcuts: "Double+Cmd" -> "Double ⌘", "Right+Alt" -> "Right ⌥", "Hyper" -> "Hyper". Null for combos. */
+export function modifierOnlyDisplay(accel: string): string | null {
+  const parts = accel.split("+").map((p) => p.trim().toLowerCase()).filter(Boolean);
+  const last = parts.at(-1);
+  if (!last || !SIDE_MODS[last] || !parts.slice(0, -1).every((p) => p === "double" || p === "left" || p === "right")) return null;
+  if (parts.length === 1 && last !== "hyper") return null;
+  const words = parts.slice(0, -1).map((p) => p[0]!.toUpperCase() + p.slice(1));
+  return [...words, SIDE_MODS[last]].join(" ");
+}
+
+/** "Alt+Space" -> "⌥ Space"; "Cmd+Shift+K" -> "⇧⌘K"; "Hyper+K" -> "⌃⌥⇧⌘K". */
 export function accelToDisplay(accel: string): string {
-  const parts = accel.split("+").map((p) => p.trim()).filter(Boolean);
+  const modOnly = modifierOnlyDisplay(accel);
+  if (modOnly) return modOnly;
+  const parts = accel
+    .split("+")
+    .flatMap((p) => (p.trim().toLowerCase() === "hyper" ? ["Ctrl", "Alt", "Shift", "Cmd"] : [p]))
+    .map((p) => p.trim())
+    .filter(Boolean);
   const mods: string[] = [];
   const keys: string[] = [];
   for (const p of parts) {
