@@ -123,14 +123,23 @@ final class PasteboardWatchState: @unchecked Sendable {
         let state = self.state
         let t = DispatchSource.makeTimerSource(queue: queue)
         t.schedule(deadline: .now(), repeating: interval, leeway: .milliseconds(50))
-        t.setEventHandler { [weak self] in
-            let count = NSPasteboard.general.changeCount
-            guard state.shouldRead(count) else { return }
-            let snap = SystemPasteboardWatcher.readGeneral(changeCount: count)
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.deliver(snap) } }
-        }
+        t.setEventHandler(handler: Self.pollHandler(state: state) { [weak self] snap in self?.deliver(snap) })
         t.resume()
         timer = t
+    }
+
+    /// Built outside the main actor: a closure written inside `start()` would inherit @MainActor isolation, and
+    /// Swift 6's runtime check traps when the timer fires on the poll queue (the release app crashed on launch).
+    nonisolated private static func pollHandler(
+        state: PasteboardWatchState,
+        deliver: @escaping @MainActor (PasteboardSnapshot) -> Void
+    ) -> @Sendable () -> Void {
+        return {
+            let count = NSPasteboard.general.changeCount
+            guard state.shouldRead(count) else { return }
+            let snap = readGeneral(changeCount: count)
+            DispatchQueue.main.async { MainActor.assumeIsolated { deliver(snap) } }
+        }
     }
 
     public func stop() {
