@@ -69,6 +69,8 @@ export interface ClipSettings extends Record<string, unknown> {
   stackHotkey: string;
   /** Order the paste stack pastes in: first copied first (fifo) or last copied first (lifo). */
   stackOrder: "fifo" | "lifo";
+  /** Let plain ⌘V paste the next Paste Stack item. Off by default: a forgotten stack must never hijack paste. */
+  stackInterceptPaste: boolean;
   /** Recognise text in copied images (needs the Glide helper) so they are searchable. */
   ocrImages: boolean;
   /** Remembered layout of Clipboard History. */
@@ -97,6 +99,7 @@ export const DEFAULT_CLIP_SETTINGS: ClipSettings = {
   hotkey: "",
   stackHotkey: "",
   stackOrder: "fifo",
+  stackInterceptPaste: false,
   ocrImages: true,
   viewMode: "list",
 };
@@ -427,6 +430,7 @@ export function normalizeSettings(raw: Partial<ClipSettings>): ClipSettings {
     hotkey: typeof raw.hotkey === "string" ? raw.hotkey : d.hotkey,
     stackHotkey: typeof raw.stackHotkey === "string" ? raw.stackHotkey : d.stackHotkey,
     stackOrder: raw.stackOrder === "lifo" ? "lifo" : "fifo",
+    stackInterceptPaste: raw.stackInterceptPaste === true,
     ocrImages: typeof raw.ocrImages === "boolean" ? raw.ocrImages : d.ocrImages,
     viewMode: raw.viewMode === "grid" ? "grid" : "list",
   };

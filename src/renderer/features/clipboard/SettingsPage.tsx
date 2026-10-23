@@ -151,6 +151,9 @@ export function ClipboardSettingsPage() {
       </Group>
 
       <Group title="Paste Stack" footer="“Start Paste Stack” collects your next copies; “Paste Next from Stack” pastes them one at a time.">
+        <Row label="⌘V pastes the next stack item" hint="Off: ⌘V always pastes what you copied; use “Paste Next from Stack” instead">
+          <Toggle label="⌘V pastes the next stack item" checked={s.stackInterceptPaste} onChange={(v) => void patch({ stackInterceptPaste: v })} />
+        </Row>
         <Row label="Paste order" htmlFor="clipboard-stack-order">
           <select id="clipboard-stack-order" className="select" value={s.stackOrder} onChange={(e) => void patch({ stackOrder: e.target.value === "lifo" ? "lifo" : "fifo" })}>
             <option value="fifo">First copied, first pasted (FIFO)</option>

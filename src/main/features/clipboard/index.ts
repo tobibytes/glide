@@ -104,7 +104,7 @@ function saveStack() {
   }
   ctx?.emit("stack", stackState());
   ctx?.refreshCatalogue();
-  setPasteStackIntercept(interceptsPaste(stack));
+  setPasteStackIntercept(settings.stackInterceptPaste && interceptsPaste(stack));
 }
 
 function applyRetention(now = Date.now()) {
@@ -287,6 +287,7 @@ function applySettings(next: ClipSettings) {
     saveStack();
   }
   schedulePauseEnd();
+  setPasteStackIntercept(settings.stackInterceptPaste && interceptsPaste(stack));
   if (settings.enabled) startPolling();
   else stopPolling();
   applyRetention();
@@ -495,7 +496,7 @@ export const feature: FeatureModule = {
     applyRetention();
     registerHotkeys();
     schedulePauseEnd();
-    setPasteStackIntercept(interceptsPaste(stack));
+    setPasteStackIntercept(settings.stackInterceptPaste && interceptsPaste(stack));
     offStackPaste = attachStackPaste(c.helper, nextForNativePaste, (...a) => c.log(...a));
     if (settings.enabled) startPolling();
     // Backfill OCR for images captured before OCR existed (or while the helper was missing).
