@@ -1,10 +1,14 @@
 #!/bin/zsh
 # Build the native Glide.app (release) into macos/build/Glide.app and sign it.
 #
-#   scripts/build-app.sh                 # arm64 release build, signed, verified
+#   scripts/build-app.sh                       # universal (arm64 + x86_64) release build, signed, verified
+#   scripts/build-app.sh --arch arm64          # one slice only (also x86_64); same as GLIDE_ARCH=arm64
 #   GLIDE_SCRATCH=/path scripts/build-app.sh   # SwiftPM --scratch-path (parallel sessions use their own)
-#   GLIDE_ARCH=universal scripts/build-app.sh  # TODO: universal (arm64 + x86_64) — see below
 #   GLIDE_SIGN_IDENTITY="Developer ID Application: …" scripts/build-app.sh
+#
+# Universal: each slice is built on its own (`swift build -c release --arch <a>`, same scratch path, separate
+# <scratch>/<a>-apple-macosx/release dirs) and joined with `lipo -create`. This avoids SwiftPM's multi-arch
+# `--arch arm64 --arch x86_64` path, which goes through xcbuild into a different products layout.
 #
 # Signing mirrors ../scripts/package.mjs: the stable "Glide Local Signing" identity in
 # ~/Library/Keychains/glide-signing.keychain-db (password in ~/.config/glide/signing-keychain-password) keeps
@@ -13,11 +17,20 @@
 #
 # This script never installs or launches the app. Run it headless via the test server (docs/TESTING.md):
 #   GLIDE_HEADLESS=1 GLIDE_USER_DATA=$(mktemp -d) build/Glide.app/Contents/MacOS/Glide --test-server
+#   (the Intel slice under Rosetta: prefix with `arch -x86_64`)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT=$PWD
 SCRATCH=${GLIDE_SCRATCH:-$ROOT/.build}
-ARCH=${GLIDE_ARCH:-arm64}
+ARCH=${GLIDE_ARCH:-universal}
+while (( $# )); do
+  case $1 in
+    --arch) [[ $# -ge 2 ]] || { echo "--arch needs a value (arm64, x86_64, universal)" >&2; exit 2; }; ARCH=$2; shift 2 ;;
+    --arch=*) ARCH=${1#--arch=}; shift ;;
+    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    *) echo "unknown option $1 (use --arch arm64|x86_64|universal)" >&2; exit 2 ;;
+  esac
+done
 OUT=$ROOT/build
 APP=$OUT/Glide.app
 ICON=$ROOT/../build/icon.icns
@@ -26,20 +39,31 @@ VERSION=${VERSION:-0.0.0}
 BUILD_NUMBER=${GLIDE_BUILD_NUMBER:-$(date +%Y%m%d%H%M)}
 
 case $ARCH in
-  arm64) ARCH_FLAGS=(--arch arm64) ;;
-  x86_64) ARCH_FLAGS=(--arch x86_64) ;;
-  universal)
-    # TODO(universal): `swift build --arch arm64 --arch x86_64` builds through xcbuild into
-    # <scratch>/apple/Products/Release; untested here (no x86_64 toolchain verification yet).
-    ARCH_FLAGS=(--arch arm64 --arch x86_64) ;;
-  *) echo "unknown GLIDE_ARCH=$ARCH (arm64, x86_64, universal)" >&2; exit 2 ;;
+  arm64|x86_64) SLICES=($ARCH) ;;
+  universal) SLICES=(arm64 x86_64) ;;
+  *) echo "unknown arch $ARCH (arm64, x86_64, universal)" >&2; exit 2 ;;
 esac
 
-echo "==> swift build -c release ${ARCH_FLAGS[*]} (scratch: $SCRATCH)"
-swift build -c release --product Glide --scratch-path "$SCRATCH" "${ARCH_FLAGS[@]}"
-BIN_DIR=$(swift build -c release --product Glide --scratch-path "$SCRATCH" "${ARCH_FLAGS[@]}" --show-bin-path)
-BIN=$BIN_DIR/Glide
-[[ -x $BIN ]] || { echo "no binary at $BIN" >&2; exit 1; }
+BINS=()
+BIN_DIR=
+for a in $SLICES; do
+  echo "==> swift build -c release --arch $a (scratch: $SCRATCH)"
+  swift build -c release --product Glide --scratch-path "$SCRATCH" --arch "$a"
+  d=$(swift build -c release --product Glide --scratch-path "$SCRATCH" --arch "$a" --show-bin-path)
+  [[ -x $d/Glide ]] || { echo "no binary at $d/Glide" >&2; exit 1; }
+  [[ $(lipo -archs "$d/Glide") == "$a" ]] || { echo "$d/Glide is $(lipo -archs "$d/Glide"), expected $a" >&2; exit 1; }
+  BINS+=("$d/Glide")
+  [[ -n $BIN_DIR ]] || BIN_DIR=$d   # resource bundles are arch-independent; take them from the first slice
+done
+if (( ${#BINS} > 1 )); then
+  BIN=$SCRATCH/Glide-universal
+  echo "==> lipo -create ${SLICES[*]}"
+  lipo -create "${BINS[@]}" -output "$BIN"
+else
+  BIN=${BINS[1]}
+fi
+GOT=(${(o)=$(lipo -archs "$BIN")})
+[[ ${GOT[*]} == ${${(o)SLICES}[*]} ]] || { echo "lipo: $BIN is ${GOT[*]}, expected ${SLICES[*]}" >&2; exit 1; }
 
 echo "==> assembling $APP"
 rm -rf "$APP"
@@ -91,6 +115,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSDesktopFolderUsageDescription</key><string>Glide searches files on your Desktop.</string>
   <key>NSDocumentsFolderUsageDescription</key><string>Glide searches files in your Documents folder.</string>
   <key>NSDownloadsFolderUsageDescription</key><string>Glide searches files in your Downloads folder.</string>
+  <key>NSRemovableVolumesUsageDescription</key><string>Glide searches and opens files on external drives you connect.</string>
+  <key>NSNetworkVolumesUsageDescription</key><string>Glide searches and opens files on network drives you connect.</string>
   <key>NSScreenCaptureUsageDescription</key><string>Glide reads text on screen (OCR) and picks colors when you ask it to.</string>
 </dict>
 </plist>

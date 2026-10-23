@@ -40,7 +40,7 @@ struct MCPServerToolDef {
 
     static let none = agentSchema()
 
-    /// The 23 tools (docs/MCP.md), in catalogue order.
+    /// The 24 tools (docs/MCP.md + delete_reminder), in catalogue order.
     static func all() -> [MCPServerToolDef] {
         [
             wrap("search_glide", "Search Glide", agent: "search_catalogue", readOnly: true, destructive: false,
@@ -69,6 +69,8 @@ struct MCPServerToolDef {
                              readOnly: true, destructive: false, requires: "reminders",
                              inputSchema: agentSchema(["query": agentProp("string", "Only reminders whose title contains this text"), "limit": agentProp("integer", "1-100, default 30")])),
             wrap("create_reminder", "Create Reminder", agent: "create_reminder", readOnly: false, destructive: false, "Create an Apple Reminder through Glide with an optional due date (ISO 8601) and notes."),
+            wrap("delete_reminder", "Delete Reminder", agent: "delete_reminder", readOnly: false, destructive: true,
+                 "Permanently delete one of the user's Apple Reminders by id (from list_reminders) or exact title. Off unless the user enables it; the user confirms every call in Glide."),
             wrap("list_automations", "List Automations", agent: "list_automations", readOnly: true, destructive: false, "List the user's Glide automations (trigger → action rules) with their ids."),
             wrap("run_automation", "Run Automation", agent: "run_automation", readOnly: false, destructive: true, "Run one of the user's Glide automations now by id (from list_automations), ignoring its trigger."),
             MCPServerToolDef(name: "capture_text_from_image", title: "Text from Image File",
@@ -197,7 +199,7 @@ struct MCPPendingRequest: Equatable {
     }
 }
 
-enum MCPDecision: String { case allow, deny, always, timeout }
+enum MCPDecision: String { case allow, deny, always, timeout, cancelled }
 
 /// Pending confirmations: each waits for Allow / Deny / Always in Glide; denied on timeout, when too many
 /// already wait (5), or when the server stops.
@@ -208,12 +210,14 @@ enum MCPDecision: String { case allow, deny, always, timeout }
     var maxPending = 5
     var now: () -> Double = agentNowMs
     private var waiting: [String: (req: MCPPendingRequest, resume: (MCPDecision) -> Void)] = [:]
+    /// Caller tag (session + JSON-RPC id) → pending id, for notifications/cancelled.
+    private var tags: [String: String] = [:]
     private var order: [String] = []
     private var seq = 0
 
     var pending: [MCPPendingRequest] { order.compactMap { waiting[$0]?.req } }
 
-    func request(client: String, tool: String, toolTitle: String, summary: String) async -> MCPDecision {
+    func request(client: String, tool: String, toolTitle: String, summary: String, tag: String? = nil) async -> MCPDecision {
         if waiting.count >= maxPending { return .deny }
         let t = now()
         let ms = max(1000, timeoutMs())
@@ -228,6 +232,7 @@ enum MCPDecision: String { case allow, deny, always, timeout }
                 c.resume(returning: d)
             })
             order.append(req.id)
+            if let tag { tags[tag] = req.id }
             onChange(pending)
             onRequest(req)
             Task { @MainActor [weak self] in
@@ -240,17 +245,24 @@ enum MCPDecision: String { case allow, deny, always, timeout }
     @discardableResult func settle(_ id: String, _ d: MCPDecision) -> Bool {
         guard let w = waiting.removeValue(forKey: id) else { return false }
         order.removeAll { $0 == id }
+        tags = tags.filter { $0.value != id }
         w.resume(d)
         onChange(pending)
         return true
     }
 
     @discardableResult func respond(_ id: String, _ decision: String) -> Bool {
-        guard let d = MCPDecision(rawValue: decision), d != .timeout else { return false }
+        guard let d = MCPDecision(rawValue: decision), d != .timeout, d != .cancelled else { return false }
         return settle(id, d)
     }
 
     func denyAll() { for id in order { settle(id, .deny) } }
+
+    /// The client cancelled the request that is waiting on this prompt.
+    @discardableResult func cancel(tag: String) -> Bool {
+        guard let id = tags[tag] else { return false }
+        return settle(id, .cancelled)
+    }
 }
 
 // MARK: - request log (<dataDir>/requests.json; never arguments or results)
@@ -261,7 +273,7 @@ struct MCPLogEntry: Codable, Equatable {
     var client: String
     var tool: String
     var summary: String
-    /// ok | error | denied | timeout | off | rate-limited | invalid
+    /// ok | error | denied | timeout | cancelled | off | rate-limited | invalid
     var outcome: String
     var ms: Double
     var error: String?
@@ -374,7 +386,16 @@ struct MCPServerPrepared {
         return .object(o)
     }
 
-    func call(client: String, name: String, args raw: JSONValue) async -> JSONValue {
+    func isKnownTool(_ name: String) -> Bool { tools.contains { $0.name == name && backend.available($0) } }
+
+    func recordUnknown(client: String, name: String) {
+        log.add(at: now(), client: client, tool: name, summary: "Unknown tool \(name)", outcome: "invalid", ms: 0)
+    }
+
+    /// notifications/cancelled for a call that may be waiting on a confirmation.
+    func cancel(requestKey: String) { confirmations.cancel(tag: requestKey) }
+
+    func call(client: String, name: String, args raw: JSONValue, requestKey: String? = nil) async -> JSONValue {
         let t0 = now()
         let s = settings()
         let tool = tools.first { $0.name == name && backend.available($0) }
@@ -407,8 +428,11 @@ struct MCPServerPrepared {
         let summary = await prepared.describe()
         var approval = "auto"
         if gate == .confirm {
-            let d = await confirmations.request(client: client, tool: tool.name, toolTitle: tool.title, summary: summary)
+            let d = await confirmations.request(client: client, tool: tool.name, toolTitle: tool.title, summary: summary, tag: requestKey)
             switch d {
+            case .cancelled:
+                record(summary, "cancelled")
+                return Self.text("The request was cancelled before the user answered.", isError: true)
             case .deny, .timeout:
                 record(summary, d == .deny ? "denied" : "timeout")
                 return Self.text(d == .deny ? "The user denied this request in Glide." : "No answer in Glide before the confirmation timed out, so the request was denied.", isError: true)
@@ -465,7 +489,7 @@ struct MCPServerPrepared {
         if uri.hasPrefix(Self.notePrefix) {
             guard allowed("search_notes", client) else { throw MCPError(code: MCP.invalidParams, message: "Reading notes is turned off in Glide Settings → MCP Server (search_notes).") }
             let id = String(uri.dropFirst(Self.notePrefix.count)).removingPercentEncoding ?? ""
-            guard let body = await backend.note(id) else { throw MCPError(code: MCP.invalidParams, message: "No note with id \(id)") }
+            guard let body = await backend.note(id) else { throw MCPError(code: MCP.resourceNotFound, message: "No note with id \(id)", data: ["uri": .string(uri)]) }
             return ["uri": .string(uri), "mimeType": "text/markdown", "text": .string(body)]
         }
         if uri == Self.clipboardURI {
@@ -474,6 +498,6 @@ struct MCPServerPrepared {
             }
             return ["uri": .string(uri), "mimeType": "application/json", "text": .string(AgentText.json(.array(await backend.clipboardRecent(20))))]
         }
-        throw MCPError(code: MCP.invalidParams, message: "Unknown resource \(uri)")
+        throw MCPError(code: MCP.resourceNotFound, message: "Resource not found: \(uri)", data: ["uri": .string(uri)])
     }
 }

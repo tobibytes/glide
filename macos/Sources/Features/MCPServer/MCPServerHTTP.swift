@@ -88,6 +88,9 @@ struct MCPHTTPParser {
     private var streams: [String: [MCPHTTPConnection]] = [:]
     private var connections: [ObjectIdentifier: MCPHTTPConnection] = [:]
     private var sweep: Task<Void, Never>?
+    private var heartbeat: Task<Void, Never>?
+    /// SSE comment interval on open GET streams, so clients' idle-body timeouts (undici: 300 s) never fire.
+    var heartbeatInterval: Duration = .seconds(20)
 
     init(token: @escaping () -> String, makeSession: @escaping () -> MCPServerSession) {
         self.token = token
@@ -109,7 +112,16 @@ struct MCPHTTPParser {
                 try? await Task.sleep(for: .seconds(60))
                 guard let self else { return }
                 let cutoff = Date().addingTimeInterval(-self.idle)
-                for (id, s) in self.sessions where s.lastSeen < cutoff { self.drop(id) }
+                // A session with an open GET stream is a connected client even when it sends nothing.
+                for (id, s) in self.sessions where s.lastSeen < cutoff && (self.streams[id] ?? []).isEmpty { self.drop(id) }
+            }
+        }
+        heartbeat = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                guard let interval = self?.heartbeatInterval else { return }
+                try? await Task.sleep(for: interval)
+                guard let self else { return }
+                for list in self.streams.values { for c in list { c.sendComment("ping") } }
             }
         }
     }
@@ -168,6 +180,10 @@ struct MCPHTTPParser {
         if let sid = req.headers["mcp-session-id"], !sid.isEmpty {
             guard let s = sessions[sid] else { return conn.send(status: 404, body: Self.rpcError("Unknown or expired session")) }
             s.lastSeen = Date()
+            // 2025-06-18 transport spec: an invalid or unsupported MCP-Protocol-Version is a 400.
+            if let v = req.headers["mcp-protocol-version"], !MCP.supportedProtocolVersions.contains(v) {
+                return conn.send(status: 400, body: Self.rpcError("Unsupported MCP-Protocol-Version: \(v.prefix(40))"))
+            }
             switch req.method {
             case "DELETE":
                 drop(sid)
@@ -225,6 +241,7 @@ struct MCPHTTPParser {
 
     func close() async {
         sweep?.cancel()
+        heartbeat?.cancel()
         for id in Array(sessions.keys) { drop(id) }
         for c in connections.values { c.close() }
         connections.removeAll()
@@ -319,6 +336,11 @@ struct MCPHTTPParser {
         busy = false
         let head = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n: glide\n\n"
         connection.send(content: Data(head.utf8), completion: .contentProcessed { _ in })
+    }
+
+    func sendComment(_ text: String) {
+        guard streaming, !closed else { return }
+        connection.send(content: Data(": \(text)\n\n".utf8), completion: .contentProcessed { _ in })
     }
 
     func sendEvent(_ data: Data) {

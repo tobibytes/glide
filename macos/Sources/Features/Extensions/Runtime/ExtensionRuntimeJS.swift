@@ -2582,7 +2582,7 @@ module.exports = globalThis.__glideApi;
       getApplications,
       getDefaultApplication: () => Promise.reject(new Error("getDefaultApplication is not supported in Glide yet")),
       getFrontmostApplication,
-      updateCommandMetadata: async () => void 0,
+      updateCommandMetadata: async (metadata) => void await req("updateCommandMetadata", [{ subtitle: metadata?.subtitle ?? null }]),
       captureException: (e) => console.error(e),
       OAuth: {
         RedirectMethod: { Web: "web", App: "app", AppURI: "appURI" },

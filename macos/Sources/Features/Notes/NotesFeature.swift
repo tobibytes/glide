@@ -147,7 +147,7 @@ import SwiftUI
         let n = store.file.notes.count
         return [item("toggle", "Toggle Floating Notes", "Floating Notes", "note.text", ["notes", "sticky", "scratchpad", "float"]),
                 item("new", "New Note", "Floating Notes", "square.and.pencil", ["notes", "create", "sticky"], argument: true),
-                item("search", "Search Notes", "\(n) note\(n == 1 ? "" : "s")", "magnifyingglass", ["notes", "find", "floating"])]
+                item("search", "Search Notes", "\(n) note\(n == 1 ? "" : "s")", "magnifyingglass", ["notes", "find", "floating"], argument: true)] // fix round: Tab → query
     }
 
     public func actions(for item: SearchItem) -> [ItemAction] {
@@ -170,7 +170,7 @@ import SwiftUI
             return .hide()
         case "search":
             n7AfterUpdate { [weak self] in self?.searchModel.syncHost() }
-            return .pushView(ViewID(feature: id, name: "search"))
+            return .pushView(ViewID(feature: id, name: "search"), payload: scored.argument.map { ["query": .string($0)] } ?? .null) // fix round
         default: return .error("Unknown action \(action)")
         }
     }

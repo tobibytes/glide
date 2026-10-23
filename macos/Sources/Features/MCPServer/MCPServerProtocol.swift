@@ -18,6 +18,8 @@ import GlideCore
     var lastSeen = Date()
     /// Server → client messages (notifications) for transports that can push (SSE stream / stdio).
     var push: ((JSONValue) -> Void)?
+    /// tools/call requests still running (idKey), so notifications/cancelled can withdraw their confirmation.
+    private var inFlight = Set<String>()
 
     init(id: String = UUID().uuidString, handler: MCPCallHandler, version: String) {
         self.id = id
@@ -35,22 +37,29 @@ import GlideCore
     func handle(_ m: JSONValue) async -> JSONValue? {
         lastSeen = Date()
         switch MCP.kind(m) {
-        case .notification, .response: return nil
+        case .notification:
+            // The client gave up on a request (timeout / abort): withdraw its confirmation prompt, if any.
+            if m["method"]?.stringValue == "notifications/cancelled", let rid = m["params"]?["requestId"] {
+                let key = MCP.idKey(rid)
+                if inFlight.contains(key) { handler.cancel(requestKey: "\(id)/\(key)") }
+            }
+            return nil
+        case .response: return nil
         case .invalid: return MCP.error(id: m["id"] ?? .null, code: MCP.invalidRequest, message: "Invalid JSON-RPC message")
         case .request: break
         }
         let id = m["id"] ?? .null
         let params = m["params"] ?? [:]
         do {
-            return MCP.result(id: id, try await dispatch(m["method"]?.stringValue ?? "", params))
+            return MCP.result(id: id, try await dispatch(m["method"]?.stringValue ?? "", params, requestId: id))
         } catch let e as MCPError {
-            return MCP.error(id: id, code: e.code, message: e.message)
+            return MCP.error(id: id, code: e.code, message: e.message, data: e.data)
         } catch {
             return MCP.error(id: id, code: MCP.internalError, message: error.localizedDescription)
         }
     }
 
-    private func dispatch(_ method: String, _ p: JSONValue) async throws -> JSONValue {
+    private func dispatch(_ method: String, _ p: JSONValue, requestId: JSONValue) async throws -> JSONValue {
         switch method {
         case "initialize":
             clientName = Self.label(p["clientInfo"])
@@ -66,7 +75,16 @@ import GlideCore
         case "tools/list": return ["tools": .array(handler.visibleTools(client: clientName).map(\.listEntry))]
         case "tools/call":
             guard let name = p["name"]?.stringValue else { throw MCPError(code: MCP.invalidParams, message: "tools/call needs a name") }
-            return await handler.call(client: clientName, name: name, args: p["arguments"] ?? [:])
+            // Spec (tools → error handling): an unknown tool is a protocol error (-32602); failures of a known tool
+            // (bad arguments, denied, turned off) are results with isError so the model can read them.
+            guard handler.isKnownTool(name) else {
+                handler.recordUnknown(client: clientName, name: name)
+                throw MCPError(code: MCP.invalidParams, message: "Unknown tool: \(name)")
+            }
+            let key = MCP.idKey(requestId)
+            inFlight.insert(key)
+            defer { inFlight.remove(key) }
+            return await handler.call(client: clientName, name: name, args: p["arguments"] ?? [:], requestKey: "\(id)/\(key)")
         case "resources/list": return ["resources": .array(await handler.listResources(client: clientName))]
         case "resources/templates/list": return ["resourceTemplates": .array(handler.resourceTemplates(client: clientName))]
         case "resources/read":

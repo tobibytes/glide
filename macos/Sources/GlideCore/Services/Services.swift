@@ -116,7 +116,8 @@ public struct ShellResult: Hashable, Sendable {
 public struct SelectionResult: Hashable, Codable, Sendable {
     public var text: String?
     public var app: String?
-    /// "no-accessibility" | "no-target-app" | "no-focused-element" | "no-selected-text"
+    /// "no-accessibility" | "no-target-app" | "no-focused-element" | "no-selected-text" | "secure-field" (password
+    /// field, never read) | "timeout"
     public var reason: String?
     public init(text: String?, app: String?, reason: String?) {
         self.text = text
@@ -331,6 +332,12 @@ public struct BarcodeResult: Hashable, Codable, Sendable {
     func reminders(listId: String?, includeCompleted: Bool) async throws -> JSONValue
     func createReminder(_ params: JSONValue) async throws -> JSONValue
     func completeReminder(id: String, completed: Bool) async throws -> JSONValue
+    /// Remove a reminder permanently (EKEventStore.remove + commit). Returns `{"id", "deleted": true}`. (fix round)
+    func deleteReminder(id: String) async throws -> JSONValue
+}
+
+public extension EventKitService {
+    func deleteReminder(id: String) async throws -> JSONValue { throw FeatureError.failed("Deleting reminders is not supported here") }
 }
 
 public struct FinderSelectionResult: Hashable, Codable, Sendable {
@@ -420,6 +427,9 @@ public struct PickedColor: Hashable, Codable, Sendable {
     public let spotlight: any SpotlightShortcutService
     /// True in GLIDE_HEADLESS mode: side effects are recorded, not performed.
     public let isHeadless: Bool
+    /// Shared menu-bar items (StatusItems.swift). The factories install the NSStatusItem renderer (live) or the
+    /// recording fake (headless); the default only keeps state.
+    public var statusItems: any StatusItemService = StatusItemHub()
 
     public init(workspace: any WorkspaceService, pasteboard: any PasteboardService, paste: any PasteService,
                 notifications: any NotificationService, scripts: any ScriptService, confirmation: any ConfirmationService,

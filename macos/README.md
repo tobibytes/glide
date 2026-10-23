@@ -25,7 +25,9 @@ A full Swift rewrite of Glide, the keyboard-first launcher in `../` (Electron). 
 ```sh
 swift build                      # debug
 scripts/test.sh                  # swift build && swift test (the E2E suites drive the real binary, headless)
-scripts/build-app.sh             # release .app → build/Glide.app (signed, verified; never installed or launched)
+scripts/build-app.sh             # universal (arm64 + x86_64) release .app → build/Glide.app (signed, verified; never installed or launched)
+scripts/build-app.sh --arch arm64  # one slice only (faster); also x86_64
+scripts/make-dmg.sh              # build/Glide.app → build/Glide-<version>.dmg (+ .sha256); `--arch …` builds first
 ```
 
 Parallel work sessions each build in their own scratch directory:

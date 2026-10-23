@@ -88,8 +88,12 @@ struct MCPToolDef: Equatable, Sendable {
             try? await Task.sleep(for: timeout)
             guard !Task.isCancelled, let self, let c = self.pending.removeValue(forKey: key) else { return }
             c.resume(throwing: MCPError(code: MCP.requestTimeout, message: "Request timed out"))
-            // Tell the server we gave up (spec: notifications/cancelled).
-            try? await self.transport.send(MCP.notification("notifications/cancelled", params: ["requestId": .int(Int64(id)), "reason": "timeout"]))
+            // Tell the server we gave up (spec: notifications/cancelled). In its own task: this timer task is
+            // cancelled as soon as the caller resumes, and that would cancel an HTTP POST before it is sent.
+            let transport = self.transport
+            Task { @MainActor in
+                try? await transport.send(MCP.notification("notifications/cancelled", params: ["requestId": .int(Int64(id)), "reason": "timeout"]))
+            }
         }
         defer { timer.cancel() }
         return try await withTaskCancellationHandler {
@@ -103,7 +107,10 @@ struct MCPToolDef: Equatable, Sendable {
             }
         } onCancel: {
             Task { @MainActor [weak self] in
-                if let c = self?.pending.removeValue(forKey: key) { c.resume(throwing: CancellationError()) }
+                guard let self, let c = self.pending.removeValue(forKey: key) else { return }
+                c.resume(throwing: CancellationError())
+                // The caller (e.g. a stopped agent run) gave up: let the server stop working on it.
+                try? await self.transport.send(MCP.notification("notifications/cancelled", params: ["requestId": .int(Int64(id)), "reason": "cancelled"]))
             }
         }
     }

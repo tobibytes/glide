@@ -289,7 +289,7 @@ import UniformTypeIdentifiers
         let panel = NSOpenPanel()
         panel.title = "Import Snippets (Raycast or Glide JSON)"
         panel.allowedContentTypes = [.json]
-        guard panel.runModal() == .OK, let url = panel.url, let json = try? String(contentsOf: url, encoding: .utf8) else { return .stay(message: nil) }
+        guard GlideWindows.shared.runModal({ panel.runModal() }) == .OK, let url = panel.url, let json = try? String(contentsOf: url, encoding: .utf8) else { return .stay(message: nil) }
         do { return .stay(message: Self.message(try importJSON(json))) } catch { return .error(error.localizedDescription) }
     }
 
@@ -299,7 +299,7 @@ import UniformTypeIdentifiers
         panel.title = "Export Snippets"
         panel.nameFieldStringValue = "Glide Snippets.json"
         panel.allowedContentTypes = [.json]
-        guard panel.runModal() == .OK, let url = panel.url else { return .stay(message: nil) }
+        guard GlideWindows.shared.runModal({ panel.runModal() }) == .OK, let url = panel.url else { return .stay(message: nil) }
         do {
             try exportJSON().write(to: url, atomically: true, encoding: .utf8)
             return .stay(message: "Exported to \(url.lastPathComponent)")

@@ -87,7 +87,7 @@ import SwiftUI
 
     public func items() -> [SearchItem] {
         [SearchItem(id: "fileindex:search", kind: .command, title: "Search Files", subtitle: "Spotlight file search with Quick Look", icon: .symbol("doc.text.magnifyingglass"),
-                    keywords: ["find", "files", "folders", "documents", "finder", "spotlight"], feature: id, kindLabel: "File Search"),
+                    keywords: ["find", "files", "folders", "documents", "finder", "spotlight"], acceptsArgument: true, feature: id, kindLabel: "File Search"), // fix round: Tab → query
          SearchItem(id: "fileindex:recent", kind: .command, title: "Recent Files", subtitle: "Files opened from Glide", icon: .symbol("clock.arrow.circlepath"),
                     keywords: ["recent", "files", "history", "opened"], feature: id, kindLabel: "File Search")]
     }

@@ -105,9 +105,13 @@ struct KeyEngine {
 
     mutating func setEntries(_ list: [SnippetEntry]) {
         // Longest keyword first so ";sig2" wins over ";sig"; empty ones are dropped.
-        entries = list.filter { !$0.keyword.isEmpty && (!$0.text.isEmpty || $0.id != nil) }.sorted { $0.keyword.count > $1.keyword.count }
+        let next = list.filter { !$0.keyword.isEmpty && (!$0.text.isEmpty || $0.id != nil) }.sorted { $0.keyword.count > $1.keyword.count }
+        // The config is re-sent often while typing ({time}/{clipboard} snippets re-render every 20 s, 400 ms after
+        // each expansion, on every Paste Stack change): only a different keyword set restarts the typed word, so
+        // a keyword typed across a refresh still expands (input-audit fix).
+        if next.map(\.keyword) != entries.map(\.keyword) { buffer = "" }
+        entries = next
         maxKeyword = entries.map { $0.keyword.count }.max() ?? 0
-        buffer = ""
     }
 
     mutating func resetBuffer() { buffer = "" }

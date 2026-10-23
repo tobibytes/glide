@@ -23,8 +23,17 @@ import SwiftUI
 
     func show(page: String?) {
         if let page { model.route(page) }
-        NSApp.activate(ignoringOtherApps: true) // Settings is a normal, activating window
-        window.makeKeyAndOrderFront(nil)
+        // Opened again from another display: come up centred on the screen the user is on (where the launcher
+        // and the mouse are), not on the screen it was first created on.
+        if !window.isVisible, let screen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }), screen != window.screen {
+            let v = screen.visibleFrame
+            var f = window.frame
+            f.size = NSSize(width: min(f.width, v.width), height: min(f.height, v.height))
+            f.origin = NSPoint(x: (v.midX - f.width / 2).rounded(), y: (v.midY - f.height / 2).rounded())
+            window.setFrame(f, display: false)
+        }
+        // A normal, activating window: Dock + ⌘Tab while open, focus back to the user's app on close.
+        GlideWindows.shared.present(window)
     }
 }
 
@@ -221,7 +230,9 @@ struct HotkeyRecorder: View {
     }
 
     private func start() {
+        guard monitor == nil else { return }
         recording = true
+        HotkeyCapture.begin() // the combo must reach the monitor, not toggle the launcher
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { e in
             if e.keyCode == 53 && e.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty { stop(); return nil }
             if let accel = Self.accelerator(from: e) { commit(accel); stop() }
@@ -231,7 +242,10 @@ struct HotkeyRecorder: View {
 
     private func stop() {
         recording = false
-        if let monitor { NSEvent.removeMonitor(monitor) }
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+            HotkeyCapture.end()
+        }
         monitor = nil
     }
 

@@ -20,7 +20,7 @@ import SwiftUI
 
     public func items() -> [SearchItem] {
         [SearchItem(id: "menus.search", kind: .command, title: "Search Menu Items", subtitle: "Menu Bar", icon: .symbol("filemenu.and.selection"),
-                    keywords: ["menu", "menu bar", "menubar", "commands", "actions", "shortcuts"], feature: id, kindLabel: "Menu")]
+                    keywords: ["menu", "menu bar", "menubar", "commands", "actions", "shortcuts"], acceptsArgument: true, feature: id, kindLabel: "Menu")] // fix round: Tab → query
     }
 
     public func actions(for item: SearchItem) -> [ItemAction] {
@@ -34,7 +34,9 @@ import SwiftUI
         let front = context?.services.frontmost.targetApp()
         nav.reset()
         await load(pid: front?.pid, appName: front?.name)
-        return .pushView("menus.search", payload: front.map { ["pid": .int(Int64($0.pid)), "appName": .string($0.name)] } ?? .null)
+        var payload: [String: JSONValue] = front.map { ["pid": .int(Int64($0.pid)), "appName": .string($0.name)] } ?? [:]
+        if let q = scored.argument, !q.isEmpty { payload["query"] = .string(q) } // fix round: argument pre-fills the field
+        return .pushView("menus.search", payload: payload.isEmpty ? .null : .object(payload))
     }
 
     func load(pid: Int32?, appName: String?) async {

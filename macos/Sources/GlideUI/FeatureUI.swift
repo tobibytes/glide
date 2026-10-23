@@ -20,12 +20,23 @@ import SwiftUI
     func setTitle(_ title: String)
     /// Ids of the pushed views, bottom → top (e.g. to avoid stacking a duplicate). (integration)
     var viewStack: [ViewID] { get }
+    /// Same as `setTitle`: the footer's context title of the top view (the name docs/requests asked for). (fix round)
+    func setContextTitle(_ title: String)
+    /// The launcher's vim state: nil = vim mode off in Settings, else NORMAL/INSERT. (fix round)
+    var vimMode: VimMode? { get }
+    /// Pop this view and hide the launcher in one call (after a pushed view completed its job). (fix round)
+    func popAndClose()
 }
 
 public extension LauncherViewHost {
     func setQuery(_ text: String) {}
     func setTitle(_ title: String) {}
     var viewStack: [ViewID] { [] }
+    func setContextTitle(_ title: String) { setTitle(title) }
+    var vimMode: VimMode? { nil }
+    func popAndClose() { pop(); close() }
+    /// Whether a view with this id is anywhere on the launcher's stack (e.g. re-push only when it is gone). (fix round)
+    func isOnStack(_ view: ViewID) -> Bool { viewStack.contains(view) }
 }
 
 /// A page in the Settings window sidebar.

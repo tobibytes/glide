@@ -81,6 +81,22 @@ public struct SearchEngine: Sendable {
         let restUnits = Array(units[(space + 1)...])
         let argument = String(utf16CodeUnits: restUnits, count: restUnits.count).trimmingLeadingWhitespace()
         if argument.isEmpty { return nil }
+        // Fix round: "search files report" / "clipboard history foo": the WHOLE title of an acceptsArgument item
+        // followed by text makes the text its argument (longest title wins), before the first-word rule below.
+        // Not while the query is still the start of another title ("search files in…" → "Search Files in Folder").
+        let wholeFolded = foldUnits(raw.trimmingCharacters(in: .whitespacesAndNewlines))
+        let typingATitle = candidates.contains { !Self.notRanked.contains($0.item.kind) && $0.title.folded.starts(with: wholeFolded) }
+        var full: (index: Int, headLen: Int, argument: String)?
+        for (i, c) in candidates.enumerated() where !typingATitle && c.item.acceptsArgument == true && !Self.notRanked.contains(c.item.kind) {
+            let title = c.item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard title.contains(" "), let r = raw.range(of: title, options: [.anchored, .caseInsensitive, .diacriticInsensitive]),
+                  r.upperBound < raw.endIndex, raw[r.upperBound].isWhitespace else { continue }
+            let rest = String(raw[r.upperBound...]).trimmingLeadingWhitespace()
+            let headLen = raw.utf16.distance(from: raw.startIndex, to: r.upperBound)
+            if rest.isEmpty { continue }
+            if full == nil || headLen > full!.headLen { full = (i, headLen, rest) }
+        }
+        if let full { return (full.index, full.argument, full.headLen) }
         let whole = foldUnits(raw.trimmingCharacters(in: .whitespacesAndNewlines))
         // Typing ANY item's multi-word title ("search snippets", "ask name demo") is not head + argument for a
         // different item that merely shares the first word ("Search Bookmarks", "Ask Glide Agent"). Only an

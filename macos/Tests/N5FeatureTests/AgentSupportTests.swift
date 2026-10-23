@@ -137,7 +137,7 @@ struct AgentSupportTests {
         if case let .ready(p) = prep("start_timer", ["minutes": 25, "name": "Focus"]) { #expect(await p.describe() == "Start a 25 min timer named “Focus”") }
         if case let .ready(p) = prep("transform_text", ["transform": "upper", "text": "abc"]) { #expect((try? await p.run().text) == "ABC") }
         if case let .ready(p) = prep("convert", ["query": "2+3"]) { #expect((try? await p.run().text)?.contains("5") == true) }
-        #expect(tools.count == 35)
+        #expect(tools.count == 36) // + delete_reminder (fix round)
         #expect(Set(tools.map(\.name)).count == tools.count)
     }
 

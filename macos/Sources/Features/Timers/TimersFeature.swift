@@ -13,7 +13,8 @@ import SwiftUI
     public private(set) var data = TimersData()
     var now: N7Now = n7SystemNow
     private var ticker: Timer?
-    private var lastStatusTitle = ""
+    private var statusShown = false
+    static let statusItemId = "timers"
     /// Notifications this run posted (title) — the test channel reads them.
     public private(set) var notified: [String] = []
     lazy var listModel = N7ListModel(placeholder: "Type a duration (25m, 1h30m tea, 5:00) or search timers…", emptyTitle: "No timers match",
@@ -96,14 +97,42 @@ import SwiftUI
         NSSound(named: NSSound.Name(sound))?.play()
     }
 
-    /// Countdown next to the Glide menu-bar icon through the shared `setStatusTitle` (integration: replaces this
-    /// feature's own NSStatusItem; the Menu Bar feature claims the title when its Timers extra is on, so the
-    /// countdown never shows twice). Only sent on change (it ticks every second).
+    /// The soonest timer through the shared status-item API (`services.statusItems`, item "timers", `.combinable`):
+    /// next to Glide's icon with its actions in Glide's menu while "Show timers and focus in Glide's menu bar
+    /// icon" is on, its own icon otherwise. When the Menu Bar feature's Timers extra is on it shows the timers
+    /// (`StatusTitleRouting.claim`), so the countdown never appears twice.
     private func updateStatusItem() {
+        guard let ctx = context else { return }
         let title = showInMenuBar ? TimersModel.trayTitle(data, now: now()) : ""
-        guard title != lastStatusTitle else { return }
-        lastStatusTitle = title
-        context?.setStatusTitle(title)
+        let claimed = !title.isEmpty && (StatusTitleRouting.claim?(id, title) ?? false)
+        guard !title.isEmpty, !claimed, let spec = statusSpec(title: title) else {
+            if statusShown { ctx.services.statusItems.remove(Self.statusItemId) }
+            statusShown = false
+            return
+        }
+        statusShown = true
+        ctx.services.statusItems.show(Self.statusItemId, spec, placement: .combinable)
+    }
+
+    /// Countdown title + the Menu Bar Timers extra's rows (pause / add / stop per timer, presets, Show Timers…).
+    func statusSpec(title: String) -> StatusItemSpec? {
+        var state = N7JSON.value(data).objectValue ?? [:]
+        state["settings"] = ["showInMenuBar": true]
+        let actions = TimerActions(
+            toggle: { [weak self] tid in self?.updateTimer(tid) { [weak self] in TimersModel.toggle($0, now: self?.now() ?? 0) } },
+            add: { [weak self] tid, ms in self?.updateTimer(tid) { TimersModel.addTime($0, ms: ms) } },
+            stop: { [weak self] tid in self?.updateTimer(tid) { _ in nil } },
+            stopwatchToggle: { [weak self] sid in self?.updateStopwatch(sid) { [weak self] in TimersModel.toggle($0, now: self?.now() ?? 0) } },
+            stopwatchRemove: { [weak self] sid in self?.updateStopwatch(sid) { _ in nil } },
+            startPreset: { [weak self] pid in
+                guard let self, let p = self.data.presets.first(where: { $0.id == pid }) else { return }
+                self.startTimer(p.durationMs, p.name)
+            },
+            show: { [weak self] in self?.context?.push(ViewID(feature: "timers", name: "list"), payload: .null) })
+        guard let spec = ExtraSpecs.timers(TimersInput(json: .object(state)), now: now(), actions) else { return nil }
+        var out = StatusItemBridge.spec(spec, section: "Timers")
+        out.title = title
+        return out
     }
 
     // MARK: operations

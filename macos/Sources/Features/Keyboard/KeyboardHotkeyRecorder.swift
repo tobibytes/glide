@@ -114,8 +114,12 @@ struct KeyboardHotkeyField: View {
     }
 
     private func start() {
+        guard monitor == nil else { return }
         logic = HotkeyRecorderLogic()
         recording = true
+        // Glide's own hotkeys are unregistered meanwhile: Carbon consumes a registered combo (often the current
+        // launcher hotkey) before this monitor sees it, and a Double+⌘ binding would toggle the launcher.
+        HotkeyCapture.begin()
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { ev in
             handle(ev)
             return nil
@@ -126,7 +130,10 @@ struct KeyboardHotkeyField: View {
     }
 
     private func stop() {
-        if let monitor { NSEvent.removeMonitor(monitor) }
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+            HotkeyCapture.end()
+        }
         monitor = nil
         ticker?.invalidate()
         ticker = nil

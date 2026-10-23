@@ -8,7 +8,7 @@ import GlideCore
 
     static func all() -> [AgentTool] {
         [listAutomations(), createAutomation(), runAutomation(), listLayouts(), restoreLayout(), saveLayout(), transformText(), searchBookmarks(),
-         clipboardHistory(), listProcesses(), killProcess(), systemStatus(), createReminder(), createSnippet(), createQuicklink(), runShortcut(), setTheme()]
+         clipboardHistory(), listProcesses(), killProcess(), systemStatus(), createReminder(), deleteReminder(), createSnippet(), createQuicklink(), runShortcut(), setTheme()]
     }
 
     static let triggerHelp = #"Trigger object. kind "time" {time:"HH:MM", days:[0-6] (0=Sun, empty=every day)}, "interval" {minutes}, "app" {event:"launched"|"quit"|"activated", app}, "wifi" {event:"joined"|"left"|"changed", network}, "power" {event:"ac"|"battery"|"below"|"above", percent}, "display" {event:"connected"|"disconnected"|"any"}, "folder" {path, event:"added"|"any"}, "launch" {}."#
@@ -351,6 +351,59 @@ import GlideCore
                     return try AgentOp.from(try await caps.call("reminders", "complete", ["id": .string(id), "completed": true]), fallback: "Reminder marked completed").text("Reminder marked completed")
                 } }
                 return AgentToolOutput(text: r["message"]?.stringValue ?? "Reminder created", undo: undo)
+            })
+    }
+
+    /// The reminders the user has (Reminders feature `state`), or a readable failure.
+    static func reminderRows(_ caps: any AgentCapabilities) async throws -> [JSONValue] {
+        let st = try await caps.call("reminders", "state", .null)
+        if let status = st["status"]?.stringValue, status != "ok" {
+            throw AgentToolFailure(st["message"]?.stringValue ?? "Reminders unavailable (\(status)). Grant access in Glide → Reminders.")
+        }
+        return st["reminders"]?.arrayValue ?? []
+    }
+
+    /// id wins; else a title match (exact, case-insensitive, then a unique "contains").
+    static func findReminder(_ rows: [JSONValue], id: String?, title: String?) throws -> JSONValue {
+        if let id {
+            guard let r = rows.first(where: { $0["id"]?.stringValue == id }) else { throw AgentToolFailure("No reminder with id \(id)") }
+            return r
+        }
+        let t = (title ?? "").lowercased()
+        let exact = rows.filter { ($0["title"]?.stringValue ?? "").lowercased() == t }
+        let hits = exact.isEmpty ? rows.filter { ($0["title"]?.stringValue ?? "").lowercased().contains(t) } : exact
+        guard let first = hits.first else { throw AgentToolFailure("No reminder matches \(q(title ?? ""))") }
+        guard hits.count == 1 else {
+            throw AgentToolFailure("\(hits.count) reminders match \(q(title ?? "")): " + hits.prefix(5).map { "\(q($0["title"]?.stringValue ?? "")) (id \($0["id"]?.stringValue ?? ""))" }.joined(separator: ", ") + ". Pass id.")
+        }
+        return first
+    }
+
+    static func deleteReminder() -> AgentTool {
+        agentDefine(
+            name: "delete_reminder", title: "Delete Reminder",
+            description: "Permanently delete one of the user's Apple Reminders by its title (or id, when known). Several matches are refused with their ids. Always asks the user.",
+            mutating: true,
+            schema: agentSchema(["id": agentProp("string", "Reminder id"), "title": agentProp("string", "Exact title, when the id is unknown")]),
+            alwaysConfirm: true, destructive: true, requires: "reminders",
+            parse: { a -> (String?, String?) in
+                let id = try a.str("id", max: 400)?.trimmingCharacters(in: .whitespaces)
+                let title = try a.str("title", max: 200)?.trimmingCharacters(in: .whitespaces)
+                guard !(id ?? "").isEmpty || !(title ?? "").isEmpty else { throw AgentArgs.Bad(message: "Give the reminder's id or title") }
+                return ((id ?? "").isEmpty ? nil : id, (title ?? "").isEmpty ? nil : title)
+            },
+            describe: { a, caps in
+                if let rows = try? await reminderRows(caps), let r = try? findReminder(rows, id: a.0, title: a.1) {
+                    return "Delete the reminder \(q(r["title"]?.stringValue ?? "")) — this can't be undone"
+                }
+                return "Delete the reminder \(a.0.map { "with id \($0)" } ?? q(a.1 ?? "")) — this can't be undone"
+            },
+            run: { a, caps in
+                let r = try findReminder(try await reminderRows(caps), id: a.0, title: a.1)
+                guard let id = r["id"]?.stringValue else { throw AgentToolFailure("That reminder has no id") }
+                let title = r["title"]?.stringValue ?? id
+                let out = try await caps.call("reminders", "delete", ["id": .string(id)])
+                return AgentToolOutput(text: try AgentOp.from(out, fallback: "Deleted the reminder \(q(title))").text("Deleted the reminder \(q(title))"))
             })
     }
 

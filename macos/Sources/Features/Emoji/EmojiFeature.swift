@@ -57,7 +57,7 @@ import SwiftUI
 
     public func items() -> [SearchItem] {
         [SearchItem(id: "emoji:picker", kind: .command, title: "Search Emoji & Symbols", subtitle: "Emoji", icon: .emoji("😀"),
-                    keywords: ["emoji", "emoticon", "symbols", "smiley", "picker", "character"], feature: id, data: ["action": "picker"], kindLabel: "Command")]
+                    keywords: ["emoji", "emoticon", "symbols", "smiley", "picker", "character"], acceptsArgument: true, feature: id, data: ["action": "picker"], kindLabel: "Command")] // fix round: Tab → query
     }
 
     public func dynamicItems(for query: DynamicQuery) async -> [ScoredItem] {

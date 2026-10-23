@@ -4,8 +4,8 @@ import GlideCore
 /// Model Context Protocol over JSON-RPC 2.0, implemented natively (no SDK). Shared by the agent's MCP client
 /// (this folder) and Glide's MCP server (../MCPServer).
 enum MCP {
-    static let latestProtocolVersion = "2025-06-18"
-    static let supportedProtocolVersions = ["2025-06-18", "2025-03-26", "2024-11-05"]
+    static let latestProtocolVersion = "2025-11-25"
+    static let supportedProtocolVersions = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
 
     // JSON-RPC error codes
     static let parseError = -32700
@@ -15,6 +15,8 @@ enum MCP {
     static let internalError = -32603
     static let connectionClosed = -32000
     static let requestTimeout = -32001
+    /// MCP: resources/read for a URI the server doesn't have.
+    static let resourceNotFound = -32002
 
     static func request(id: JSONValue, method: String, params: JSONValue? = nil) -> JSONValue {
         var o: [String: JSONValue] = ["jsonrpc": "2.0", "id": id, "method": .string(method)]

@@ -48,6 +48,14 @@ import SwiftUI
             }
         }
         observation = context.store.observe { [weak self] _ in Task { @MainActor in self?.configure() } }
+        // Accessibility granted after launch: the config was built empty (no Accessibility), so the tap's own retry
+        // has nothing to start. Rebuild it (chained: the services factory's handler retries the tap / hotkeys).
+        let permissions = context.services.permissions
+        let previous = permissions.onChange
+        permissions.onChange = { [weak self] status in
+            previous?(status)
+            self?.configure()
+        }
         configure()
     }
 

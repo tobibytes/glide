@@ -139,8 +139,9 @@ extension MCPClientTransport {
 
     func send(_ message: JSONValue) async throws {
         guard let p = process, p.isRunning, !closed else { throw MCPError.closed("The server process is not running") }
-        var data = MCP.encode(message)
-        data.append(0x0A)
+        var line = MCP.encode(message)
+        line.append(0x0A)
+        let data = line
         let handle = stdinPipe.fileHandleForWriting
         try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, Error>) in
             writeQueue.async {
@@ -276,14 +277,37 @@ extension MCPClientTransport {
         } catch {}
     }
 
+    /// The standalone GET stream for server-initiated messages (list_changed …). When it drops (server restart,
+    /// proxy / idle timeouts) it is reopened with backoff; 405 means the server has none, 404 that the session ended.
     private func openNotificationStream() {
         getTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            let r = self.request(method: "GET", accept: "text/event-stream")
-            guard let (bytes, response) = try? await self.session.bytes(for: r), let http = response as? HTTPURLResponse, http.statusCode == 200 else { return }
-            await self.consumeSSE(bytes)
+            var failures = 0
+            while let self, !self.closed, !Task.isCancelled {
+                let r = self.request(method: "GET", accept: "text/event-stream")
+                let opened = Date()
+                if let (bytes, response) = try? await self.session.bytes(for: r), let http = response as? HTTPURLResponse {
+                    switch http.statusCode {
+                    case 200: await self.consumeSSE(bytes)
+                    case 405: return
+                    case 404 where self.sessionId != nil:
+                        guard !self.closed else { return }
+                        self.sessionId = nil
+                        self.onClose?("The server ended the session (404)")
+                        return
+                    default: break
+                    }
+                }
+                guard !self.closed, !Task.isCancelled else { return }
+                // A stream that stayed up a while was healthy: start the backoff over.
+                failures = Date().timeIntervalSince(opened) > 30 ? 0 : failures + 1
+                let delay = min(Self.streamRetryMax, Self.streamRetryBase * pow(2, Double(max(0, failures - 1))))
+                try? await Task.sleep(for: .milliseconds(Int(delay * 1000)))
+            }
         }
     }
+
+    static let streamRetryBase: Double = 1
+    static let streamRetryMax: Double = 30
 
     func close() async {
         guard !closed else { return }
@@ -295,6 +319,129 @@ extension MCPClientTransport {
             r.timeoutInterval = 2
             _ = try? await session.data(for: r)
         }
+        session.invalidateAndCancel()
+        onClose?(nil)
+    }
+}
+
+// MARK: - legacy HTTP+SSE (protocol 2024-11-05)
+
+/// The deprecated HTTP+SSE transport: one long-lived GET event stream carries every server → client message; its
+/// first `endpoint` event names the URL that client messages are POSTed to (answered 202, replies come on the stream).
+@MainActor final class MCPLegacySSEClientTransport: MCPClientTransport {
+    let url: URL
+    let headers: [String: String]
+    var onMessage: ((JSONValue) -> Void)?
+    var onClose: ((String?) -> Void)?
+    private(set) var endpoint: URL?
+    private let session: URLSession
+    private var streamTask: Task<Void, Never>?
+    private var endpointWaiter: CheckedContinuation<Void, Error>?
+    private var closed = false
+    var endpointTimeout: Duration = .seconds(15)
+
+    init(url: URL, headers: [String: String] = [:]) {
+        self.url = url
+        self.headers = headers
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.timeoutIntervalForRequest = 24 * 3600
+        cfg.timeoutIntervalForResource = 7 * 24 * 3600
+        cfg.httpShouldSetCookies = false
+        cfg.urlCache = nil
+        session = URLSession(configuration: cfg)
+    }
+
+    func start() async throws {
+        var r = URLRequest(url: url)
+        r.httpMethod = "GET"
+        for (k, v) in headers { r.setValue(v, forHTTPHeaderField: k) }
+        r.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        let (bytes, response) = try await session.bytes(for: r)
+        guard let http = response as? HTTPURLResponse else { throw MCPError(code: MCP.internalError, message: "No HTTP response") }
+        switch http.statusCode {
+        case 200: break
+        case 401: throw MCPError(code: 401, message: "401 Unauthorized")
+        default: throw MCPError(code: http.statusCode, message: "HTTP \(http.statusCode) opening the SSE stream")
+        }
+        let timeout = endpointTimeout
+        try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, Error>) in
+            endpointWaiter = c
+            streamTask = Task { @MainActor [weak self] in await self?.consume(bytes) }
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: timeout)
+                self?.failStart(MCPError(code: MCP.requestTimeout, message: "The server never announced its message endpoint"))
+            }
+        }
+    }
+
+    private func failStart(_ e: Error) {
+        guard let w = endpointWaiter else { return }
+        endpointWaiter = nil
+        w.resume(throwing: e)
+    }
+
+    private func consume(_ bytes: URLSession.AsyncBytes) async {
+        var parser = MCPSSEParser()
+        var chunk = Data()
+        do {
+            for try await b in bytes {
+                chunk.append(b)
+                guard b == 0x0A else { continue }
+                for ev in parser.feed(chunk) { event(ev.event, ev.data) }
+                chunk.removeAll(keepingCapacity: true)
+            }
+        } catch {}
+        guard !closed else { return }
+        failStart(MCPError.closed("The server closed the event stream before announcing its endpoint"))
+        closed = true
+        onClose?("The server closed the event stream")
+    }
+
+    private func event(_ name: String, _ data: String) {
+        switch name {
+        case "endpoint":
+            let raw = data.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Same origin only (the SDK enforces this too): never POST the user's headers elsewhere.
+            guard let u = URL(string: raw, relativeTo: url)?.absoluteURL, u.scheme == url.scheme, u.host == url.host, u.port == url.port else {
+                failStart(MCPError(code: MCP.invalidRequest, message: "The server announced an endpoint on another origin"))
+                return
+            }
+            endpoint = u
+            if let w = endpointWaiter { endpointWaiter = nil; w.resume() }
+        case "message":
+            if let m = MCP.decode(Data(data.utf8)) { onMessage?(m) }
+        default: break
+        }
+    }
+
+    func send(_ message: JSONValue) async throws {
+        guard !closed, let endpoint else { throw MCPError.closed() }
+        var r = URLRequest(url: endpoint)
+        r.httpMethod = "POST"
+        for (k, v) in headers { r.setValue(v, forHTTPHeaderField: k) }
+        r.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        r.httpBody = MCP.encode(message)
+        r.timeoutInterval = 60
+        let (data, response) = try await session.data(for: r)
+        guard let http = response as? HTTPURLResponse else { throw MCPError(code: MCP.internalError, message: "No HTTP response") }
+        switch http.statusCode {
+        case 200..<300: return
+        case 401: throw MCPError(code: 401, message: "401 Unauthorized")
+        case 404:
+            closed = true
+            streamTask?.cancel()
+            onClose?("The server ended the session (404)")
+            throw MCPError.closed("Session expired")
+        default:
+            throw MCPError(code: http.statusCode, message: "HTTP \(http.statusCode): \(String(decoding: data.prefix(300), as: UTF8.self))")
+        }
+    }
+
+    func close() async {
+        guard !closed else { return }
+        closed = true
+        failStart(MCPError.closed())
+        streamTask?.cancel()
         session.invalidateAndCancel()
         onClose?(nil)
     }

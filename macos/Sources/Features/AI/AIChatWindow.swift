@@ -1,5 +1,6 @@
 import AppKit
 import GlideCore
+import GlideSystem
 import GlideUI
 import Observation
 import SwiftUI
@@ -14,6 +15,8 @@ import SwiftUI
     var title = "New Chat"
     var draft = ""
     var filter = ""
+    /// Bumped each time the window is shown: moves the keyboard focus to the composer.
+    var focusComposer = 0
     let conversation: AIConversation
 
     init(feature: AIFeature, store: AIChatStore) {
@@ -113,8 +116,8 @@ import SwiftUI
     }
 
     func show() {
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
+        GlideWindows.shared.present(window) // activating: Dock + ⌘Tab while open, focus back to the user's app on close
+        model.focusComposer += 1 // typing goes to the composer, also when the window is shown again
     }
 
     /// Offscreen render for headless evidence: the hosting view is never put in an on-screen window.
@@ -161,6 +164,7 @@ struct AIChatRootView: View {
             }
         }
         .onAppear { inputFocused = true }
+        .onChange(of: model.focusComposer) { _, _ in inputFocused = true }
     }
 
     private var sidebar: some View {

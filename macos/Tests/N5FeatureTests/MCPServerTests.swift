@@ -42,8 +42,8 @@ import Testing
 struct MCPServerTests {
     @Test func catalogueHas23ToolsWithAnnotations() {
         let tools = MCPServerTools.all()
-        #expect(tools.count == 23)
-        #expect(Set(tools.map(\.name)).count == 23)
+        #expect(tools.count == 24) // + delete_reminder (fix round)
+        #expect(Set(tools.map(\.name)).count == 24)
         let run = tools.first { $0.name == "run_command" }
         #expect(run?.listEntry["annotations"]?["destructiveHint"] == true)
         #expect(tools.first { $0.name == "search_glide" }?.listEntry["annotations"]?["readOnlyHint"] == true)
@@ -153,6 +153,31 @@ struct MCPServerTests {
         let clip = await s.handle(MCP.request(id: 6, method: "resources/read", params: ["uri": "glide://clipboard/recent"]))
         #expect(clip?["error"] != nil) // clipboard tool is off by default
         #expect(await s.handle(MCP.request(id: 7, method: "ping"))?["result"] == [:])
+    }
+
+    @Test func protocolErrorsAndCancellation() async throws {
+        let rig = ServerRig()
+        rig.answer = nil // leave confirmations pending
+        rig.settings.tools["start_timer"] = "ask"
+        let s = MCPServerSession(handler: rig.handler, version: "1.0.0")
+        let init0 = await s.handle(MCP.request(id: 1, method: "initialize", params: ["protocolVersion": "2025-11-25", "clientInfo": ["name": "c"], "capabilities": [:]]))
+        #expect(init0?["result"]?["protocolVersion"] == "2025-11-25")
+        // Unknown tool: JSON-RPC -32602 (not an isError result); unknown resource: -32002.
+        #expect(await s.handle(MCP.request(id: 2, method: "tools/call", params: ["name": "nope", "arguments": [:]]))?["error"]?["code"] == .int(Int64(MCP.invalidParams)))
+        let missing = await s.handle(MCP.request(id: 3, method: "resources/read", params: ["uri": "glide://notes/zzz"]))
+        #expect(missing?["error"]?["code"] == .int(Int64(MCP.resourceNotFound)))
+        #expect(missing?["error"]?["data"]?["uri"] == "glide://notes/zzz")
+        // notifications/cancelled withdraws the pending confirmation and the call answers "cancelled".
+        let call = Task { @MainActor in await s.handle(MCP.request(id: 9, method: "tools/call", params: ["name": "start_timer", "arguments": ["minutes": 1]])) }
+        #expect(await waitUntil(3) { rig.confirmations.pending.count == 1 })
+        _ = await s.handle(MCP.notification("notifications/cancelled", params: ["requestId": 9, "reason": "user"]))
+        let r = await call.value
+        #expect(rig.confirmations.pending.isEmpty)
+        #expect(r?["result"]?["isError"] == true)
+        #expect(rig.log.list.first?.outcome == "cancelled")
+        #expect(!rig.backend.ran.contains("start_timer"))
+        // The user can't answer a cancelled prompt with "cancelled"/"timeout" from the UI.
+        #expect(!rig.confirmations.respond("x", "cancelled"))
     }
 
     @Test func authTokenAndHostChecks() throws {

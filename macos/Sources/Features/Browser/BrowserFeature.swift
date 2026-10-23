@@ -244,7 +244,7 @@ import SwiftUI
             let v = ViewID(rawValue: d["view"]?.stringValue ?? "browser.bookmarks")
             let m = v.name == "history" ? historyModel : bookmarksModel
             n7AfterUpdate { m.syncHost() }
-            return .pushView(v)
+            return .pushView(v, payload: scored.argument.map { ["query": .string($0)] } ?? .null) // fix round: argument pre-fills the field
         case "settings": return .openSettings(page: id)
         case "open": return open(url, profile: d["profile"]?.stringValue, mode: "browser")
         case "openDefault": return open(url, profile: nil, mode: "default")

@@ -8,6 +8,9 @@ import AppKit
         let appItem = NSMenuItem()
         let appMenu = NSMenu(title: "Glide")
         appMenu.addItem(withTitle: "Hide Glide", action: #selector(NSApplication.hide(_:)), keyEquivalent: "")
+        // Visible while a regular window (Settings, AI Chat) makes Glide a .regular app; still no ⌘Q (see above).
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Quit Glide", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
         appItem.submenu = appMenu
         main.addItem(appItem)
 

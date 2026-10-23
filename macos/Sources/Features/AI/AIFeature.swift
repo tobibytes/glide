@@ -33,6 +33,9 @@ import SwiftUI
     private var chatWindow: AIChatWindowController?
     /// Bumped when the settings page should re-read key status.
     let settingsModel = AISettingsModel()
+    /// One-shot streamed answers for other features (extensions' AI.ask): id → conversation + characters already handed out.
+    private var askStreams: [String: (conv: AIConversation, sent: Int)] = [:]
+    private var askStreamSeq = 0
 
     private let environment: [String: String]
 
@@ -147,7 +150,7 @@ import SwiftUI
             return AnthropicClient(apiKey: key, baseURL: baseURL)
         case .openai:
             // Headless: only the loopback test server. Real app: the custom server if set, else api.openai.com.
-            let custom = headless ? nil : (openaiBaseURL.isEmpty ? nil : URL(string: openaiBaseURL))
+            let custom = headless ? nil : (openaiBaseURL.isEmpty ? nil : OpenAIClient.normalizedBaseURL(openaiBaseURL))
             let url = baseURL.map { $0.appendingPathComponent("v1") } ?? custom
             let local = url.map { ["127.0.0.1", "localhost", "::1"].contains($0.host?.lowercased() ?? "") } ?? false
             // Local servers (Ollama, LM Studio) usually need no key.
@@ -377,6 +380,37 @@ import SwiftUI
             await conv.wait()
             if let e = conv.error { return ["ok": false, "error": .string(e.message), "kind": .string(e.kind.rawValue)] }
             return ["ok": true, "text": .string(conv.lastAnswer ?? ""), "model": .string(conv.lastModel ?? conv.effectiveModel)]
+        case "askStream":
+            // Streamed one-shot answer: {prompt, system?, model?} → {ok, id}; then poll with askStreamPoll {id, wait?}.
+            let conv = AIConversation(provider: self, model: args["model"]?.stringValue)
+            conv.system = args["system"]?.stringValue
+            askStreamSeq += 1
+            let sid = "as\(askStreamSeq)"
+            askStreams[sid] = (conv, 0)
+            conv.ask(args["prompt"]?.stringValue ?? "")
+            return ["ok": true, "id": .string(sid)]
+        case "askStreamPoll":
+            // {id, wait? (ms, default 1000)} → {delta, done, ok, text?, model?, error?, kind?}; waits for new text or the end.
+            guard let sid = args["id"]?.stringValue, askStreams[sid] != nil else { return ["ok": false, "done": true, "delta": "", "error": "Unknown AI stream", "kind": "other"] }
+            let deadline = ContinuousClock.now + .milliseconds(Int(args["wait"]?.intValue ?? 1000))
+            func pending() -> String {
+                guard let e = askStreams[sid], let m = e.conv.messages.last, m.role == "assistant", m.content.count > e.sent else { return "" }
+                return String(m.content.dropFirst(e.sent))
+            }
+            while let e = askStreams[sid], e.conv.streaming, pending().isEmpty, ContinuousClock.now < deadline {
+                try? await Task.sleep(for: .milliseconds(15))
+            }
+            guard let e = askStreams[sid] else { return ["ok": false, "done": true, "delta": "", "error": "Cancelled", "kind": "other"] }
+            let delta = pending()
+            askStreams[sid]?.sent += delta.count
+            if e.conv.streaming { return ["ok": true, "done": false, "delta": .string(delta)] }
+            askStreams[sid] = nil
+            if let err = e.conv.error { return ["ok": false, "done": true, "delta": .string(delta), "error": .string(err.message), "kind": .string(err.kind.rawValue)] }
+            if e.conv.cancelled { return ["ok": false, "done": true, "delta": .string(delta), "error": "Cancelled", "kind": "other"] }
+            return ["ok": true, "done": true, "delta": .string(delta), "text": .string(e.conv.lastAnswer ?? ""), "model": .string(e.conv.lastModel ?? e.conv.effectiveModel)]
+        case "askStreamCancel":
+            if let sid = args["id"]?.stringValue, let e = askStreams.removeValue(forKey: sid) { e.conv.stop() }
+            return true
         case "quickState":
             guard let q = quick else { return .null }
             if args["wait"]?.boolValue == true { await q.conversation.wait() }

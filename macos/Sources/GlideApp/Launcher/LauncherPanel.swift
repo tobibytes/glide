@@ -1,5 +1,6 @@
 import AppKit
 import GlideCore
+import GlideSystem
 import GlideUI
 import SwiftUI
 
@@ -10,6 +11,9 @@ final class LauncherPanel: NSPanel {
     let headless: Bool
     var onKey: ((NSEvent) -> Bool)?
     var onResignKey: (() -> Void)?
+    /// ⌘W (Window ▸ Close in Glide's main menu). The panel has no close button, so AppKit would disable the item
+    /// and beep; hiding through the controller keeps its `isVisible` in sync (orderOut alone would not).
+    var onClose: (() -> Void)?
 
     init(headless: Bool) {
         self.headless = headless
@@ -48,9 +52,11 @@ final class LauncherPanel: NSPanel {
         return super.performKeyEquivalent(with: event)
     }
 
-    /// Keys go to the launcher model first; only plain text editing reaches the field.
+    /// Keys go to the launcher model first; only plain text editing reaches the field. While an input method is
+    /// composing (Japanese / Chinese IME, a dead-key accent) every key goes to the field: ↩ commits the
+    /// composition instead of running the selected item, ⌫ / ⎋ edit it instead of popping the view.
     override func sendEvent(_ event: NSEvent) {
-        if event.type == .keyDown, let onKey, onKey(event) { return }
+        if PanelKeyInput.routesToModel(event, firstResponder: firstResponder), let onKey, onKey(event) { return }
         super.sendEvent(event)
     }
 
@@ -60,6 +66,12 @@ final class LauncherPanel: NSPanel {
     }
 
     override func cancelOperation(_ sender: Any?) {} // Esc is handled by the model
+
+    override func performClose(_ sender: Any?) { onClose?() }
+
+    override func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        item.action == #selector(performClose(_:)) ? onClose != nil : super.validateMenuItem(item)
+    }
 }
 
 /// Owns the panel + hosting view; implements show/hide/position/snapshot.
@@ -87,6 +99,7 @@ final class LauncherPanel: NSPanel {
             guard let controller, let k = KeyMapping.vimKey(e) else { return false }
             return controller.handleKey(k)
         }
+        panel.onClose = { [weak controller] in controller?.hide() }
         panel.onResignKey = { [weak self] in
             guard let self, self.isVisible, controller.settings.hideOnBlur, !self.headless else { return }
             controller.hide()

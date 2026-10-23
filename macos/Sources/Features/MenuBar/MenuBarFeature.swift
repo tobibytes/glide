@@ -34,7 +34,8 @@ import SwiftUI
         if context.services.isHeadless {
             manager.activate(nil)
         } else {
-            let factory: TrayFactory = { _ in StatusItemTray() }
+            let service = context.services.statusItems // the shared status-item API (one NSStatusItem per extra, Timers may merge into Glide's icon)
+            let factory: TrayFactory = { extra in StatusItemTray(service: service, extra: extra) }
             manager.activate(factory)
         }
         apply(readSettings())
@@ -51,7 +52,18 @@ import SwiftUI
     static var defaults: [String: JSONValue] {
         var d: [String: JSONValue] = [:]
         for e in ExtraID.allCases { d[e.rawValue] = .bool(e.defaultOn) }
+        d[combineKey] = true
         return d
+    }
+
+    /// "Show timers and focus in Glide's menu bar icon" (default on): Timers, Focus and the Timers extra put their
+    /// countdown next to Glide's icon and their actions in Glide's menu instead of separate icons.
+    static let combineKey = "combineWithGlide"
+    var combineWithGlide: Bool { context?.settings(defaults: Self.defaults)[Self.combineKey]?.boolValue ?? true }
+
+    public func setCombineWithGlide(_ on: Bool) {
+        context?.setSettings([Self.combineKey: .bool(on)])
+        context?.services.statusItems.combineWithGlideIcon = on
     }
 
     func readSettings() -> [ExtraID: Bool] {
@@ -66,6 +78,7 @@ import SwiftUI
             if next[e] == true { startExtra(e) } else { stopExtra(e) }
         }
         enabled = next
+        context?.services.statusItems.combineWithGlideIcon = combineWithGlide
         // Integration: the timers countdown (`setStatusTitle` from Timers) shows on the Timers extra when it is on,
         // else next to the Glide icon (Electron `setTrayTitleHandler`).
         StatusTitleRouting.claim = { [weak self] feature, _ in feature == "timers" && self?.enabled[.timers] == true }
@@ -75,6 +88,7 @@ import SwiftUI
     public func setEnabled(_ patch: [String: JSONValue]) {
         var clean: [String: JSONValue] = [:]
         for (k, v) in patch { if ExtraID(rawValue: k) != nil, let b = v.boolValue { clean[k] = .bool(b) } }
+        if let b = patch[Self.combineKey]?.boolValue { setCombineWithGlide(b) }
         context?.setSettings(clean)
         var next = enabled
         for (k, v) in clean { if let e = ExtraID(rawValue: k) { next[e] = v.boolValue } }
@@ -82,7 +96,7 @@ import SwiftUI
     }
 
     func settingsState() -> JSONValue {
-        ["extras": .array(ExtraID.allCases.map { e in
+        [Self.combineKey: .bool(combineWithGlide), "extras": .array(ExtraID.allCases.map { e in
             ["id": .string(e.rawValue), "title": .string(e.title), "description": .string(e.detail), "icon": .string(e.symbol), "enabled": .bool(enabled[e] == true)]
         })]
     }
@@ -256,6 +270,18 @@ import SwiftUI
             injected[key] = args["data"] ?? .null
             if key == "calendar.schedule" { await refreshSchedule() }
             return true
+        // Shared status-item API state (the fake service in headless runs: composed items, merged sources, menus).
+        case "statusItems" where headless:
+            return context?.services.statusItems.state() ?? .null
+        case "statusClick" where headless:
+            guard let id = args["id"]?.stringValue, let path = args["path"]?.arrayValue?.compactMap(\.intValue) else { throw FeatureError.invalidArguments("id and path required") }
+            let ok = context?.services.statusItems.click(id, path: path) ?? false
+            try? await Task.sleep(for: .milliseconds(20))
+            return .bool(ok)
+        case "statusMenuOpen" where headless:
+            context?.services.statusItems.menuWillOpen(args["id"]?.stringValue ?? args.stringValue ?? "glide")
+            try? await Task.sleep(for: .milliseconds(20))
+            return context?.services.statusItems.state() ?? .null
         case "tick" where headless:
             if let n = args["now"]?.doubleValue { nowOverride = n }
             for e in ExtraID.allCases where enabled[e] == true { await render(e) }
@@ -286,6 +312,17 @@ struct MenuBarSettingsView: View {
             } header: { Text("Extras") } footer: {
                 Text("Each extra is its own item in the macOS menu bar. Data comes from the matching feature (Timers, Calendar, Clipboard, Agent); polling runs only while an extra is shown.")
             }
+            Section {
+                Toggle(isOn: Binding(get: { feature?.combineWithGlide ?? true }, set: { feature?.setCombineWithGlide($0); tick += 1 })) {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Show timers and focus in Glide's menu bar icon")
+                            Text("The running countdown appears next to Glide's icon and its actions in Glide's menu. Off: separate menu bar icons.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    } icon: { Image(systemName: "rectangle.compress.vertical") }
+                }
+            } header: { Text("Glide Icon") }
         }
         .formStyle(.grouped)
         .id(tick)

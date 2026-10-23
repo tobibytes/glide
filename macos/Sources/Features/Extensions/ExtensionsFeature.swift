@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import GlideCore
+import GlideSystem
 import GlideUI
 import Observation
 import SwiftUI
@@ -29,11 +30,21 @@ import SwiftUI
     /// Overrides for tests (fetch transport, exec policy).
     var hostOptions: JSHost.Options?
     var examplesDirOverride: URL?
+    /// Raycast menu-bar commands on the shared status-item API (MenuBar/ExtensionMenuBarHost.swift).
+    lazy var menuBar = ExtensionMenuBarHost(feature: self)
+    /// OAuth sign-ins waiting for glide://oauth (PKCEClient.authorize) and the tokens extensions saved.
+    let oauthFlows = OAuthFlows()
+    private(set) var tokens = ExtensionTokenStore(backend: MemoryTokenBackend())
+    /// Tests: where tokens go (default: Keychain, memory in headless runs).
+    var tokenBackendOverride: ExtensionTokenBackend?
+    /// AI streams (AIFeature askStream ids) per session, cancelled when the session ends.
+    private var aiStreams: [String: Set<String>] = [:]
 
     public init() {}
 
     public func start(context: FeatureContext) async {
         self.context = context
+        tokens = ExtensionTokenStore(backend: tokenBackendOverride ?? (context.services.isHeadless ? MemoryTokenBackend() : KeychainTokenBackend()))
         let base = context.dataDirectory()
         let reg = ExtensionRegistry(base: base)
         registry = reg
@@ -43,9 +54,13 @@ import SwiftUI
                 context?.services.isHeadless == true && url == StoreClient.defaultIndexURL ? "Headless runs never fetch the public store index" : nil
             },
             changed: { [weak self] in self?.changed() },
-            beforeUninstall: { [weak self] name in self?.stopSessions(of: name) },
+            beforeUninstall: { [weak self] name in
+                self?.stopSessions(of: name)
+                self?.tokens.clear(name)
+            },
             log: { [weak context] in context?.log($0) }))
         observeQuery()
+        menuBar.start()
         sweeper = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(30))
@@ -56,6 +71,8 @@ import SwiftUI
 
     public func stop() async {
         sweeper?.cancel()
+        oauthFlows.cancelAll()
+        menuBar.stopAll()
         for s in sessions.values { s.kill() }
         sessions = [:]
     }
@@ -97,6 +114,7 @@ import SwiftUI
     private func changed() {
         registry?.invalidate()
         context?.refreshCatalogue()
+        menuBar.sync() // installed / removed / disabled menu-bar commands
     }
 
     private func nextToken() -> String {
@@ -119,7 +137,7 @@ import SwiftUI
             guard let m = ext.manifest else { continue }
             let assets = ext.dir.appendingPathComponent("assets").path
             for cmd in m.commands {
-                out.append(SearchItem(id: "ext:\(ext.name):\(cmd.name)", kind: .command, title: cmd.title, subtitle: cmd.subtitle ?? m.title,
+                out.append(SearchItem(id: "ext:\(ext.name):\(cmd.name)", kind: .command, title: cmd.title, subtitle: menuBar.subtitle(ext.name, cmd.name) ?? cmd.subtitle ?? m.title,
                                       icon: extIcon(cmd.icon ?? m.icon, assets: assets) ?? extIcon(m.icon, assets: assets) ?? .symbol("puzzlepiece.extension"),
                                       keywords: cmd.keywords + [m.title] + (cmd.description.map { [$0] } ?? []),
                                       acceptsArgument: cmd.arguments.isEmpty ? nil : true, feature: id,
@@ -135,6 +153,12 @@ import SwiftUI
             var list = [ItemAction(id: "run", title: "Run Command", shortcut: "↩", icon: "play")]
             if let ext = registry?.get(item.data?["ext"]?.stringValue ?? ""), !(ext.manifest?.preferences.isEmpty ?? true) {
                 list.append(ItemAction(id: "preferences", title: "Configure Extension", shortcut: "⌘,", icon: "gearshape"))
+            }
+            if let ext = registry?.get(item.data?["ext"]?.stringValue ?? ""), let cmd = ext.manifest?.commands.first(where: { $0.name == item.data?["command"]?.stringValue }),
+               cmd.mode == "menu-bar" {
+                let on = menuBar.isEnabled(ExtensionMenuBarHost.key(ext.name, cmd.name))
+                list.append(ItemAction(id: on ? "background-off" : "background-on", title: on ? "Deactivate Menu Bar Item" : "Activate Menu Bar Item",
+                                       icon: on ? "stop.circle" : "menubar.arrow.up.rectangle"))
             }
             list.append(ItemAction(id: "manage", title: "Manage Extensions", icon: "puzzlepiece.extension"))
             list.append(ItemAction(id: "disable", title: "Disable Extension", icon: "pause.circle", destructive: true))
@@ -153,6 +177,9 @@ import SwiftUI
         let cmd = item.data?["command"]?.stringValue ?? ""
         switch action {
         case "preferences": return pushPreferences(ext, then: nil)
+        case "background-on", "background-off":
+            menuBar.setEnabled(ext, cmd, action == "background-on")
+            return .stay(message: action == "background-on" ? "Menu bar item activated" : "Menu bar item deactivated")
         case "disable":
             do { try registry?.setEnabled(ext, false) } catch { return .error(error.localizedDescription) }
             changed()
@@ -198,15 +225,17 @@ import SwiftUI
             return pushArguments(ext: ext, cmd: cmd, values: args)
         }
         if background && cmd.mode == "view" { return .error("\(cmd.title) is a view command and cannot run in the background") }
-        if cmd.mode == "menu-bar" { return .error("Menu bar commands are not supported by the native runtime yet") }
 
         let info = SessionInfo(id: "s\(nextToken())", extName: m.name, extTitle: m.title, commandName: cmd.name, commandTitle: cmd.title,
                                mode: cmd.mode, runtime: m.runtime, launchType: launchType, assetsPath: ext.dir.appendingPathComponent("assets").path)
+        let aiAvailable = await aiStatus().hasKey
         let s = ExtensionSession(info: info, delegate: self, options: options())
         sessions[info.id] = s
         s.start(initPayload: InitPayload.make(ext: ext, manifest: m, command: cmd, arguments: args,
                                               preferences: Manifest.resolvePreferences(m, saved: saved, command: cmd.name),
-                                              supportPath: reg.supportDir(m.name).path, launchType: launchType, launchContext: launchContext))
+                                              supportPath: reg.supportDir(m.name).path, launchType: launchType, launchContext: launchContext,
+                                              aiAvailable: aiAvailable))
+        if cmd.mode == "menu-bar" { return menuBar.sessionStarted(s, command: cmd, background: background) }
         if cmd.mode == "view" {
             let model = makeRunModel(s, depth: 0)
             s.mount(0)
@@ -233,7 +262,7 @@ import SwiftUI
     /// Sessions nobody looks at (launcher reset after idle, abandoned views) stop after 10 minutes.
     private func sweep() {
         let now = Date()
-        for s in sessions.values where s.inFlight == 0 && now.timeIntervalSince(s.lastActivity) > 600 { s.kill() }
+        for s in sessions.values where s.info.mode != "menu-bar" && s.inFlight == 0 && now.timeIntervalSince(s.lastActivity) > 600 { s.kill() }
     }
 
     // MARK: pushing / popping Glide-owned views
@@ -278,7 +307,7 @@ import SwiftUI
             host.setPlaceholder(m.placeholder)
             host.setFooter(primary: m.actions.first?.title ?? (m.type == "form" ? "Submit" : nil), hasActions: !m.actions.isEmpty)
             // integration: Raycast `navigationTitle` names the view; a controlled `searchText` drives the field.
-            if let t = m.view["title"]?.stringValue, !t.isEmpty { host.setTitle(t) }
+            host.setContextTitle(m.title.isEmpty ? m.session.info.commandTitle : m.title) // fix round: navigationTitle, else the command title (nested pushes carry no item title)
             if let q = m.view["searchText"]?.stringValue, q != host.query { host.setQuery(q) }
         } else if let f = formModels[token] {
             host.setPlaceholder(f.title)
@@ -434,7 +463,7 @@ import SwiftUI
                 panel.canChooseDirectories = true
                 panel.canChooseFiles = false
                 panel.prompt = "Install"
-                guard panel.runModal() == .OK, let url = panel.url else { return }
+                guard GlideWindows.shared.runModal({ panel.runModal() }) == .OK, let url = panel.url else { return }
                 try installFolder(url)
                 host?.toast("Installed \(url.lastPathComponent)", style: .success)
             default:
@@ -620,6 +649,7 @@ import SwiftUI
             let n = args["name"]?.stringValue ?? ""
             stopSessions(of: n)
             try registry?.uninstall(n)
+            tokens.clear(n)
             changed()
             return true
         case "setEnabled":
@@ -638,6 +668,17 @@ import SwiftUI
             if case let .pushView(v, p) = r { LauncherHosts.current?.push(v, payload: p) }
             return Self.describe(r)
         case "view": return viewState()
+        case "oauthRedirect":
+            // glide://oauth?code=…&state=… (AppDelegate open-url, or a headless test simulating the browser).
+            return ["handled": .bool(oauthRedirect(args["url"]?.stringValue ?? args.stringValue ?? ""))]
+        case "oauthPending":
+            return .array(oauthFlows.requests.map { ["id": .string($0.id), "extension": .string($0.extName), "provider": .string($0.providerName),
+                                                     "url": .string($0.url), "state": .string($0.state)] })
+        case "oauthCancel":
+            oauthFlows.cancel(args["id"]?.stringValue ?? "")
+            return true
+        case "oauthTokens":
+            return tokens.get(args["name"]?.stringValue ?? "", args["provider"]?.stringValue ?? "default") ?? .null
         case "flushSearch":
             topRunModel()?.flushSearch()
             return true
@@ -681,7 +722,9 @@ import SwiftUI
         case "storeUninstall":
             try store?.uninstall(args["id"]?.stringValue ?? "")
             return true
-        default: throw FeatureError.unknownMethod(feature: id, method: method)
+        default:
+            if let r = await menuBar.invoke(method, args) { return r } // menuBarState / menuBarClick / menuBarOpen / menuBarRefresh / setBackground
+            throw FeatureError.unknownMethod(feature: id, method: method)
         }
     }
 
@@ -728,6 +771,11 @@ extension ExtensionsFeature: ExtensionSessionDelegate, RunModelOwner {
     private func models(of s: ExtensionSession) -> [RunModel] { runModels.values.filter { $0.session === s } }
 
     func sessionDidChange(_ s: ExtensionSession, _ event: ExtensionSession.Event) {
+        if s.info.mode == "menu-bar" { // status items, never launcher views
+            menuBar.sessionDidChange(s, event)
+            if case .ended = event { sessions[s.info.id] = nil }
+            return
+        }
         switch event {
         case let .render(depth), let .push(depth):
             if let v = s.view(depth) {
@@ -746,6 +794,10 @@ extension ExtensionsFeature: ExtensionSessionDelegate, RunModelOwner {
             recordEffect("toast", ["style": "failure", "title": .string(msg)])
         case .ended:
             sessions[s.info.id] = nil
+            oauthFlows.cancelSession(s.info.id)
+            for sid in aiStreams.removeValue(forKey: s.info.id) ?? [] {
+                Task { @MainActor [weak self] in _ = try? await self?.context?.callFeature("ai", method: "askStreamCancel", args: ["id": .string(sid)]) }
+            }
             for m in models(of: s) where m.view.isNull { popView(m.token) }
         }
     }
@@ -785,11 +837,16 @@ extension ExtensionsFeature: ExtensionSessionDelegate, RunModelOwner {
     }
 
     func session(_ s: ExtensionSession, request method: String, params: [JSONValue]) async throws -> JSONValue {
+        try await session(s, request: method, params: params, stream: { _ in })
+    }
+
+    func session(_ s: ExtensionSession, request method: String, params: [JSONValue], stream: @escaping @MainActor (String) -> Void) async throws -> JSONValue {
         guard let ctx = context, let reg = registry else { throw ExtensionError("Extensions are not ready yet") }
         let services = ctx.services
         let p0 = params.first
         let s0 = p0?.stringValue ?? ""
         let name = s.info.extName
+        if let r = menuBar.request(s, method: method, params: params) { return r } // updateCommandMetadata
         switch method {
         case "clipboard.copy":
             let c = clipText(p0)
@@ -883,10 +940,18 @@ extension ExtensionsFeature: ExtensionSessionDelegate, RunModelOwner {
         case "storage.clear":
             try reg.storageWrite(name) { $0 = [:] }
             return .null
-        case "ai.ask": throw ExtensionError("AI.ask is not available in Glide's native extension runtime yet")
-        case "oauth.authorize", "oauth.getTokens", "oauth.setTokens", "oauth.removeTokens":
-            if method == "oauth.getTokens" { return .null }
-            throw ExtensionError("OAuth is not available in Glide's native extension runtime yet")
+        case "ai.ask":
+            let o = params.count > 1 ? params[1].objectValue ?? [:] : [:]
+            return .string(try await aiAsk(s, prompt: s0, model: o["model"]?.stringValue, creativity: o["creativity"]?.stringValue, stream: stream))
+        case "oauth.authorize":
+            return ["code": .string(try await oauthAuthorize(s, p0?.objectValue ?? [:]))]
+        case "oauth.getTokens": return tokens.get(name, s0.isEmpty ? "default" : s0) ?? .null
+        case "oauth.setTokens":
+            try tokens.set(name, s0.isEmpty ? "default" : s0, params.count > 1 ? params[1] : .null)
+            return .null
+        case "oauth.removeTokens":
+            try tokens.remove(name, s0.isEmpty ? "default" : s0)
+            return .null
         case "applications": return .array([])
         default: throw ExtensionError("Unknown request \(method)")
         }
@@ -943,6 +1008,79 @@ extension ExtensionsFeature: ExtensionSessionDelegate, RunModelOwner {
             recordEffect("toast", ["style": "failure", "title": .string(error.localizedDescription)])
         }
         if ok, let cb = a.callback { m.session.invoke(depth: m.depth, handler: cb) }
+    }
+}
+
+// MARK: - AI.ask and OAuth (Raycast compatibility)
+
+extension ExtensionsFeature {
+    /// Glide AI's key status (environment.canAccess(AI)) and active provider.
+    func aiStatus() async -> (hasKey: Bool, provider: String) {
+        guard let r = try? await context?.callFeature("ai", method: "hasApiKey", args: .null) else { return (false, "anthropic") }
+        return (r["hasKey"]?.boolValue == true, r["provider"]?.stringValue ?? "anthropic")
+    }
+
+    /// AI.ask: streams Glide AI's answer as "data" chunks and resolves with the full text.
+    func aiAsk(_ s: ExtensionSession, prompt: String, model: String?, creativity: String?, stream: @escaping @MainActor (String) -> Void) async throws -> String {
+        guard let ctx = context else { throw ExtensionError("Extensions are not ready yet") }
+        let status = await aiStatus()
+        guard status.hasKey else { throw ExtensionError(ExtensionAI.notSetUp) }
+        var args: [String: JSONValue] = ["prompt": .string(prompt)]
+        if let m = ExtensionAI.mapModel(model, provider: status.provider) { args["model"] = .string(m) }
+        if let note = ExtensionAI.creativityNote(creativity) { args["system"] = .string(note) }
+        let start: JSONValue
+        do {
+            start = try await ctx.callFeature("ai", method: "askStream", args: .object(args))
+        } catch {
+            // An AI feature without streaming: one-shot answer, emitted as a single chunk.
+            let r = try await ctx.callFeature("ai", method: "ask", args: .object(args))
+            guard r["ok"]?.boolValue == true else { throw ExtensionError(r["error"]?.stringValue ?? "Glide AI failed") }
+            let text = r["text"]?.stringValue ?? ""
+            if !text.isEmpty { stream(text) }
+            return text
+        }
+        guard let sid = start["id"]?.stringValue else { throw ExtensionError(start["error"]?.stringValue ?? "Glide AI failed") }
+        aiStreams[s.info.id, default: []].insert(sid)
+        defer { aiStreams[s.info.id]?.remove(sid) }
+        var text = ""
+        while true {
+            guard s.alive else {
+                _ = try? await ctx.callFeature("ai", method: "askStreamCancel", args: ["id": .string(sid)])
+                throw ExtensionError("Aborted")
+            }
+            let r = try await ctx.callFeature("ai", method: "askStreamPoll", args: ["id": .string(sid), "wait": 500])
+            if let d = r["delta"]?.stringValue, !d.isEmpty {
+                text += d
+                stream(d)
+            }
+            guard r["done"]?.boolValue == true else { continue }
+            guard r["ok"]?.boolValue == true else {
+                let kind = r["kind"]?.stringValue
+                throw ExtensionError(kind == "noKey" ? ExtensionAI.notSetUp : r["error"]?.stringValue ?? "Glide AI failed")
+            }
+            return r["text"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 } ?? text
+        }
+    }
+
+    /// OAuth.PKCEClient.authorize: opens the provider's page in the browser and waits for glide://oauth.
+    func oauthAuthorize(_ s: ExtensionSession, _ o: [String: JSONValue]) async throws -> String {
+        guard let ctx = context else { throw ExtensionError("Extensions are not ready yet") }
+        let provider = o["providerName"]?.stringValue ?? "the provider"
+        let services = ctx.services
+        return try await oauthFlows.authorize(extName: s.info.extName, sessionId: s.info.id, url: o["url"]?.stringValue ?? "",
+                                              state: o["state"]?.stringValue ?? "", providerName: provider) { [weak self] req, url in
+            self?.recordEffect("oauth", ["id": .string(req.id), "extension": .string(req.extName), "provider": .string(provider), "url": .string(req.url)])
+            let r = services.workspace.open(url: url, withApp: nil)
+            if !r.ok { throw ExtensionError(r.error ?? "Could not open the sign-in page") }
+            if s.info.mode == "view" { LauncherHosts.current?.toast("Sign in with \(provider) in your browser…", style: .info) }
+        }
+    }
+
+    /// glide://oauth?… from the app delegate (or the test channel).
+    @discardableResult func oauthRedirect(_ url: String) -> Bool {
+        let id = oauthFlows.handleRedirect(url)
+        if id == nil { context?.log("ignored OAuth redirect (no pending sign-in matches it)") }
+        return id != nil
     }
 }
 

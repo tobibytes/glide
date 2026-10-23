@@ -20,6 +20,14 @@ struct SessionInfo: Hashable, Sendable {
     /// An extension request (RequestMethod in src/extension-api/types.ts). Throw to reject.
     func session(_ s: ExtensionSession, request method: String, params: [JSONValue]) async throws -> JSONValue
     func sessionDidChange(_ s: ExtensionSession, _ event: ExtensionSession.Event)
+    /// Like `session(_:request:params:)`, with a sink for partial results (`{type:"stream"}` messages, e.g. AI.ask's "data" events).
+    func session(_ s: ExtensionSession, request method: String, params: [JSONValue], stream: @escaping @MainActor (String) -> Void) async throws -> JSONValue
+}
+
+extension ExtensionSessionDelegate {
+    func session(_ s: ExtensionSession, request method: String, params: [JSONValue], stream: @escaping @MainActor (String) -> Void) async throws -> JSONValue {
+        try await session(s, request: method, params: params)
+    }
 }
 
 /// One running command: a JSHost plus the view stack it rendered (port of sessions.ts).
@@ -204,7 +212,11 @@ struct SessionInfo: Hashable, Sendable {
             guard let self else { return }
             var res: JSONValue = ["type": "response", "id": .int(Int64(id))]
             do {
-                let r = try await self.delegate?.session(self, request: method, params: params) ?? .null
+                let sink: @MainActor (String) -> Void = { [weak self] chunk in
+                    guard id >= 0 else { return }
+                    self?.post(["type": "stream", "id": .int(Int64(id)), "chunk": .string(chunk)])
+                }
+                let r = try await self.delegate?.session(self, request: method, params: params, stream: sink) ?? .null
                 if case var .object(o) = res { o["result"] = r; res = .object(o) }
             } catch {
                 if case var .object(o) = res { o["error"] = .string(error.localizedDescription); res = .object(o) }

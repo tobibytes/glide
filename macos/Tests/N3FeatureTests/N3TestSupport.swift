@@ -18,14 +18,14 @@ import GlideUI
     var pushed: [ViewID] = []
     var calls: [(String, String)] = []
 
-    init(_ featureId: String, env: [String: String] = [:]) {
+    init(_ featureId: String, env: [String: String] = [:], services custom: ((SideEffectLog) -> SystemServices)? = nil) {
         self.featureId = featureId
         root = (ProcessInfo.processInfo.environment["GLIDE_E2E_TMP"].map { URL(fileURLWithPath: $0) } ?? FileManager.default.temporaryDirectory).appendingPathComponent("n3-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         store = Store(directory: root, debounce: 0)
         _ = try? store.load()
         log = SideEffectLog(echo: false)
-        services = SystemServicesFactory.headless(log: log, environment: env)
+        services = custom?(log) ?? SystemServicesFactory.headless(log: log, environment: env)
     }
 
 

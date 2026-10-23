@@ -23,14 +23,16 @@ import GlideSystem
             Task { @MainActor in
                 await core.start()
                 core.appFeature.onQuit = { NSApp.terminate(nil) }
+                // Glide's icon through the shared status-item API: an NSStatusItem live, recorded state only headless.
+                let item = StatusItemController(service: core.services.statusItems, hotkeyDisplay: Accelerator.display(core.store.settings.hotkey),
+                                                onShow: { core.launcher.show() }, onSettings: { core.openSettings(page: nil) })
+                statusItem = item
+                core.statusTitleSink = { [weak item] t in item?.setTitle(t) }
                 if config.testServer {
                     let server = TestServer(core: core)
                     testServer = server
                     server.start()
                 } else if !config.headless {
-                    statusItem = StatusItemController(hotkeyDisplay: Accelerator.display(core.store.settings.hotkey),
-                                                      onShow: { core.launcher.show() }, onSettings: { core.openSettings(page: nil) })
-                    core.statusTitleSink = { [weak statusItem] t in statusItem?.setTitle(t) }
                     DistributedNotificationCenter.default().addObserver(forName: SingleInstance.showNotification, object: nil, queue: .main) { _ in
                         MainActor.assumeIsolated { core.launcher.show() }
                     }
@@ -52,6 +54,9 @@ import GlideSystem
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        // Dock-icon click while Settings / AI Chat is open (Glide is .regular then): AppKit brings those windows
+        // back (incl. a minimized one); the launcher only when Glide has no regular window.
+        if GlideWindows.shared.hasOpenWindows { return true }
         core?.launcher.show()
         return false
     }
@@ -61,6 +66,9 @@ import GlideSystem
         for url in urls where url.scheme == "glide" {
             switch url.host {
             case "settings": core?.openSettings(page: url.path.isEmpty ? nil : String(url.path.dropFirst()))
+            case "oauth":
+                // Raycast extension sign-in coming back from the browser (PKCEClient redirect URI).
+                if let core { Task { @MainActor in _ = try? await core.registry.invoke(feature: "extensions", method: "oauthRedirect", args: ["url": .string(url.absoluteString)]) } }
             default: core?.launcher.show()
             }
         }

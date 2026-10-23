@@ -44,6 +44,9 @@ import GlideSystem
     private var lines = MCPLineBuffer()
     private var queue: [JSONValue] = []
     private var sending = false
+    /// Messages sent concurrently once the session exists (a call waiting on a confirmation in Glide must not
+    /// hold back pings, other calls or its own notifications/cancelled).
+    private var inflight = 0
     private var finishing = false
     var write: (JSONValue) -> Void = { m in StdoutWriter.shared.line(String(decoding: MCP.encode(m), as: UTF8.self)) }
     var exitProcess: (Int32) -> Void = { exit($0) }
@@ -73,7 +76,7 @@ import GlideSystem
             FileHandle.standardInput.readabilityHandler = nil
             // Let in-flight requests finish before closing the session.
             Task { @MainActor in
-                while self.sending || !self.queue.isEmpty { try? await Task.sleep(for: .milliseconds(20)) }
+                while self.sending || !self.queue.isEmpty || self.inflight > 0 { try? await Task.sleep(for: .milliseconds(20)) }
                 self.finish(0)
             }
             return
@@ -89,22 +92,36 @@ import GlideSystem
         pump()
     }
 
-    /// Serialised sends: requests reach Glide in stdin order.
+    /// Until the session exists (initialize answered), sends are serialised so initialize goes first; after that
+    /// every message is sent as soon as it arrives, in stdin order, without waiting for earlier responses.
     private func pump() {
-        guard !sending, !queue.isEmpty else { return }
-        sending = true
-        let m = queue.removeFirst()
-        Task { @MainActor in
-            do { try await self.remote.send(m) } catch {
-                let message = (error as? MCPError)?.message ?? error.localizedDescription
-                self.err(message)
-                if MCP.kind(m) == .request {
-                    let refused = (error as? URLError)?.code == .cannotConnectToHost || message.localizedCaseInsensitiveContains("could not connect")
-                    self.write(MCP.error(id: m["id"] ?? .null, code: -32000, message: refused ? MCPStdioBridge.notRunning : "Glide MCP request failed: \(message)"))
+        while !sending, !queue.isEmpty {
+            let m = queue.removeFirst()
+            if remote.sessionId != nil {
+                inflight += 1
+                Task { @MainActor in
+                    await self.forward(m)
+                    self.inflight -= 1
                 }
+                continue
             }
-            self.sending = false
-            self.pump()
+            sending = true
+            Task { @MainActor in
+                await self.forward(m)
+                self.sending = false
+                self.pump()
+            }
+        }
+    }
+
+    private func forward(_ m: JSONValue) async {
+        do { try await remote.send(m) } catch {
+            let message = (error as? MCPError)?.message ?? error.localizedDescription
+            err(message)
+            if MCP.kind(m) == .request {
+                let refused = (error as? URLError)?.code == .cannotConnectToHost || message.localizedCaseInsensitiveContains("could not connect")
+                write(MCP.error(id: m["id"] ?? .null, code: -32000, message: refused ? MCPStdioBridge.notRunning : "Glide MCP request failed: \(message)"))
+            }
         }
     }
 

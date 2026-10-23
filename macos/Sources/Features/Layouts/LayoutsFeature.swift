@@ -99,7 +99,10 @@ import SwiftUI
         case "settings", "new-workspace", "edit-workspace":
             model.pendingEdit = action == "new-workspace" ? "new" : (action == "edit-workspace" ? d["workspaceId"]?.stringValue : nil)
             return .openSettings(page: id)
-        case "open-accessibility": return SettingsPanes.open(SettingsPanes.accessibility, context)
+        case "open-accessibility":
+            // Ask once first (explicit action): until Glide has asked it is not listed in the pane.
+            if let ctx = context, !ctx.services.permissions.status().accessibility { _ = await ctx.services.permissions.request(.accessibility) }
+            return SettingsPanes.open(SettingsPanes.accessibility, context)
         case "restore", "restore-relaunch":
             return await restore(d["layoutId"]?.stringValue ?? "", relaunch: action == "restore-relaunch" ? true : nil)
         case "update":

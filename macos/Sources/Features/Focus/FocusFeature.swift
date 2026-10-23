@@ -15,7 +15,8 @@ import SwiftUI
     private var ticker: Timer?
     private var poll: Timer?
     private var polling = false
-    private var statusItem: NSStatusItem?
+    private var statusShown = false
+    static let statusItemId = "focus"
     private var lastQuitAttempt: [String: Double] = [:]
     private var snoozed: [String: Double] = [:]
     public private(set) var notified: [String] = []
@@ -139,8 +140,8 @@ import SwiftUI
         poll?.invalidate()
         ticker = nil
         poll = nil
-        if let s = statusItem { NSStatusBar.system.removeStatusItem(s) }
-        statusItem = nil
+        if statusShown { context?.services.statusItems.remove(Self.statusItemId) }
+        statusShown = false
     }
 
     func tick() {
@@ -159,32 +160,35 @@ import SwiftUI
         return s.status == "paused" ? "◷ \(clock) ❚❚" : "◷ \(clock)"
     }
 
+    /// The countdown through the shared status-item API (item "focus", `.combinable`): next to Glide's icon with
+    /// these rows in Glide's menu while "Show timers and focus in Glide's menu bar icon" is on, its own icon
+    /// otherwise. Headless runs record it (never an NSStatusItem).
     private func updateStatusItem() {
-        guard context?.services.isHeadless == false else { return }
-        guard let s = session else {
-            if let i = statusItem { NSStatusBar.system.removeStatusItem(i) }
-            statusItem = nil
+        guard let ctx = context else { return }
+        guard let spec = statusSpec() else {
+            if statusShown { ctx.services.statusItems.remove(Self.statusItemId) }
+            statusShown = false
             return
         }
-        if statusItem == nil { statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength) }
-        statusItem?.button?.attributedTitle = NSAttributedString(string: trayTitle, attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)])
-        let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: s.goal.isEmpty ? "Focus Session" : "Focus: \(s.goal)", action: nil, keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "\(FocusMachine.formatDuration(s.durationMs)) session", action: nil, keyEquivalent: ""))
-        menu.addItem(.separator())
-        for (title, sel) in [(s.status == "running" ? "Pause" : "Resume", #selector(menuPause)), ("Add 5 Minutes", #selector(menuExtend)), ("Stop Session", #selector(menuStop)),
-                             ("Focus Statistics…", #selector(menuStats))] {
-            let it = NSMenuItem(title: title, action: sel, keyEquivalent: "")
-            it.target = self
-            menu.addItem(it)
-        }
-        statusItem?.menu = menu
+        statusShown = true
+        ctx.services.statusItems.show(Self.statusItemId, spec, placement: .combinable)
     }
 
-    @objc private func menuPause() { _ = togglePause() }
-    @objc private func menuExtend() { _ = extend(5) }
-    @objc private func menuStop() { Task { await stop(completed: false) } }
-    @objc private func menuStats() { context?.push(ViewID(feature: id, name: "stats"), payload: .null) }
+    /// Title + menu for the running session (nil when there is none). Menu rows carry no ticking text.
+    func statusSpec() -> StatusItemSpec? {
+        guard let s = session else { return nil }
+        return StatusItemSpec(title: trayTitle, tooltip: s.goal.isEmpty ? "Glide Focus" : "Focus: \(s.goal)", menu: [
+            .info(s.goal.isEmpty ? "Focus Session" : "Focus: \(s.goal)", "\(FocusMachine.formatDuration(s.durationMs)) session"),
+            .separator,
+            StatusMenuItem(s.status == "running" ? "Pause" : "Resume", icon: s.status == "running" ? "pause.circle" : "play.circle") { [weak self] in _ = self?.togglePause() },
+            StatusMenuItem("Add 5 Minutes", icon: "plus.circle") { [weak self] in _ = self?.extend(5) },
+            StatusMenuItem("Stop Session", icon: "stop.circle") { [weak self] in Task { await self?.stop(completed: false) } },
+            .separator,
+            StatusMenuItem("Focus Statistics…", icon: "chart.bar") { [weak self] in self?.showStats() },
+        ], section: "Focus")
+    }
+
+    private func showStats() { context?.push(ViewID(feature: id, name: "stats"), payload: .null) }
 
     // MARK: operations
 

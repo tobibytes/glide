@@ -132,7 +132,7 @@ import SwiftUI
 
     public func run(action: String, on scored: ScoredItem, modifiers: ActionModifiers) async -> ActionResult {
         switch action {
-        case "open-accessibility": return SettingsPanes.open(SettingsPanes.accessibility, context)
+        case "open-accessibility": return await openAccessibility()
         case "window-settings": return .openSettings(page: id)
         default:
             guard let a = scored.item.data?["action"]?.stringValue else { return .error("Unknown window action") }
@@ -203,7 +203,7 @@ struct WindowsSettingsView: View {
                     Image(systemName: accessibility ? "checkmark.seal.fill" : "exclamationmark.triangle.fill").foregroundStyle(accessibility ? .green : .orange)
                     Text(accessibility ? "Accessibility is granted" : "Accessibility is required to move other apps' windows")
                     Spacer()
-                    if !accessibility { Button("Open Accessibility Settings") { _ = feature?.run(openPane: SettingsPanes.accessibility) } }
+                    if !accessibility { Button("Open Accessibility Settings") { Task { _ = await feature?.openAccessibility() } } }
                 }
             }
         }
@@ -212,10 +212,26 @@ struct WindowsSettingsView: View {
             on = feature?.suggestedOn ?? false
             accessibility = feature?.accessibilityGranted ?? false
         }
+        .task {
+            // Live: the user grants it in System Settings and comes back to this page (read-only, never prompts).
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1.5))
+                let now = feature?.accessibilityGranted ?? false
+                if now != accessibility { accessibility = now }
+            }
+        }
     }
 }
 
 extension WindowsFeature {
     var accessibilityGranted: Bool { context?.services.permissions.status().accessibility ?? false }
     func run(openPane: String) -> ActionResult { SettingsPanes.open(openPane, context) }
+
+    /// "Open Accessibility Settings" (explicit action): ask once first — until Glide has asked, it is not even
+    /// listed in the pane and the user would have to add it with +. Then open the pane.
+    func openAccessibility() async -> ActionResult {
+        guard let ctx = context else { return .error("Window management is not ready") }
+        if !ctx.services.permissions.status().accessibility { _ = await ctx.services.permissions.request(.accessibility) }
+        return SettingsPanes.open(SettingsPanes.accessibility, ctx)
+    }
 }

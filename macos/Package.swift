@@ -107,7 +107,7 @@ let package = Package(
         // N9: Extensions (JavaScriptCore host), Store, Script Commands.
         .testTarget(
             name: "N9FeatureTests",
-            dependencies: ["GlideCore", "GlideSystem", "GlideUI", "GlideFeatures"],
+            dependencies: ["GlideCore", "GlideSystem", "GlideUI", "GlideFeatures", "GlideTestHarness"],
             path: "Tests/N9FeatureTests",
             swiftSettings: strict
         ),

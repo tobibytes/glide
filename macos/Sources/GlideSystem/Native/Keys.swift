@@ -83,6 +83,13 @@ struct UnsafeBox<T>: @unchecked Sendable {
         }
         let types: [CGEventType] = [.keyDown, .keyUp, .flagsChanged, .leftMouseDown, .rightMouseDown, .otherMouseDown]
         let mask = types.reduce(CGEventMask(0)) { $0 | (CGEventMask(1) << CGEventMask($1.rawValue)) }
+        // Preflight (never prompts): creating an active keyboard tap while untrusted makes macOS show its
+        // Accessibility prompt at launch, not on an explicit user action. retryIfNeeded() runs once it's granted.
+        guard AXIsProcessTrusted() else {
+            let reason = "Accessibility permission is required for snippet expansion and the Hyper key."
+            onEvent?(.tapFailed(reason: reason))
+            return reason
+        }
         guard let t = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap, eventsOfInterest: mask, callback: keysTapCallback, userInfo: nil) else {
             let reason = AXIsProcessTrusted()
                 ? "Could not create the keyboard event tap. Grant Input Monitoring to Glide in System Settings."
@@ -201,7 +208,7 @@ struct UnsafeBox<T>: @unchecked Sendable {
 
     private func perform(backspaces: Int, text: String, html: String?, cursorLeft: Int, keyword: String, live: Bool) {
         for _ in 0..<backspaces { postKey(CGKeyCode(KeyCodes.delete)) }
-        if !text.isEmpty || html != nil { paster.paste(text: text, html: html) }
+        if !text.isEmpty || html != nil { paster.paste(text: text, html: html, keyDelay: 0) }
         let replay = takeQueue()
         let box = UnsafeBox(replay)
         DispatchQueue.main.asyncAfter(deadline: .now() + (cursorLeft > 0 || !replay.isEmpty ? 0.06 : 0)) {
@@ -244,7 +251,7 @@ struct UnsafeBox<T>: @unchecked Sendable {
         engine.pasteFinished()
         engine.pasteStack = pasteStack
         switch action {
-        case let .paste(text, html): paster.paste(text: text, html: html)
+        case let .paste(text, html): paster.paste(text: text, html: html, keyDelay: 0)
         case .passOriginal: postKey(CGKeyCode(KeyCodes.v), flags: .maskCommand)
         }
         let replay = takeQueue()

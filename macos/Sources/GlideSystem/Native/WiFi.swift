@@ -6,7 +6,9 @@ import GlideCore
 /// only called from PermissionService.request(.location).
 @MainActor public final class CoreWLANService: NSObject, WiFiService, CLLocationManagerDelegate {
     private lazy var manager = CLLocationManager()
-    private var waiter: CheckedContinuation<Void, Never>?
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    /// How long a request waits for the user's answer (no answer, or Location Services off, never calls back).
+    var answerTimeout: Duration = .seconds(60)
 
     public override init() { super.init() }
 
@@ -38,21 +40,37 @@ import GlideCore
     public func requestLocation() async -> String {
         guard locationStatus() == "notDetermined" else { return locationStatus() }
         manager.delegate = self
+        let first = waiters.isEmpty
+        let timeout = answerTimeout
         await withCheckedContinuation { cont in
-            waiter = cont
+            // A second request while the prompt is up waits for the same answer (it used to replace — and leak —
+            // the first continuation, hanging that caller forever).
+            waiters.append(cont)
+            guard first else { return }
             manager.requestWhenInUseAuthorization()
             manager.startUpdatingLocation()
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: timeout)
+                self?.answered()
+            }
         }
-        manager.stopUpdatingLocation()
         return locationStatus()
+    }
+
+    /// Resume every waiting request (the user answered, or the timeout passed).
+    func answered() {
+        guard !waiters.isEmpty else { return }
+        manager.stopUpdatingLocation()
+        let w = waiters
+        waiters = []
+        for c in w { c.resume() }
     }
 
     public nonisolated func locationManagerDidChangeAuthorization(_ m: CLLocationManager) {
         let status = m.authorizationStatus
         Task { @MainActor in
-            guard status != .notDetermined, let w = self.waiter else { return }
-            self.waiter = nil
-            w.resume()
+            guard status != .notDetermined else { return }
+            self.answered()
         }
     }
 }

@@ -126,7 +126,7 @@ public enum HotkeyParser {
 /// Character key → keycode on the current keyboard layout (TIS must run on the main thread).
 @MainActor public final class KeyLayout {
     private static let keypadCodes: Set<UInt16> = [65, 67, 69, 71, 75, 76, 78, 81, 82, 83, 84, 85, 86, 87, 88, 89, 91, 92]
-    static let ansi: [Character: UInt32] = [
+    nonisolated static let ansi: [Character: UInt32] = [
         "A": 0, "S": 1, "D": 2, "F": 3, "H": 4, "G": 5, "Z": 6, "X": 7, "C": 8, "V": 9, "B": 11, "Q": 12, "W": 13, "E": 14, "R": 15,
         "Y": 16, "T": 17, "1": 18, "2": 19, "3": 20, "4": 21, "6": 22, "5": 23, "=": 24, "9": 25, "7": 26, "-": 27, "8": 28, "0": 29,
         "]": 30, "O": 31, "U": 32, "[": 33, "I": 34, "P": 35, "L": 37, "J": 38, "'": 39, "K": 40, ";": 41, "\\": 42, ",": 43, "/": 44,
@@ -252,8 +252,11 @@ private let modifierTapCallback: CGEventTapCallBack = { _, type, event, _ in
 @MainActor public final class CarbonHotkeyService: HotkeyService {
     nonisolated(unsafe) fileprivate static weak var current: CarbonHotkeyService?
     public var onPress: ((String) -> Void)?
-    /// Set by the keyboard tap once it forwards Caps Lock (F18) taps to handleHyperTap().
-    public var keysTapHooked = false
+    /// Set by the keyboard tap once it forwards Caps Lock (F18) taps to handleHyperTap(). Turning it on retries a
+    /// "Hyper" binding refused earlier: the launcher never re-sends unchanged bindings (input-audit fix).
+    public var keysTapHooked = false {
+        didSet { if keysTapHooked && !oldValue && Self.wantsHyper(lastBindings) { _ = set(lastBindings) } }
+    }
     /// Whether the Hyper key mapping is active (set by the keyboard tap service).
     public var hyperActive: () -> Bool = { false }
 
@@ -272,7 +275,49 @@ private let modifierTapCallback: CGEventTapCallBack = { _, type, event, _ in
 
     public init() { Self.current = self }
 
+    /// While a hotkey recorder has the keyboard (HotkeyCapture) every Glide hotkey is unregistered, so the combo
+    /// being recorded — often the current launcher hotkey — reaches the recorder instead of toggling the launcher.
+    private var suspended = false
+    public func setSuspended(_ on: Bool) {
+        guard on != suspended else { return }
+        suspended = on
+        if on {
+            let keep = lastBindings
+            unregisterAll()
+            lastBindings = keep
+        } else {
+            _ = set(lastBindings)
+        }
+    }
+
+    /// Permissions changed (Input Monitoring granted after launch): register the modifier-only shortcuts that
+    /// failed for want of the listen tap. No-op when nothing waits for it (input-audit fix).
+    public func refresh() {
+        guard tap == nil, lastBindings.contains(where: { Self.isModifierOnly($0.accelerator) }) else { return }
+        _ = set(lastBindings)
+    }
+
+    nonisolated static func isModifierOnly(_ accelerator: String) -> Bool {
+        if case .success(.modifier) = HotkeyParser.parse(accelerator) { return true }
+        return false
+    }
+
+    nonisolated static func wantsHyper(_ bindings: [HotkeyBinding]) -> Bool {
+        bindings.contains { b in
+            if case .success(.modifier(.hyper, _, _)) = HotkeyParser.parse(b.accelerator) { return true }
+            return false
+        }
+    }
+
+    /// Permissions changed (Input Monitoring granted in System Settings): re-apply, so a modifier-only hotkey
+    /// ("Double+Command") whose tap failed at launch starts working without a relaunch.
+    public func permissionsChanged() {
+        guard !suspended, !lastBindings.isEmpty else { return }
+        _ = set(lastBindings)
+    }
+
     public func set(_ bindings: [HotkeyBinding]) -> HotkeyRegistration {
+        if suspended { lastBindings = bindings; return HotkeyRegistration() } // applied on resume
         installCarbon()
         startLayoutWatch()
         lastBindings = bindings

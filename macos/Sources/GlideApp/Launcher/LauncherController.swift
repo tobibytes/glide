@@ -327,10 +327,12 @@ import Observation
     func handle(_ result: ActionResult, item: ScoredItem, actionId: String?, wasVisible: Bool = true, openedWindow: Bool = false) {
         switch result {
         case let .hide(message):
-            let stay = settings.keepOpenAfterRun && !switchesApp(item.item, actionId: actionId) && !openedWindow
+            // An action that hid the launcher itself (paste-back, window / menu commands) handed the keyboard to the
+            // user's app: re-showing would take it back, and a delayed ⌘V would paste into Glide's search field.
+            let steppedAside = wasVisible && windowing?.isVisible == false
+            let stay = settings.keepOpenAfterRun && !switchesApp(item.item, actionId: actionId) && !openedWindow && !steppedAside
             argument = nil
             if stay {
-                if wasVisible && windowing?.isVisible == false { windowing?.showPanel() }
                 showToast(message ?? "✓ \(item.item.title)", .success)
                 runSearch(preserveSelection: true)
             } else {
@@ -368,7 +370,7 @@ import Observation
         if var t = stack.popLast() { t.query = query; stack.append(t) } else { rootQuery = query }
         var view = PushedView(id: id, payload: payload)
         let ui = registry.feature(id.feature) as? any FeatureUI
-        view.title = ui?.viewTitle(id, payload: payload) ?? title
+        view.title = ui?.viewTitle(id, payload: payload) ?? title ?? DefaultViewTitles.title(id) // fix round: sub-pushes get a readable default
         if let p = ui?.viewPlaceholder(id, payload: payload) { view.placeholder = p }
         stack.append(view)
         query = payload["query"]?.stringValue ?? ""

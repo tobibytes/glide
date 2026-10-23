@@ -185,6 +185,7 @@ import GlideCore
     public func reminders(listId: String?, includeCompleted: Bool) async throws -> JSONValue { throw unavailable() }
     public func createReminder(_ params: JSONValue) async throws -> JSONValue { throw unavailable() }
     public func completeReminder(id: String, completed: Bool) async throws -> JSONValue { throw unavailable() }
+    public func deleteReminder(id: String) async throws -> JSONValue { throw unavailable() }
 }
 
 @MainActor public final class HeadlessFinder: FinderService {

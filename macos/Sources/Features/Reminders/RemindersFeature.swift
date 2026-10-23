@@ -148,6 +148,20 @@ public enum EventKitAccess: String, Sendable {
         }
     }
 
+    /// Removes the reminder from Reminders (EKEventStore.remove). nil = deleted, else the error message.
+    func delete(id: String) async -> String? {
+        guard access().0 == .ok, let ek = eventKit else { return access().1 ?? "Not ready" }
+        do {
+            _ = try await ek.deleteReminder(id: id)
+            reminders.removeAll { $0.id == id }
+            await load()
+            context?.refreshCatalogue()
+            return nil
+        } catch {
+            return Self.failure(error).1
+        }
+    }
+
     /// Explicit user action only (the "Grant Access" row).
     func requestAccess() async {
         _ = await context?.services.permissions.request(.reminders)
@@ -283,6 +297,13 @@ public enum EventKitAccess: String, Sendable {
                          }] + common + [N7Action("copy", "Copy Title", shortcut: "⌘C", icon: "doc.on.doc") { [weak self] in
                              self?.context?.services.pasteboard.setString(r.title, html: nil, transient: false)
                              LauncherHosts.current?.toast("Copied", style: .success)
+                         },
+                         // Destructive: ⌃X / vim x need a second press (N7ListModel.confirmDelete).
+                         N7Action("delete", "Delete Reminder", shortcut: "⌃X", icon: "trash", destructive: true) { [weak self] in
+                             guard let self else { return }
+                             if let err = await self.delete(id: r.id) { self.listModel.host?.toast(err, style: .error) } else {
+                                 self.listModel.host?.toast("Deleted “\(r.title)”", style: .success)
+                             }
                          }])
         }
         if rows.isEmpty {
@@ -363,6 +384,13 @@ public enum EventKitAccess: String, Sendable {
             guard let r = reminders.first(where: { $0.id == args["id"]?.stringValue }) else { return ["ok": false, "error": "Invalid reminder"] }
             let err = await complete(r, args["completed"]?.boolValue != false)
             return ["ok": .bool(err == nil), "error": err.map(JSONValue.string) ?? .null]
+        case "delete":
+            // Agent / MCP `delete_reminder` (and the agent's undo of create_reminder). Accepts {id} or a bare id string.
+            guard let rid = (args["id"]?.stringValue ?? args.stringValue)?.trimmingCharacters(in: .whitespaces), !rid.isEmpty else { return ["ok": false, "error": "Missing id"] }
+            if reminders.isEmpty { await load() }
+            let title = reminders.first { $0.id == rid }?.title
+            let err = await delete(id: rid)
+            return ["ok": .bool(err == nil), "error": err.map(JSONValue.string) ?? .null, "message": err == nil ? .string("Deleted reminder “\(title ?? rid)”") : .null]
         case "setSettings":
             var p: [String: JSONValue] = [:]
             if let v = args["defaultListId"]?.stringValue { p["defaultListId"] = .string(v) }

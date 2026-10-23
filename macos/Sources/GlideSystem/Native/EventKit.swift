@@ -134,6 +134,14 @@ import GlideCore
         try store.save(r, commit: true)
         return Self.describe(r)
     }
+
+    public func deleteReminder(id: String) async throws -> JSONValue {
+        try require(.reminder, "Reminders")
+        guard let r = store.calendarItem(withIdentifier: id) as? EKReminder else { throw FeatureError.failed("Reminder not found") }
+        guard r.calendar?.allowsContentModifications != false else { throw FeatureError.failed("This reminders list is read-only") }
+        try store.remove(r, commit: true)
+        return ["id": .string(id), "deleted": true]
+    }
 }
 
 /// In-memory EventKit for tests and headless driver runs (never touches the user's calendars/reminders).
@@ -196,5 +204,11 @@ import GlideCore
         o["completionDate"] = completed ? .string(ISO8601DateFormatter().string(from: Date())) : .null
         reminderItems[i] = .object(o)
         return .object(o)
+    }
+
+    public func deleteReminder(id: String) async throws -> JSONValue {
+        guard let i = reminderItems.firstIndex(where: { $0["id"]?.stringValue == id }) else { throw FeatureError.failed("Reminder not found") }
+        reminderItems.remove(at: i)
+        return ["id": .string(id), "deleted": true]
     }
 }

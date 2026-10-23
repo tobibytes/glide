@@ -1,5 +1,6 @@
 import AppKit
 import GlideCore
+import GlideSystem
 import SwiftUI
 
 /// Electron-style accelerator from a key press ("Command+Shift+K", "Alt+Space"). Pure (unit-tested).
@@ -47,7 +48,34 @@ public struct HotkeyRecorderField: NSViewRepresentable {
         var value: String?
         var placeholder = ""
         var onChange: (String) -> Void = { _ in }
-        private var recording = false { didSet { needsDisplay = true } }
+        private var recording = false { didSet { needsDisplay = true; updateCapture() } }
+        /// Glide's global hotkeys are suspended while this field records in the key window (HotkeyCapture), or
+        /// the current launcher hotkey could never be recorded: Carbon would consume it and toggle the launcher.
+        private(set) var capturing = false
+        private var keyObservers: [NSObjectProtocol] = []
+
+        private func updateCapture() {
+            let want = recording && (window?.isKeyWindow ?? false)
+            guard want != capturing else { return }
+            capturing = want
+            if want { HotkeyCapture.begin() } else { HotkeyCapture.end() }
+        }
+
+        override public func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            for o in keyObservers { NotificationCenter.default.removeObserver(o) }
+            keyObservers = []
+            if let w = window {
+                for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
+                    keyObservers.append(NotificationCenter.default.addObserver(forName: name, object: w, queue: .main) { [weak self] _ in
+                        MainActor.assumeIsolated { self?.updateCapture() }
+                    })
+                }
+            } else {
+                recording = false
+            }
+            updateCapture()
+        }
         override public var acceptsFirstResponder: Bool { true }
         override public var canBecomeKeyView: Bool { true }
         override public var intrinsicContentSize: NSSize { NSSize(width: 200, height: 26) }

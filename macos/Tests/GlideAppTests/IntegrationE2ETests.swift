@@ -146,9 +146,11 @@ struct IntegrationE2ETests {
         _ = try d.invoke("workflows", "run", ["workflowId": "wf-fx", "input": "ping"])
         let effects = (result(try d.invoke("headless", "effects")) as? [[String: Any]]) ?? []
         #expect(effects.contains { $0["kind"] as? String == "http" })
-        // Timers' countdown goes through the shared status-title API (recorded, never shown headless).
+        // Timers' countdown goes through the shared status-item API (`services.statusItems`; the headless fake records
+        // `status-item`, never an NSStatusItem). The Menu Bar Timers extra (on by default) would claim it, so turn it off.
+        _ = try d.invoke("menubar", "setSettings", ["timers": false])
         _ = try d.invoke("timers", "start", ["ms": 60_000, "name": "Tea"])
-        #expect(try poll { d.sideEffects.contains { $0.kind == "status-title" && $0.detail.contains("timers") } })
+        #expect(try poll { d.sideEffects.contains { $0.kind == "status-item" && $0.detail.contains("timers") } })
     }
 
     // MARK: callFeature contracts (shapes the callers send → what they parse)

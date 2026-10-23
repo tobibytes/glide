@@ -4,14 +4,15 @@ import GlideCore
 typealias MCPTransportFactory = @MainActor (MCPServerConfig) throws -> any MCPClientTransport
 
 enum MCPTransportFactories {
-    /// Real transports: stdio under the watchdog, Streamable HTTP (legacy SSE servers are reached the same way;
-    /// most of them also answer Streamable HTTP POSTs).
+    /// Real transports: stdio under the watchdog, Streamable HTTP, and the legacy HTTP+SSE transport (2024-11-05:
+    /// GET an event stream, POST to the endpoint it announces) for `sse` servers, like the SDK's SSEClientTransport.
     @MainActor static func live(_ c: MCPServerConfig) throws -> any MCPClientTransport {
         if c.transport == "stdio" {
             guard let cmd = c.command else { throw MCPConfigError("No command configured") }
             return MCPStdioTransport(command: cmd, args: c.args, env: c.env ?? [:], cwd: c.cwd)
         }
         guard let s = c.url, let url = URL(string: s) else { throw MCPConfigError("No URL configured") }
+        if c.transport == "sse" { return MCPLegacySSEClientTransport(url: url, headers: c.headers ?? [:]) }
         return MCPHTTPClientTransport(url: url, headers: c.headers ?? [:])
     }
 }

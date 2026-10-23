@@ -1,37 +1,41 @@
 import AppKit
+import GlideCore
 
-/// Menu bar item (never created in headless mode).
-@MainActor final class StatusItemController: NSObject {
-    private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength) // length grows with a feature title
+/// Glide's own menu-bar icon, registered as the "glide" item of the shared status-item API
+/// (`SystemServices.statusItems`). The live service renders it as an NSStatusItem; headless runs record it only.
+/// Timers / Focus (and the Menu Bar feature's Timers extra) merge their titles and menus into it while
+/// "Show timers and focus in Glide's menu bar icon" is on.
+@MainActor final class StatusItemController {
+    private let service: any StatusItemService
+    private let hotkeyDisplay: String
     private let onShow: () -> Void
     private let onSettings: () -> Void
+    private var title = ""
 
-    init(hotkeyDisplay: String, onShow: @escaping () -> Void, onSettings: @escaping () -> Void) {
+    init(service: any StatusItemService, hotkeyDisplay: String, onShow: @escaping () -> Void, onSettings: @escaping () -> Void) {
+        self.service = service
+        self.hotkeyDisplay = hotkeyDisplay
         self.onShow = onShow
         self.onSettings = onSettings
-        super.init()
-        item.button?.image = NSImage(systemSymbolName: "sparkle.magnifyingglass", accessibilityDescription: "Glide")
-        let menu = NSMenu()
-        let open = NSMenuItem(title: "Open Glide  \(hotkeyDisplay)", action: #selector(openLauncher), keyEquivalent: "")
-        open.target = self
-        menu.addItem(open)
-        let settings = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
-        settings.target = self
-        menu.addItem(settings)
-        menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit Glide", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
-        item.menu = menu
+        publish()
     }
 
-    /// Feature titles (e.g. a running timer) next to the icon; "" shows the icon alone.
+    /// Feature titles (`FeatureContext.setStatusTitle`) next to the icon; "" shows the icon alone.
     func setTitle(_ title: String) {
-        item.length = title.isEmpty ? NSStatusItem.squareLength : NSStatusItem.variableLength
-        item.button?.imagePosition = title.isEmpty ? .imageOnly : .imageLeading
-        item.button?.attributedTitle = NSAttributedString(string: title.isEmpty ? "" : " \(title)", attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)])
+        guard title != self.title else { return }
+        self.title = title
+        publish()
     }
 
-    @objc private func openLauncher() { onShow() }
-    @objc private func openSettings() { onSettings() }
+    private func publish() {
+        let show = onShow, settings = onSettings
+        service.setGlideItem(StatusItemSpec(title: title, icon: StatusItemComposer.glideIcon, tooltip: "Glide", menu: [
+            StatusMenuItem("Open Glide  \(hotkeyDisplay)") { show() },
+            StatusMenuItem("Settings…", shortcut: "⌘,") { settings() },
+            .separator,
+            StatusMenuItem("Quit Glide", shortcut: "⌘Q") { NSApp.terminate(nil) },
+        ]))
+    }
 }
 
 /// One native Glide per data directory: an flock'ed lock file (the Electron app shares the bundle id, so

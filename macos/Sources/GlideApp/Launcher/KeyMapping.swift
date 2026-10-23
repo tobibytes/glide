@@ -1,5 +1,6 @@
 import AppKit
 import GlideCore
+import GlideSystem
 
 enum KeyMapping {
     /// NSEvent → the DOM-style key names the vim model uses.
@@ -19,7 +20,8 @@ enum KeyMapping {
         case 48: name = "Tab"
         default:
             guard let c = e.charactersIgnoringModifiers, !c.isEmpty else { return nil }
-            name = c
+            // ⌘K / ⌃J on a Cyrillic, Greek… layout: match shortcuts by the US key at that position.
+            name = f.contains(.command) || f.contains(.control) ? PanelKeyInput.shortcutKey(keyCode: e.keyCode, characters: c) : c
         }
         return VimKey(name, ctrl: f.contains(.control), meta: f.contains(.command), shift: f.contains(.shift), alt: f.contains(.option))
     }

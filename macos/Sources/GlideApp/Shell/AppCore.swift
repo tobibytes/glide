@@ -53,6 +53,19 @@ struct AppConfig {
             frontmost.start()
             services = SystemServicesFactory.live(frontmost: frontmost)
             (services.permissions as? SystemPermissionService)?.startWatching()
+            // Hotkey recorders (Settings, the tour) get the keyboard: suspend Glide's global hotkeys meanwhile.
+            let hotkeys = services.hotkeys
+            HotkeyCapture.onChange = { on in (hotkeys as? CarbonHotkeyService)?.setSuspended(on) }
+            // Nothing listened to the 2 s permission poll: a keyboard tap / modifier hotkey that failed at launch
+            // (permission not granted yet) only started after a relaunch. Retry when the status changes.
+            if let perms = services.permissions as? SystemPermissionService {
+                let tap = services.keyboardTap, earlier = perms.onChange
+                perms.onChange = { status in
+                    earlier?(status)
+                    (tap as? EventTapKeyboardService)?.retryIfNeeded()
+                    (hotkeys as? CarbonHotkeyService)?.permissionsChanged()
+                }
+            }
         }
         registry = FeatureRegistry(features: [appFeature] + AllFeatures.make())
         let verbose = config.verbose

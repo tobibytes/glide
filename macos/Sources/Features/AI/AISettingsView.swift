@@ -165,7 +165,7 @@ struct AISettingsView: View {
                             .onSubmit { model.saveBaseURL() }
                         Button("Save") { model.saveBaseURL() }.disabled(model.baseURLDraft == nil)
                     }
-                    Text("Leave the server empty for api.openai.com. Any OpenAI-compatible server works; local servers need no key.")
+                    Text("Leave the server empty for api.openai.com. Any OpenAI-compatible server works; local servers need no key. Your OpenAI key is sent to the server you enter here, so only use servers you trust.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Picker("Effort", selection: Binding(get: { model.effort }, set: { model.set("effort", .string($0)) })) {

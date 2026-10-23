@@ -133,8 +133,7 @@ import SwiftUI
         startPolling()
         if c.services.isHeadless { return } // state only: never a window in headless runs
         if let w = window {
-            NSApp.activate(ignoringOtherApps: true)
-            w.makeKeyAndOrderFront(nil)
+            GlideWindows.shared.present(w)
             return
         }
         let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 560), styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: true)
@@ -153,8 +152,7 @@ import SwiftUI
             return self.handleWindowKey(e) ? nil : e
         }
         window = w
-        NSApp.activate(ignoringOtherApps: true) // a normal, activating window like Settings
-        w.makeKeyAndOrderFront(nil)
+        GlideWindows.shared.present(w) // a normal, activating window like Settings (Dock + ⌘Tab while open)
     }
 
     public func closeWindow() {
@@ -221,7 +219,9 @@ import SwiftUI
         case .completed:
             persist(OnboardingFlow.persistPatch(next, now: now))
             closeWindow()
-            context?.showLauncher()
+            // After the focus is back in the user's app: showing the non-activating launcher first would lose
+            // the key status (and hide it on blur) when that activation lands.
+            GlideWindows.shared.whenFocusRestored { [weak self] in self?.context?.showLauncher() }
         case .skipped:
             persist(OnboardingFlow.persistPatch(next, now: now))
             closeWindow()
@@ -357,6 +357,9 @@ import SwiftUI
         model.openedPermission = kind
         let current = permissionsSnapshot().status[kind]
         if let req = kind.requestKind, current != .granted { _ = await c.services.permissions.request(req) }
+        // Screen Recording has no PermissionService kind: without asking once Glide is not even listed in the
+        // pane (the user would have to add it with +). Explicit click only; never headless.
+        if kind == .screenRecording, current != .granted, !isHeadless, !CGPreflightScreenCaptureAccess() { _ = CGRequestScreenCaptureAccess() }
         if let url = URL(string: kind.paneURL) { _ = c.services.workspace.open(url: url) }
         refreshPermissions()
         return kind.paneURL

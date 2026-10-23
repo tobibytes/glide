@@ -42,6 +42,9 @@ enum LauncherMetrics {
     func setQuery(_ text: String) { controller?.query = text }
     func setTitle(_ title: String) { controller?.setTopTitle(title) }
     var viewStack: [ViewID] { controller?.stack.map(\.id) ?? [] }
+    func setContextTitle(_ title: String) { controller?.setTopTitle(title) }
+    var vimMode: VimMode? { controller.flatMap { $0.vimEnabled ? $0.mode : nil } }
+    func popAndClose() { controller?.pop(); controller?.hide() }
 }
 
 struct LauncherView: View {
