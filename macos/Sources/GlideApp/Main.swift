@@ -3,6 +3,7 @@ import Foundation
 import GlideCore
 import GlideFeatures
 import GlideSystem
+import GlideUI
 
 @main
 struct GlideMain {
@@ -30,6 +31,9 @@ struct GlideMain {
         let app = NSApplication.shared
         // LSUIElement agent; headless runs are .prohibited (no Dock icon, no menu bar, cannot activate).
         app.setActivationPolicy(config.headless ? .prohibited : .accessory)
+        // Never shown (accessory app), but key equivalents go through it: without it ⌘C / ⌘V / ⌘A / ⌘Z do nothing
+        // in Glide's text fields and ⌘W doesn't close its windows.
+        app.mainMenu = GlideMainMenu.make()
         let delegate = AppDelegate(config: config)
         app.delegate = delegate
         withExtendedLifetime(delegate) { app.run() }

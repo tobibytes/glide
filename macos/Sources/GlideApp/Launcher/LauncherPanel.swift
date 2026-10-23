@@ -41,6 +41,13 @@ final class LauncherPanel: NSPanel {
     override func orderFrontRegardless() { if !headless { super.orderFrontRegardless() } }
     override func makeKey() { if !headless { super.makeKey() } }
 
+    /// ⌘ shortcuts reach the launcher before the Edit menu (⌘C copies the selected result, not the field text);
+    /// whatever the launcher doesn't use falls through to the menu (⌘V / ⌘A / ⌘Z in the search field).
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.type == .keyDown, event.modifierFlags.contains(.command), let onKey, onKey(event) { return true }
+        return super.performKeyEquivalent(with: event)
+    }
+
     /// Keys go to the launcher model first; only plain text editing reaches the field.
     override func sendEvent(_ event: NSEvent) {
         if event.type == .keyDown, let onKey, onKey(event) { return }
@@ -124,6 +131,16 @@ final class LauncherPanel: NSPanel {
     }
 
     func openSettings(page: String?) { openSettingsHandler?(page) }
+
+    func otherVisibleWindows() -> Set<Int> {
+        guard !headless else { return [] }
+        return Set(NSApp.windows.filter { $0 !== panel && $0.isVisible && $0.canBecomeKey }.map(\.windowNumber))
+    }
+
+    var otherWindowIsKey: Bool {
+        guard !headless, let k = NSApp.keyWindow else { return false }
+        return k !== panel && k.isVisible
+    }
 
     func contentHeightChanged() {
         let h = LauncherMetrics.height(controller)

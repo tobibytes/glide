@@ -7,7 +7,7 @@ import SwiftUI
 /// that joins all Spaces (incl. full-screen apps), remembers its frame in notes.json `bounds` and autosaves.
 @MainActor final class NotesPanelController: NSObject, NSWindowDelegate {
     private unowned let feature: NotesFeature
-    private let panel: NotesPanel
+    let panel: NotesPanel
     private let ui = NotesPanelUI()
     private var boundsTask: Task<Void, Never>?
 

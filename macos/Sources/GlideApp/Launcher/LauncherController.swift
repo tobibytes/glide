@@ -12,6 +12,11 @@ import Observation
     func hidePanel()
     func openSettings(page: String?)
     func contentHeightChanged()
+    /// Window numbers of Glide's other visible windows (notes panel, AI chat, editors), to tell whether an
+    /// action opened one.
+    func otherVisibleWindows() -> Set<Int>
+    /// Another Glide window has keyboard focus (an action just opened it).
+    var otherWindowIsKey: Bool { get }
 }
 
 /// The launcher's brain: catalogue, search, selection, vim keys, action panel, view stack, results.
@@ -310,15 +315,19 @@ import Observation
             store.setUsage(engine.usageRecords)
         }
         let wasVisible = windowing?.isVisible ?? false
+        let windowsBefore = windowing?.otherVisibleWindows() ?? []
         let result = await registry.run(action: actionId, on: scored, modifiers: modifiers)
-        handle(result, item: scored, actionId: actionId, wasVisible: wasVisible)
+        // An action that opened its own window (Floating Notes, AI Chat, an editor) keeps the focus: re-showing
+        // the launcher would take the keyboard away from it.
+        let openedWindow = windowing.map { $0.otherWindowIsKey || !$0.otherVisibleWindows().subtracting(windowsBefore).isEmpty } ?? false
+        handle(result, item: scored, actionId: actionId, wasVisible: wasVisible, openedWindow: openedWindow)
         return result
     }
 
-    func handle(_ result: ActionResult, item: ScoredItem, actionId: String?, wasVisible: Bool = true) {
+    func handle(_ result: ActionResult, item: ScoredItem, actionId: String?, wasVisible: Bool = true, openedWindow: Bool = false) {
         switch result {
         case let .hide(message):
-            let stay = settings.keepOpenAfterRun && !switchesApp(item.item, actionId: actionId)
+            let stay = settings.keepOpenAfterRun && !switchesApp(item.item, actionId: actionId) && !openedWindow
             argument = nil
             if stay {
                 if wasVisible && windowing?.isVisible == false { windowing?.showPanel() }

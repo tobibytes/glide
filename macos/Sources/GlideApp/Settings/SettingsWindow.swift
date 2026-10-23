@@ -143,12 +143,36 @@ struct AppearancePage: View {
 }
 
 struct AboutPage: View {
+    @Environment(\.openURL) private var openURL
+    static let repo = URL(string: "https://github.com/tobibytes/glide")!
+    static let author = URL(string: "https://github.com/tobibytes")!
+
+    private var version: String {
+        let info = Bundle.main.infoDictionary
+        let v = info?["CFBundleShortVersionString"] as? String ?? "dev"
+        let b = info?["CFBundleVersion"] as? String
+        return b.map { $0 == v ? "Version \(v)" : "Version \(v) (\($0))" } ?? "Version \(v)"
+    }
+
     var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "sparkle").font(.system(size: 40)).foregroundStyle(.tint)
-            Text("Glide").font(.title.bold())
-            Text("Native shell · phase 0").foregroundStyle(.secondary)
+        VStack(spacing: 12) {
+            Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 96, height: 96)
+            Text("Glide").font(.largeTitle.bold())
+            Text(version).foregroundStyle(.secondary).textSelection(.enabled)
+            Text("A keyboard-first launcher for macOS").foregroundStyle(.secondary)
+            HStack(spacing: 4) {
+                Text("Built by")
+                Link("tobibytes", destination: Self.author).fontWeight(.semibold)
+            }
+            .padding(.top, 4)
+            HStack(spacing: 10) {
+                Button { openURL(Self.repo) } label: { Label("GitHub", systemImage: "chevron.left.forwardslash.chevron.right") }
+                Button { openURL(Self.repo.appendingPathComponent("issues/new")) } label: { Label("Report an Issue", systemImage: "exclamationmark.bubble") }
+            }
+            .padding(.top, 6)
+            Text("Open source · MIT License · © 2026 tobibytes").font(.caption).foregroundStyle(.tertiary).padding(.top, 8)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

@@ -73,7 +73,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSPrincipalClass</key><string>NSApplication</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
-  <key>NSHumanReadableCopyright</key><string>Glide</string>
+  <key>NSHumanReadableCopyright</key><string>© 2026 tobibytes · MIT License</string>
   <key>CFBundleURLTypes</key>
   <array>
     <dict>
