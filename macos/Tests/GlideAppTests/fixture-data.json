@@ -1,0 +1,72 @@
+{
+  "settings": {
+    "hotkey": "Command+Space",
+    "theme": "dark",
+    "disabledSources": ["files"],
+    "appDirectories": ["/Applications", "/System/Applications", "/System/Applications/Utilities", "~/Applications", "~/Developer/Apps"],
+    "fileSearch": false,
+    "calculator": true,
+    "sectionLimit": 6,
+    "hideOnBlur": true,
+    "keepOpenAfterRun": false,
+    "frecencyHalfLifeDays": 14,
+    "vimMode": true,
+    "launchAtLogin": true,
+    "onboardingDone": true,
+    "lastSeenVersion": "0.3.0",
+    "features": {
+      "appearance": { "darkTheme": "nord", "lightTheme": "dawn", "accent": "#7c8cff", "density": "compact", "fontSize": 15, "radius": 12, "width": 820, "translucency": 40, "vibrancy": true, "animations": false },
+      "clipboard": { "enabled": true, "maxItems": 500, "ignoreApps": ["com.1password.1password"], "pasteStack": { "enabled": false } },
+      "keyboard": { "hyperKey": "capslock", "snippetExpansion": true },
+      "windows": { "gap": 8 },
+      "ai": { "model": "claude-sonnet", "temperature": 0.4, "keyRef": "safeStorage:ai" }
+    }
+  },
+  "workflows": [
+    {
+      "id": "wf-morning-setup",
+      "name": "Morning Setup",
+      "description": "Open Calendar and Notes, then say hello",
+      "icon": { "kind": "emoji", "value": "☀️" },
+      "keywords": ["start", "day"],
+      "hotkey": "Alt+Cmd+M",
+      "actions": [
+        { "id": "a1", "type": "openApp", "params": { "app": "Calendar" } },
+        { "id": "a2", "type": "openApp", "params": { "app": "Notes" }, "disabled": true },
+        { "id": "a3", "type": "condition", "params": { "left": "{{clipboard}}", "op": "contains", "right": "http" },
+          "then": [{ "id": "a3t", "type": "openUrl", "params": { "url": "{{clipboard}}" } }],
+          "else": [{ "id": "a3e", "type": "notify", "params": { "title": "No link" } }] },
+        { "id": "a4", "type": "feature", "label": "Snap left", "params": { "feature": "windows", "action": "snap", "position": "left-half", "delayMs": 250 }, "uiCollapsed": true }
+      ],
+      "createdAt": 1760000000000,
+      "updatedAt": 1760900000123,
+      "runCount": 42
+    },
+    {
+      "id": "wf-quick-note",
+      "name": "Quick Note",
+      "icon": { "kind": "symbol", "value": "note.text", "tint": "#f5a524" },
+      "acceptsInput": true,
+      "alias": "qn",
+      "actions": [
+        { "id": "a1", "type": "runShell", "params": { "command": "printf \"%s\\n\" \"{{input}}\" >> ~/Desktop/notes.txt", "shell": "/bin/zsh" } }
+      ],
+      "createdAt": 1760000000000,
+      "updatedAt": 1760000000000
+    }
+  ],
+  "quicklinks": [
+    { "id": "ql-google", "name": "Google", "url": "https://www.google.com/search?q={query}", "icon": { "kind": "emoji", "value": "🌐" }, "alias": "g" },
+    { "id": "ql-github", "name": "GitHub", "url": "https://github.com/search?q={query}", "icon": { "kind": "url", "value": "https://github.com/favicon.ico" }, "keywords": ["code"], "openWith": "com.google.Chrome" },
+    { "id": "ql-docs", "name": "Swift Docs", "url": "https://developer.apple.com/documentation", "faviconFetchedAt": 1760000001000 }
+  ],
+  "snippets": [
+    { "id": "sn-email-sig", "name": "Email signature", "text": "Best regards,\n\n— sent from Glide", "keyword": ";sig" },
+    { "id": "sn-shrug", "name": "Shrug", "text": "¯\\_(ツ)_/¯", "keyword": ";shrug", "excludedApps": ["com.apple.Terminal"] },
+    { "id": "sn-rich", "name": "Rich hello", "text": "Hello world", "html": "<b>Hello</b> world", "alias": "hi", "folder": "Greetings" }
+  ],
+  "favorites": ["app:/System/Applications/Calendar.app", "workflow:wf-morning-setup"],
+  "aliases": { "app:/Applications/Safari.app": "sf", "system:lockScreen": "lock" },
+  "hotkeys": { "app:/System/Applications/Notes.app": "Alt+Cmd+N", "clipboard.history": "Shift+Cmd+V" },
+  "schemaVersion": 3
+}

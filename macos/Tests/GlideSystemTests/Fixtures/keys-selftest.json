@@ -1,0 +1,170 @@
+{
+  "backspaces": [";sig", "👍🏽", "🇫🇷x", "é", "é", "日本"],
+  "expectBackspaces": [4, 1, 2, 1, 1, 2],
+  "cases": [
+    {
+      "name": "static keyword expands after the completing keystroke",
+      "config": { "snippets": [{ "keyword": ";sig", "text": "Best" }] },
+      "events": [{ "kind": "type", "text": "a;sig" }],
+      "expect": ["pass", "pass", "pass", "pass", "expand:;sig:4:-"]
+    },
+    {
+      "name": "longest matching suffix wins",
+      "config": { "snippets": [{ "keyword": "sig", "text": "short" }, { "keyword": ";sig", "text": "long" }] },
+      "events": [{ "kind": "type", "text": ";sig" }, { "kind": "type", "text": " sig" }],
+      "expect": ["pass", "pass", "pass", "expand:;sig:4:-", "pass", "pass", "pass", "expand:sig:3:-"]
+    },
+    {
+      "name": "live entry waits for snippet.render and queues typing meanwhile",
+      "config": { "snippets": [{ "keyword": ";d", "text": "fallback-date", "id": "s1" }] },
+      "events": [
+        { "kind": "type", "text": ";d" },
+        { "kind": "type", "text": "x" },
+        { "kind": "up", "code": 7 },
+        { "kind": "renderReply", "fallback": "fallback-date", "text": "2026-10-22", "cursorLeft": 3 },
+        { "kind": "type", "text": "y" }
+      ],
+      "expect": ["pass", "expand:;d:2:s1", "queue", "queue", "render:live:2026-10-22:-:3", "pass"]
+    },
+    {
+      "name": "render timeout falls back to the pre-rendered text; rich replies keep html",
+      "config": { "snippets": [{ "keyword": ";d", "text": "fallback-date", "id": "s1" }] },
+      "events": [
+        { "kind": "type", "text": ";d" },
+        { "kind": "renderReply", "fallback": "fallback-date" },
+        { "kind": "type", "text": ";d" },
+        { "kind": "renderReply", "fallback": "fallback-date", "text": "Bold", "html": "<b>Bold</b>", "cursorLeft": -4 }
+      ],
+      "expect": ["pass", "expand:;d:2:s1", "render:fallback:fallback-date:-:0", "pass", "expand:;d:2:s1", "render:live:Bold:<b>Bold</b>:0"]
+    },
+    {
+      "name": "a live entry with an empty fallback ({clipboard} with nothing copied yet) still matches",
+      "config": { "snippets": [{ "keyword": ";cb", "text": "", "id": "cb" }, { "keyword": ";x", "text": "" }] },
+      "events": [{ "kind": "type", "text": ";x;cb" }, { "kind": "renderReply", "fallback": "" }],
+      "expect": ["pass", "pass", "pass", "pass", "expand:;cb:3:cb", "render:fallback::-:0"]
+    },
+    {
+      "name": "multi-UTF16 keywords delete one backspace per grapheme",
+      "config": { "snippets": [{ "keyword": "👍🏽", "text": "thumbs" }, { "keyword": ";é", "text": "accent" }] },
+      "events": [{ "kind": "type", "text": "👍🏽" }, { "kind": "type", "text": ";é" }],
+      "expect": ["expand:👍🏽:1:-", "pass", "expand:;é:2:-"]
+    },
+    {
+      "name": "case-adaptive variants match the typed case",
+      "config": {
+        "snippets": [
+          { "keyword": ";sig", "text": "best", "id": "s1" },
+          { "keyword": ";Sig", "text": "Best", "id": "s1" },
+          { "keyword": ";SIG", "text": "BEST", "id": "s1" }
+        ]
+      },
+      "events": [{ "kind": "type", "text": ";Sig" }, { "kind": "renderReply", "fallback": "Best" }, { "kind": "type", "text": ";SIG" }],
+      "expect": ["pass", "pass", "pass", "expand:;Sig:4:s1", "render:fallback:Best:-:0", "pass", "pass", "pass", "expand:;SIG:4:s1"]
+    },
+    {
+      "name": "per-snippet and global app exclusions (case-insensitive)",
+      "config": {
+        "snippets": [{ "keyword": ";sig", "text": "Best", "excludedBundleIds": ["com.apple.Terminal"] }],
+        "excludedBundleIds": ["com.microsoft.VSCode"]
+      },
+      "events": [
+        { "kind": "type", "text": ";sig", "bundleId": "com.apple.terminal" },
+        { "kind": "type", "text": ";sig", "bundleId": "COM.MICROSOFT.VSCODE" },
+        { "kind": "type", "text": ";sig", "bundleId": "com.apple.TextEdit" }
+      ],
+      "expect": ["pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "expand:;sig:4:-"]
+    },
+    {
+      "name": "never expands in secure input; the buffer restarts afterwards",
+      "config": { "snippets": [{ "keyword": ";sig", "text": "Best" }] },
+      "events": [{ "kind": "type", "text": ";si" }, { "kind": "type", "text": "g", "secure": true }, { "kind": "type", "text": ";sig", "secure": true }, { "kind": "type", "text": "g" }, { "kind": "type", "text": ";sig" }],
+      "expect": ["pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "expand:;sig:4:-"]
+    },
+    {
+      "name": "reset keys, delete, ⌘ chords and clicks",
+      "config": { "snippets": [{ "keyword": ";sig", "text": "Best" }] },
+      "events": [
+        { "kind": "type", "text": ";si" }, { "kind": "down", "code": 36 }, { "kind": "type", "text": "g" },
+        { "kind": "type", "text": ";six" }, { "kind": "down", "code": 51 }, { "kind": "type", "text": "g" },
+        { "kind": "type", "text": ";si" }, { "kind": "down", "code": 8, "chars": "c", "mods": ["cmd"] }, { "kind": "type", "text": "g" },
+        { "kind": "type", "text": ";si" }, { "kind": "mouse" }, { "kind": "type", "text": "g" },
+        { "kind": "type", "text": ";si" }, { "kind": "flags", "mods": ["ctrl"] }, { "kind": "type", "text": "g" },
+        { "kind": "type", "text": ";si" }, { "kind": "flags", "mods": ["shift"] }, { "kind": "type", "text": "G" }, { "kind": "down", "code": 51 }, { "kind": "type", "text": "g" }
+      ],
+      "expect": [
+        "pass", "pass", "pass", "pass", "pass",
+        "pass", "pass", "pass", "pass", "pass", "expand:;sig:4:-",
+        "pass", "pass", "pass", "pass", "pass",
+        "pass", "pass", "pass", "pass", "pass",
+        "pass", "pass", "pass", "pass", "pass",
+        "pass", "pass", "pass", "pass", "pass", "pass", "expand:;sig:4:-"
+      ]
+    },
+    {
+      "name": "⌘V is never touched while the stack is off",
+      "config": { "snippets": [], "pasteStack": false },
+      "events": [{ "kind": "down", "code": 9, "chars": "v", "mods": ["cmd"] }, { "kind": "up", "code": 9, "mods": ["cmd"] }],
+      "expect": ["pass", "pass"]
+    },
+    {
+      "name": "stack on: ⌘V is intercepted until the stack empties",
+      "config": { "snippets": [], "pasteStack": true },
+      "events": [
+        { "kind": "down", "code": 9, "chars": "v", "mods": ["cmd"] },
+        { "kind": "type", "text": "z" },
+        { "kind": "up", "code": 9, "mods": ["cmd"] },
+        { "kind": "stackReply", "text": "one", "active": true },
+        { "kind": "down", "code": 9, "chars": "v", "mods": ["cmd"] },
+        { "kind": "up", "code": 9 },
+        { "kind": "stackReply", "text": "two", "html": "<i>two</i>", "active": false },
+        { "kind": "down", "code": 9, "chars": "v", "mods": ["cmd"] }
+      ],
+      "expect": ["interceptPaste", "queue", "swallow", "stack:paste:one:-:on", "interceptPaste", "swallow", "stack:paste:two:<i>two</i>:off", "pass"]
+    },
+    {
+      "name": "stack: empty, passthrough and watchdog replies let the original ⌘V through",
+      "config": { "snippets": [], "pasteStack": true },
+      "events": [
+        { "kind": "down", "code": 9, "chars": "v", "mods": ["cmd"] }, { "kind": "stackTimeout" },
+        { "kind": "down", "code": 9, "chars": "v", "mods": ["cmd"] }, { "kind": "stackReply", "passthrough": true, "active": true },
+        { "kind": "down", "code": 9, "chars": "v", "mods": ["cmd"] }, { "kind": "stackReply", "empty": true },
+        { "kind": "down", "code": 9, "chars": "v", "mods": ["cmd"] }
+      ],
+      "expect": ["interceptPaste", "stack:passOriginal:on", "interceptPaste", "stack:passOriginal:on", "interceptPaste", "stack:passOriginal:off", "pass"]
+    },
+    {
+      "name": "stack: only a plain ⌘V (by character) is intercepted",
+      "config": { "snippets": [], "pasteStack": true },
+      "events": [
+        { "kind": "down", "code": 9, "chars": "v", "mods": ["cmd", "shift"] },
+        { "kind": "down", "code": 9, "chars": "v", "mods": ["cmd", "alt"] },
+        { "kind": "down", "code": 9, "chars": "v" },
+        { "kind": "down", "code": 9, "chars": "v", "mods": ["cmd"], "secure": true },
+        { "kind": "down", "code": 9, "chars": "v", "mods": ["cmd"], "autorepeat": true },
+        { "kind": "down", "code": 47, "chars": "v", "mods": ["cmd"] },
+        { "kind": "stackReply", "text": "dvorak", "active": true },
+        { "kind": "down", "code": 9, "chars": "", "mods": ["cmd"] },
+        { "kind": "stackReply", "text": "nochars", "active": true },
+        { "kind": "down", "code": 9, "chars": "ü", "mods": ["cmd"] }
+      ],
+      "expect": ["pass", "pass", "pass", "pass", "pass", "interceptPaste", "stack:paste:dvorak:-:on", "interceptPaste", "stack:paste:nochars:-:on", "pass"]
+    },
+    {
+      "name": "Hyper key: F18 held adds ⌃⌥⇧⌘, tapped alone is Escape",
+      "config": { "snippets": [{ "keyword": ";sig", "text": "Best" }], "hyper": true },
+      "events": [
+        { "kind": "type", "text": ";si" },
+        { "kind": "down", "code": 79 }, { "kind": "down", "code": 79, "autorepeat": true }, { "kind": "down", "code": 40, "chars": "k" }, { "kind": "up", "code": 40 }, { "kind": "up", "code": 79 },
+        { "kind": "type", "text": "g" },
+        { "kind": "down", "code": 79 }, { "kind": "up", "code": 79 }
+      ],
+      "expect": ["pass", "pass", "pass", "swallow", "swallow", "passHyper", "passHyper", "swallow", "pass", "swallow", "swallowPostEscape"]
+    },
+    {
+      "name": "F18 passes untouched when Hyper is off",
+      "config": { "snippets": [{ "keyword": ";sig", "text": "Best" }], "hyper": false },
+      "events": [{ "kind": "down", "code": 79 }, { "kind": "up", "code": 79 }],
+      "expect": ["pass", "pass"]
+    }
+  ]
+}

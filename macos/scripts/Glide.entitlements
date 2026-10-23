@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Hardened-runtime entitlements for native Glide.app (scripts/build-app.sh). No JIT needed (no V8).
+     Not sandboxed: Glide drives other apps (AX, Apple Events), reads selection and pastes. -->
+<plist version="1.0">
+<dict>
+  <!-- Workflows run AppleScript; snippets paste via System Events. -->
+  <key>com.apple.security.automation.apple-events</key>
+  <true/>
+  <!-- Calendar / Reminders (EventKit) and Location (weather, Wi-Fi SSID). -->
+  <key>com.apple.security.personal-information.calendars</key>
+  <true/>
+  <key>com.apple.security.personal-information.location</key>
+  <true/>
+</dict>
+</plist>
