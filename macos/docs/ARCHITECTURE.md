@@ -68,12 +68,18 @@ headless mode.
 | `FeatureContext.setStatusTitle(_:)` | Text next to the Glide menu-bar icon (Timers' countdown). `StatusTitleRouting.claim` lets Menu Bar show it on its Timers extra instead. Headless: `status-title` effect. |
 | `FeatureContext.executeItem` | Returns the item's real `ActionResult`. |
 | `LauncherViewHost.setTitle(_:)` / `FeatureUI.viewTitle(_:payload:)` | Footer context title of a pushed view. Default: the pushing item's title, else the feature title. Never the raw view id. Test state: `contextTitle`. |
+| `FeatureUI.viewPlaceholder(_:payload:)` | The search-field placeholder at push time, so it appears on the first frame. |
 | push payload `"query"` | Pre-fills the pushed view's search field. `LauncherViewHost.setQuery` changes it later. |
 | `LauncherViewHost.viewStack` | Ids of the pushed views, bottom → top. |
 | `SettingsPage(onRoute:)` | Receives the sub-route of `<page>/<route>` or `<page>#<route>` (`workflows/<id>`, `snippets/<id>`, `automations#new`), also in headless runs and settings snapshots. |
 | `PasteboardService.imagePNG/setImagePNG/fileURLs/setFileURLs` | Image and file pasteboard contents. Headless fake: `pasteboard-image` and `pasteboard-files` effects. |
 | `ItemIcon.url(_:)` (kind `"url"`) | `data:` and `file:` images. http(s) favicons are fetched only in the live app (`FaviconCache.networkAllowed`). |
 | ⌘⏎ in the root search | `agent/openFromLauncher {query}`. Applies when the selected row is a fallback, there is no selection, or the row has no ⌘⏎ action of its own. Otherwise the row's ⌘⏎ wins. Agent settings can turn it off. |
+
+A catalogue rebuild re-runs the current query and keeps that query's last dynamic rows (calculator, conversions,
+timers) until fresh ones arrive, so other features' `refreshCatalogue()` calls don't make those rows flicker.
+`SystemScriptService.runShell` reads stdout and stderr while the command runs, so output over 64 KB no longer
+deadlocks.
 
 The search engine's inline argument ("g electron") does not apply when the whole query is the start of some item's
 title, so "search snippets" opens Search Snippets rather than "Search Bookmarks" with the argument "snippets". An

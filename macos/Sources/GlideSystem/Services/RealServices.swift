@@ -139,11 +139,14 @@ import GlideCore
             p.standardOutput = out
             p.standardError = err
             try p.run()
+            // Drain both pipes while the process runs: reading only after exit deadlocked once a command wrote
+            // more than the 64 KB pipe buffer (integration fix).
+            let ob = PipeDrain(out.fileHandleForReading), eb = PipeDrain(err.fileHandleForReading)
             let deadline = Date().addingTimeInterval(timeout)
             while p.isRunning && Date() < deadline { usleep(10_000) }
             if p.isRunning { p.terminate() }
-            let o = out.fileHandleForReading.readDataToEndOfFile(), e = err.fileHandleForReading.readDataToEndOfFile()
             p.waitUntilExit()
+            let o = ob.finish(), e = eb.finish()
             return ShellResult(status: p.terminationStatus, stdout: String(decoding: o, as: UTF8.self), stderr: String(decoding: e, as: UTF8.self))
         }
     }
@@ -177,5 +180,25 @@ public enum PasteTiming {
     public static func restoreDelay(bundleId: String?) -> TimeInterval {
         guard let id = bundleId else { return standard }
         return slowPrefixes.contains { id.hasPrefix($0) } ? slow : standard
+    }
+}
+
+/// Reads a pipe to EOF on a background queue (so the writer never blocks on a full buffer). `finish` waits up to
+/// 2 s after exit: a detached grandchild can keep the pipe open.
+final class PipeDrain: @unchecked Sendable {
+    private var data = Data()
+    private let lock = NSLock()
+    private let done = DispatchSemaphore(value: 0)
+    init(_ handle: FileHandle) {
+        DispatchQueue.global(qos: .userInitiated).async { [self] in
+            let d = handle.readDataToEndOfFile()
+            lock.lock(); data = d; lock.unlock()
+            done.signal()
+        }
+    }
+    func finish() -> Data {
+        _ = done.wait(timeout: .now() + 2)
+        lock.lock(); defer { lock.unlock() }
+        return data
     }
 }

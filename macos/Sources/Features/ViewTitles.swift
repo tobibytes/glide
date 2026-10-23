@@ -20,7 +20,19 @@ enum ViewTitles {
         "workflows.prompt": "Workflow Input", "workflows.result": "Workflow Result",
     ]
     static func title(_ id: ViewID) -> String? { table[id.rawValue] }
+
+    /// First-frame placeholders (the views set the same text when they render).
+    static let placeholders: [String: String] = [
+        "clipboard.history": "Search clipboard history…", "snippets2.search": "Search snippets…",
+        "fileindex.search": "Search files…", "menus.search": "Search menu items…",
+        "agent.history": "Search agent conversations…",
+    ]
 }
+extension ClipboardFeature { public func viewPlaceholder(_ id: ViewID, payload: JSONValue) -> String? { ViewTitles.placeholders[id.rawValue] } }
+extension Snippets2Feature { public func viewPlaceholder(_ id: ViewID, payload: JSONValue) -> String? { ViewTitles.placeholders[id.rawValue] } }
+extension FilesFeature { public func viewPlaceholder(_ id: ViewID, payload: JSONValue) -> String? { ViewTitles.placeholders[id.rawValue] } }
+extension MenusFeature { public func viewPlaceholder(_ id: ViewID, payload: JSONValue) -> String? { ViewTitles.placeholders[id.rawValue] } }
+extension AgentFeature { public func viewPlaceholder(_ id: ViewID, payload: JSONValue) -> String? { ViewTitles.placeholders[id.rawValue] } }
 
 extension AgentFeature { public func viewTitle(_ id: ViewID, payload: JSONValue) -> String? { ViewTitles.title(id) } }
 extension AIFeature { public func viewTitle(_ id: ViewID, payload: JSONValue) -> String? { payload["title"]?.stringValue ?? ViewTitles.title(id) } }

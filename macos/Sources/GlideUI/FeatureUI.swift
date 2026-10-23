@@ -68,10 +68,14 @@ public struct SettingsPage: Identifiable {
     func handleKey(_ key: VimKey, view: ViewID) -> Bool
     /// Footer context title for a pushed view, known at push time (nil = the launcher's default). (integration)
     func viewTitle(_ id: ViewID, payload: JSONValue) -> String?
+    /// Search-field placeholder known at push time, so it shows on the first frame (`setPlaceholder` from
+    /// `launcherView` still overrides it). nil = "Search…". (integration)
+    func viewPlaceholder(_ id: ViewID, payload: JSONValue) -> String?
 }
 
 public extension FeatureUI {
     func viewTitle(_ id: ViewID, payload: JSONValue) -> String? { nil }
+    func viewPlaceholder(_ id: ViewID, payload: JSONValue) -> String? { nil }
     var settingsPage: SettingsPage? { nil }
     func launcherView(_ id: ViewID, payload: JSONValue, host: LauncherViewHost) -> AnyView? { nil }
     func handleKey(_ key: VimKey, view: ViewID) -> Bool { false }

@@ -123,3 +123,13 @@ struct PasteboardRichTests {
         #expect(log.all.first?.kind == "finder.newFile")
     }
 }
+
+@Suite("integration: shell output larger than a pipe buffer") @MainActor
+struct ShellPipeTests {
+    @Test func bigOutputDoesNotDeadlock() async throws {
+        let r = try await SystemScriptService().runShell("head -c 300000 /dev/zero | tr '\\\\0' 'x'; echo err >&2", shell: "/bin/sh", timeout: 10)
+        #expect(r.status == 0)
+        #expect(r.stdout.count == 300_000)
+        #expect(r.stderr == "err\n")
+    }
+}

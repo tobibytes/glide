@@ -94,6 +94,7 @@ struct IntegrationE2ETests {
         // Pushed by another feature / the test channel: the feature names the view (never the raw id).
         s = try d.invoke("launcher", "push", ["view": "clipboard.history", "payload": ["query": "abc"]])
         #expect(s["contextTitle"] as? String == "Clipboard History")
+        #expect(s["placeholder"] as? String == "Search clipboard history…") // push-time placeholder (first frame)
         #expect(s["query"] as? String == "abc") // payload "query" pre-fills the field
         try d.invoke("launcher", "pop")
         s = try d.invoke("launcher", "push", ["view": "workflows.prompt", "payload": NSNull()])

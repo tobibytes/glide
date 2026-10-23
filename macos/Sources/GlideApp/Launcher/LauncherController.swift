@@ -223,19 +223,31 @@ import Observation
         let gen = searchGeneration
         let q = query
         let keepId = preserveSelection ? selected?.id : nil
-        apply(engine.search(q), keepId: keepId)
+        // Integration: a catalogue rebuild (any feature's refreshCatalogue, e.g. a timer tick) re-runs the same
+        // query; keep that query's dynamic rows meanwhile instead of flashing static-only results.
+        apply(engine.search(q, dynamicItems: lastDynamic.query == q ? lastDynamic.items : []), keepId: keepId)
         searchTask?.cancel()
         guard !q.trimmingCharacters(in: .whitespaces).isEmpty else { searchTask = nil; return }
         searchTask = Task { @MainActor in
             let dynamic = await registry.dynamicItems(for: q)
-            guard gen == searchGeneration, !dynamic.isEmpty else { return }
+            guard gen == searchGeneration else { return }
+            lastDynamic = (q, dynamic)
+            guard !dynamic.isEmpty else { return }
             // N1: a selection still on the first row follows the new first row (calculator/conversion rows land above fallbacks).
             apply(engine.search(q, dynamicItems: dynamic), keepId: selectedIndex <= 0 ? nil : selected?.id)
         }
     }
 
     /// Wait for in-flight dynamic results (test channel).
-    func settle() async { await searchTask?.value }
+    func settle() async {
+        // A rebuild may supersede the awaited search (new task): wait for the current one.
+        for _ in 0..<20 {
+            guard let t = searchTask else { return }
+            await t.value
+            if searchTask == t { return }
+        }
+    }
+    @ObservationIgnored private var lastDynamic: (query: String, items: [ScoredItem]) = ("", [])
 
     private func apply(_ response: SearchResponse, keepId: String?) {
         var out: [LauncherRow] = []
@@ -346,7 +358,9 @@ import Observation
         argument = nil
         if var t = stack.popLast() { t.query = query; stack.append(t) } else { rootQuery = query }
         var view = PushedView(id: id, payload: payload)
-        view.title = (registry.feature(id.feature) as? any FeatureUI)?.viewTitle(id, payload: payload) ?? title
+        let ui = registry.feature(id.feature) as? any FeatureUI
+        view.title = ui?.viewTitle(id, payload: payload) ?? title
+        if let p = ui?.viewPlaceholder(id, payload: payload) { view.placeholder = p }
         stack.append(view)
         query = payload["query"]?.stringValue ?? ""
         mode = Vim.modeAfter(mode, .push)
