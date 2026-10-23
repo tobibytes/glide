@@ -18,16 +18,24 @@ import SwiftUI
         return feature?.keys.status() ?? AIKeyStatus(hasKey: false, encryptionAvailable: true)
     }
     var legacyAvailable: Bool { _ = revision; return feature?.legacyKeyAvailable ?? false }
-    var model: String { _ = revision; return feature?.currentModel ?? AIModels.defaultModel }
+    var model: String { _ = revision; return feature?.anthropicModel ?? AIModels.defaultModel }
+    var provider: AIProvider { _ = revision; return feature?.provider ?? .anthropic }
+    var openaiModel: String { _ = revision; return feature?.openaiModel ?? OpenAIModels.defaultModel }
+    var openaiBaseURL: String { _ = revision; return feature?.openaiBaseURL ?? "" }
+    var modelChoices: [AIModelInfo] { _ = revision; return feature?.modelChoices ?? AIModels.all }
+    var openaiModelDraft = ""
+    var baseURLDraft: String?
     var effort: String { _ = revision; return feature?.currentEffort ?? "medium" }
     var customCommands: [AICommandDef] { _ = revision; return feature?.customCommands ?? [] }
 
     func saveKey() {
         guard let f = feature else { return }
         do {
-            let s = try f.keys.set(keyDraft)
+            let before = f.provider
+            let s = try f.saveKey(keyDraft)
             keyDraft = ""
-            message = (s.hasKey ? "API key saved in the Keychain." : "API key removed.", true)
+            let switched = f.provider != before ? " Switched to \(f.provider.label)." : ""
+            message = (s.hasKey ? "\(f.provider.label) API key saved in the Keychain.\(switched)" : "API key removed.", true)
         } catch { message = (AIError.from(error).message, false) }
         revision += 1
     }
@@ -56,6 +64,21 @@ import SwiftUI
         }
     }
 
+    func setOpenAIModel(_ id: String) {
+        let t = id.trimmingCharacters(in: .whitespaces)
+        guard OpenAIModels.isValid(t) else { message = ("That isn't a valid model id.", false); return }
+        set("openaiModel", .string(t))
+        openaiModelDraft = ""
+    }
+
+    func saveBaseURL() {
+        let t = (baseURLDraft ?? "").trimmingCharacters(in: .whitespaces)
+        guard AIFeature.validOpenAIBaseURL(t) else { message = ("The server URL must be https (or http on localhost).", false); return }
+        set("openaiBaseURL", .string(t))
+        baseURLDraft = nil
+        message = (t.isEmpty ? "Using api.openai.com." : "Using \(t).", true)
+    }
+
     func set(_ key: String, _ value: JSONValue) {
         feature?.applySettings([key: value])
         revision += 1
@@ -78,7 +101,14 @@ struct AISettingsView: View {
 
     var body: some View {
         Form {
-            Section("Anthropic API key") {
+            Section("Provider") {
+                Picker("AI provider", selection: Binding(get: { model.provider.rawValue }, set: { model.set("provider", .string($0)); model.message = nil })) {
+                    ForEach(AIProvider.allCases) { p in Text(p.label).tag(p.rawValue) }
+                }
+                .pickerStyle(.segmented)
+                Text("Pasting a key for the other provider switches to it automatically.").font(.caption).foregroundStyle(.secondary)
+            }
+            Section("\(model.provider.label) API key") {
                 HStack {
                     Image(systemName: model.status.hasKey ? "checkmark.seal.fill" : "key")
                         .foregroundStyle(model.status.hasKey ? Color.green : Color.secondary)
@@ -90,12 +120,12 @@ struct AISettingsView: View {
                     }
                 }
                 HStack {
-                    SecureField("sk-ant-…", text: $model.keyDraft).onSubmit { model.saveKey() }
+                    SecureField(model.provider.keyPlaceholder, text: $model.keyDraft).onSubmit { model.saveKey() }
                     Button(model.status.hasKey ? "Replace" : "Save") { model.saveKey() }
                         .disabled(model.keyDraft.trimmingCharacters(in: .whitespaces).isEmpty)
                         .keyboardShortcut(.defaultAction)
                 }
-                if model.legacyAvailable {
+                if model.legacyAvailable && model.provider == .anthropic {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("A key from the previous Glide was found")
@@ -110,12 +140,33 @@ struct AISettingsView: View {
                     Label(m.text, systemImage: m.ok ? "checkmark.circle" : "exclamationmark.triangle")
                         .foregroundStyle(m.ok ? Color.green : Color.red)
                 }
-                Text("Get a key at console.anthropic.com. It is stored in your login Keychain and only sent to api.anthropic.com.")
+                Text(model.provider == .anthropic
+                     ? "Get a key at console.anthropic.com. It is stored in your login Keychain and only sent to api.anthropic.com."
+                     : "Get a key at platform.openai.com. It is stored in your login Keychain and only sent to \(model.openaiBaseURL.isEmpty ? "api.openai.com" : model.openaiBaseURL).")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Model") {
-                Picker("Default model", selection: Binding(get: { model.model }, set: { model.set("model", .string($0)) })) {
-                    ForEach(AIModels.all) { m in Text("\(m.label) — \(m.description)").tag(m.id) }
+                if model.provider == .anthropic {
+                    Picker("Default model", selection: Binding(get: { model.model }, set: { model.set("model", .string($0)) })) {
+                        ForEach(AIModels.all) { m in Text("\(m.label) — \(m.description)").tag(m.id) }
+                    }
+                } else {
+                    Picker("Default model", selection: Binding(get: { model.openaiModel }, set: { model.setOpenAIModel($0) })) {
+                        ForEach(model.modelChoices) { m in Text("\(m.label) — \(m.description)").tag(m.id) }
+                    }
+                    HStack {
+                        TextField("Other model id (gpt-…, openrouter/…, llama3.2)", text: $model.openaiModelDraft).onSubmit { model.setOpenAIModel(model.openaiModelDraft) }
+                        Button("Use") { model.setOpenAIModel(model.openaiModelDraft) }
+                            .disabled(model.openaiModelDraft.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                    HStack {
+                        TextField("Server URL (optional): https://openrouter.ai/api/v1, http://localhost:11434/v1",
+                                  text: Binding(get: { model.baseURLDraft ?? model.openaiBaseURL }, set: { model.baseURLDraft = $0 }))
+                            .onSubmit { model.saveBaseURL() }
+                        Button("Save") { model.saveBaseURL() }.disabled(model.baseURLDraft == nil)
+                    }
+                    Text("Leave the server empty for api.openai.com. Any OpenAI-compatible server works; local servers need no key.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 Picker("Effort", selection: Binding(get: { model.effort }, set: { model.set("effort", .string($0)) })) {
                     Text("Low — fastest").tag("low")
@@ -148,7 +199,7 @@ struct AISettingsView: View {
                     }
                 }
                 if let editing = model.editing {
-                    CommandEditor(command: editing, onSave: { model.saveCommand($0) }, onCancel: { model.editing = nil })
+                    CommandEditor(command: editing, models: model.modelChoices, onSave: { model.saveCommand($0) }, onCancel: { model.editing = nil })
                 } else {
                     Button("Add Command…") {
                         model.editing = AICommandDef(id: "", name: "", icon: "🤖", prompt: "Rewrite the text below …\n\n<text>\n{selection}\n</text>")
@@ -166,6 +217,7 @@ struct AISettingsView: View {
 
 struct CommandEditor: View {
     @State var command: AICommandDef
+    var models: [AIModelInfo] = AIModels.all
     let onSave: (AICommandDef) -> Void
     let onCancel: () -> Void
 
@@ -178,7 +230,7 @@ struct CommandEditor: View {
             TextEditor(text: $command.prompt).font(.system(.body, design: .monospaced)).frame(minHeight: 90)
             Picker("Model", selection: Binding(get: { command.model ?? "" }, set: { command.model = $0.isEmpty ? nil : $0 })) {
                 Text("Default").tag("")
-                ForEach(AIModels.all) { m in Text(m.label).tag(m.id) }
+                ForEach(models) { m in Text(m.label).tag(m.id) }
             }
             Toggle("Result replaces the selection", isOn: $command.replaces)
             HStack {

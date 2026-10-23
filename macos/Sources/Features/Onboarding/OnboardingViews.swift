@@ -244,10 +244,10 @@ private struct AIStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             StepTitle(eyebrow: "Step 3 · AI (optional)", title: "Bring Claude into Glide",
-                      lead: "Paste an Anthropic API key to ask AI from the launcher, chat, and transform selected text. Skip this if you don't need it.")
-            Text("Anthropic API key").font(.system(size: 12, weight: .medium)).foregroundStyle(theme.text2)
+                      lead: "Paste an Anthropic or OpenAI API key to ask AI from the launcher, chat, and transform selected text. Skip this if you don't need it.")
+            Text("Anthropic or OpenAI API key").font(.system(size: 12, weight: .medium)).foregroundStyle(theme.text2)
             HStack {
-                SecureField(model.aiHasKey == true ? "A key is saved — paste a new one to replace it" : "sk-ant-…", text: $model.aiKeyDraft)
+                SecureField(model.aiHasKey == true ? "A key is saved — paste a new one to replace it" : "sk-ant-… or sk-…", text: $model.aiKeyDraft)
                     .textFieldStyle(.roundedBorder)
                     .focused($fieldFocused)
                     .onSubmit { Task { await actions.saveAIKey() } }
@@ -258,9 +258,10 @@ private struct AIStep: View {
             HStack(spacing: 8) {
                 Tag(model.aiHasKey == true ? "Key saved" : "No key", accent: model.aiHasKey == true)
                 if model.aiHasKey == true { Button("Remove key") { Task { await actions.removeAIKey() } }.controlSize(.small) }
-                Button("Get a key ↗") { actions.openURL("https://console.anthropic.com/settings/keys") }.controlSize(.small)
+                Button("Get an Anthropic key ↗") { actions.openURL(AIProvider.anthropic.keyURL) }.controlSize(.small)
+                Button("Get an OpenAI key ↗") { actions.openURL(AIProvider.openai.keyURL) }.controlSize(.small)
             }
-            StatusLine(message: model.aiMessage, fallback: model.aiAvailable ? "Your key is stored in the macOS Keychain and only sent to Anthropic."
+            StatusLine(message: model.aiMessage, fallback: model.aiAvailable ? "Your key is stored in the macOS Keychain and only sent to that provider."
                 : "The AI feature isn't available in this build yet — you can add a key later in Settings → AI.")
         }
         .onChange(of: fieldFocused) { _, f in model.textFocused = f }

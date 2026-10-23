@@ -150,7 +150,7 @@ import SwiftUI
 
     var aiModel: (model: String, effort: String) {
         let ai = context?.store.settings.features["ai"] ?? [:]
-        let m = ai["model"]?.stringValue.flatMap { AIModels.isKnown($0) ? $0 : nil } ?? AIModels.defaultModel
+        let m = AgentAIBridge.provider?.currentModel ?? ai["model"]?.stringValue.flatMap { AIModels.isKnown($0) ? $0 : nil } ?? AIModels.defaultModel
         let e = ai["effort"]?.stringValue.flatMap { ["low", "medium", "high"].contains($0) ? $0 : nil } ?? "medium"
         return (m, e)
     }
@@ -234,7 +234,7 @@ import SwiftUI
         let client: any AIModelClient
         do { client = try makeClient() } catch {
             let m = (error as? AgentClientError)?.message ?? error.localizedDescription
-            return fail(m.isEmpty ? "Add your Anthropic API key in Settings → AI to use Glide Agent." : m)
+            return fail(m.isEmpty ? "Add an Anthropic or OpenAI API key in Settings → AI to use Glide Agent." : m)
         }
         let runId = newRunId()
         let cid = conversationId ?? model.conversationId

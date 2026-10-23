@@ -72,3 +72,34 @@ extension AIFeature {
         return self
     }
 }
+
+/// Adapts `OpenAIClient` to the agent loop: the agent's Anthropic-shaped messages and tools are translated to
+/// Chat Completions, and the answer comes back as Anthropic-shaped content blocks (text, tool_use) to replay.
+@MainActor final class AgentOpenAIClient: AIModelClient {
+    let client: OpenAIClient
+    init(client: OpenAIClient) { self.client = client }
+
+    static func body(_ req: AgentTurnRequest) -> JSONValue {
+        let system = req.context.isEmpty ? req.system : req.system + "\n\n" + req.context
+        return OpenAIFormat.body(model: req.model, effort: req.effort, system: system, messages: req.messages, tools: req.tools)
+    }
+
+    func turn(_ req: AgentTurnRequest, onText: @escaping @MainActor (String) -> Void) async throws -> AgentTurnResult {
+        let stream = client.stream(request: client.request(body: Self.body(req)), model: req.model)
+        do {
+            for try await e in stream {
+                switch e {
+                case let .textDelta(t): onText(t)
+                case let .finished(out):
+                    return AgentTurnResult(content: out.content.map(\.json), stopReason: out.stopReason, model: out.model)
+                default: break
+                }
+            }
+        } catch let e as AIError {
+            if e.kind == .refusal { return AgentTurnResult(content: [], stopReason: "refusal", model: req.model) }
+            throw AgentClientError(message: e.message, kind: e.kind.rawValue)
+        }
+        try Task.checkCancellation()
+        throw AgentClientError(message: "The answer was cut off (connection closed early).", kind: "network")
+    }
+}

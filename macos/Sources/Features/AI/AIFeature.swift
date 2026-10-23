@@ -17,7 +17,11 @@ import SwiftUI
     public static var quickViewId: ViewID { ViewID(feature: "ai", name: quickViewName) }
 
     private(set) weak var context: FeatureContext?
-    private(set) var keys = AIKeyStore(store: MemorySecretStore())
+    private(set) var anthropicKeys = AIKeyStore(store: MemorySecretStore())
+    private(set) var openaiKeys = AIKeyStore(store: MemorySecretStore())
+    /// The active provider's key store.
+    var keys: AIKeyStore { provider == .openai ? openaiKeys : anthropicKeys }
+    func keys(for p: AIProvider) -> AIKeyStore { p == .openai ? openaiKeys : anthropicKeys }
     private(set) var chats: AIChatStore?
     private var passwords: SafeStoragePasswordSource = FixedSafeStoragePassword(nil)
     private(set) var baseURL: URL?
@@ -40,10 +44,12 @@ import SwiftUI
         chats = AIChatStore(directory: context.dataDirectory().appendingPathComponent("chats", isDirectory: true))
         (baseURL, baseURLRejected) = Self.resolveBaseURL(environment["GLIDE_AI_BASE_URL"], headless: headless)
         if headless {
-            keys = AIKeyStore(store: MemorySecretStore(environment["GLIDE_AI_TEST_KEY"].flatMap { $0.isEmpty ? nil : $0 }))
+            anthropicKeys = AIKeyStore(store: MemorySecretStore(environment["GLIDE_AI_TEST_KEY"].flatMap { $0.isEmpty ? nil : $0 }))
+            openaiKeys = AIKeyStore(store: MemorySecretStore(environment["GLIDE_AI_TEST_OPENAI_KEY"].flatMap { $0.isEmpty ? nil : $0 }))
             passwords = FixedSafeStoragePassword(environment["GLIDE_AI_TEST_SAFE_STORAGE_PASSWORD"])
         } else {
-            keys = AIKeyStore(store: KeychainSecretStore())
+            anthropicKeys = AIKeyStore(store: KeychainSecretStore(account: AIProvider.anthropic.keychainAccount))
+            openaiKeys = AIKeyStore(store: KeychainSecretStore(account: AIProvider.openai.keychainAccount))
             passwords = KeychainSafeStoragePassword()
         }
         settingsModel.feature = self
@@ -67,20 +73,60 @@ import SwiftUI
     // MARK: settings
 
     var bag: [String: JSONValue] {
-        context?.settings(defaults: ["model": .string(AIModels.defaultModel), "effort": "medium", "customCommands": []]) ?? [:]
+        context?.settings(defaults: ["provider": "anthropic", "model": .string(AIModels.defaultModel), "openaiModel": .string(OpenAIModels.defaultModel),
+                                     "openaiBaseURL": "", "effort": "medium", "customCommands": []]) ?? [:]
     }
-    var currentModel: String { bag["model"]?.stringValue.flatMap { AIModels.isKnown($0) ? $0 : nil } ?? AIModels.defaultModel }
+    var provider: AIProvider { bag["provider"]?.stringValue.flatMap(AIProvider.init(rawValue:)) ?? .anthropic }
+    var anthropicModel: String { bag["model"]?.stringValue.flatMap { AIModels.isKnown($0) ? $0 : nil } ?? AIModels.defaultModel }
+    var openaiModel: String { bag["openaiModel"]?.stringValue.flatMap { OpenAIModels.isValid($0) ? $0 : nil } ?? OpenAIModels.defaultModel }
+    /// Optional OpenAI-compatible server (OpenRouter, Ollama, LM Studio); empty = api.openai.com.
+    var openaiBaseURL: String { bag["openaiBaseURL"]?.stringValue ?? "" }
+    var currentModel: String { provider == .openai ? openaiModel : anthropicModel }
     var currentEffort: String { bag["effort"]?.stringValue.flatMap { AIModels.efforts.contains($0) ? $0 : nil } ?? "medium" }
     var customCommands: [AICommandDef] { (bag["customCommands"]?.arrayValue ?? []).compactMap(AITemplates.sanitize) }
     var allCommands: [AICommandDef] { AITemplates.builtins + (context == nil ? [] : customCommands) }
 
+    /// A per-request model override if it fits the active provider (AI Commands pin Claude ids), else the default.
+    func resolveModel(_ id: String?) -> String {
+        switch provider {
+        case .anthropic: return id.flatMap { AIModels.isKnown($0) ? $0 : nil } ?? anthropicModel
+        case .openai: return id.flatMap { OpenAIModels.isValid($0) ? $0 : nil } ?? openaiModel
+        }
+    }
+
+    /// Models for pickers (chat window, command editor): the active provider's list (plus the custom OpenAI id).
+    var modelChoices: [AIModelInfo] {
+        guard provider == .openai else { return AIModels.all }
+        var list = OpenAIModels.suggested
+        if !list.contains(where: { $0.id == openaiModel }) { list.insert(AIModelInfo(id: openaiModel, label: openaiModel, description: "Custom"), at: 0) }
+        return list
+    }
+
+    func modelLabel(_ id: String?) -> String {
+        guard let id else { return provider.label }
+        return AIModels.isKnown(id) ? AIModels.label(id) : OpenAIModels.label(id)
+    }
+
     func settingsJSON() -> JSONValue {
-        ["model": .string(currentModel), "effort": .string(currentEffort), "customCommands": .array(customCommands.map(\.json))]
+        ["provider": .string(provider.rawValue), "model": .string(anthropicModel), "openaiModel": .string(openaiModel),
+         "openaiBaseURL": .string(openaiBaseURL), "effort": .string(currentEffort), "customCommands": .array(customCommands.map(\.json))]
+    }
+
+    nonisolated static func validOpenAIBaseURL(_ raw: String) -> Bool {
+        if raw.isEmpty { return true }
+        guard let url = URL(string: raw), let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased() else { return false }
+        let loopback = ["127.0.0.1", "localhost", "::1"].contains(host)
+        return scheme == "https" || (scheme == "http" && loopback)
     }
 
     @discardableResult
     func applySettings(_ patch: JSONValue) -> JSONValue {
         var out: [String: JSONValue] = [:]
+        if let p = patch["provider"]?.stringValue, AIProvider(rawValue: p) != nil { out["provider"] = .string(p) }
+        if let m = patch["openaiModel"]?.stringValue?.trimmingCharacters(in: .whitespaces), OpenAIModels.isValid(m) { out["openaiModel"] = .string(m) }
+        if let u = patch["openaiBaseURL"]?.stringValue?.trimmingCharacters(in: .whitespaces), Self.validOpenAIBaseURL(u) {
+            out["openaiBaseURL"] = .string(u.hasSuffix("/") ? String(u.dropLast()) : u)
+        }
         if let m = patch["model"]?.stringValue, AIModels.isKnown(m) { out["model"] = .string(m) }
         if let e = patch["effort"]?.stringValue, AIModels.efforts.contains(e) { out["effort"] = .string(e) }
         if let list = patch["customCommands"]?.arrayValue { out["customCommands"] = .array(AITemplates.sanitizeList(list).map(\.json)) }
@@ -92,11 +138,32 @@ import SwiftUI
 
     // MARK: client
 
-    func makeClient() throws -> AnthropicClient {
+    func makeClient() throws -> any AIChatClient {
         if let baseURLRejected, headless { throw AIError(.network, "AI requests are disabled: \(baseURLRejected)") }
         if headless && baseURL == nil { throw AIError(.network, "AI requests are disabled in headless mode (set GLIDE_AI_BASE_URL to a local test server)") }
-        guard let key = keys.read() else { throw AIError.noKey }
-        return AnthropicClient(apiKey: key, baseURL: baseURL)
+        switch provider {
+        case .anthropic:
+            guard let key = anthropicKeys.read() else { throw AIError.noKey }
+            return AnthropicClient(apiKey: key, baseURL: baseURL)
+        case .openai:
+            // Headless: only the loopback test server. Real app: the custom server if set, else api.openai.com.
+            let custom = headless ? nil : (openaiBaseURL.isEmpty ? nil : URL(string: openaiBaseURL))
+            let url = baseURL.map { $0.appendingPathComponent("v1") } ?? custom
+            let local = url.map { ["127.0.0.1", "localhost", "::1"].contains($0.host?.lowercased() ?? "") } ?? false
+            // Local servers (Ollama, LM Studio) usually need no key.
+            guard let key = openaiKeys.read() ?? (local && !headless ? "local" : nil) else { throw AIError.noKey }
+            return OpenAIClient(apiKey: key, baseURL: url)
+        }
+    }
+
+    /// Saves a key. A recognisable key for the other provider is stored there and that provider is selected.
+    @discardableResult
+    func saveKey(_ raw: String) throws -> AIKeyStatus {
+        let target = AIProvider.detect(key: raw) ?? provider
+        let s = try keys(for: target).set(raw)
+        if target != provider && s.hasKey { applySettings(["provider": .string(target.rawValue)]) }
+        settingsModel.revision += 1
+        return s
     }
 
     var dataDirectory: URL? { context?.dataDirectory() }
@@ -107,7 +174,7 @@ import SwiftUI
         guard let dir = dataDirectory else { return .failure(AIError(.other, "Not started")) }
         do {
             let key = try LegacyKeyImport.decrypt(dataDirectory: dir, passwords: passwords)
-            let status = try keys.set(key)
+            let status = try anthropicKeys.set(key)
             settingsModel.revision += 1
             return .success(status)
         } catch {
@@ -118,7 +185,7 @@ import SwiftUI
     func testConnection(model: String?) async -> (ok: Bool, message: String, kind: AIErrorKind?) {
         do {
             let client = try makeClient()
-            let name = try await client.testKey(model: model.flatMap { AIModels.isKnown($0) ? $0 : nil } ?? currentModel)
+            let name = try await client.testKey(model: resolveModel(model))
             return (true, "Connected — \(name) is available.", nil)
         } catch {
             let e = AIError.from(error)
@@ -284,14 +351,15 @@ import SwiftUI
         switch method {
         case "getSettings": return settingsJSON()
         case "setSettings": return applySettings(args)
-        case "listModels": return .array(AIModels.all.map { ["id": .string($0.id), "label": .string($0.label), "description": .string($0.description)] })
+        case "listModels": return .array(modelChoices.map { ["id": .string($0.id), "label": .string($0.label), "description": .string($0.description)] })
         case "listCommands": return .array(allCommands.map(\.json))
         case "hasApiKey":
             let s = keys.status()
-            return ["hasKey": .bool(s.hasKey), "encryptionAvailable": .bool(s.encryptionAvailable), "legacyKeyAvailable": .bool(legacyKeyAvailable)]
+            return ["hasKey": .bool(s.hasKey), "encryptionAvailable": .bool(s.encryptionAvailable), "legacyKeyAvailable": .bool(legacyKeyAvailable),
+                    "provider": .string(provider.rawValue)]
         case "setApiKey":
-            let s = try keys.set(args["key"]?.stringValue ?? args.stringValue ?? "")
-            return ["hasKey": .bool(s.hasKey)]
+            let s = try saveKey(args["key"]?.stringValue ?? args.stringValue ?? "")
+            return ["hasKey": .bool(s.hasKey), "provider": .string(provider.rawValue)]
         case "clearApiKey": return ["hasKey": .bool(try keys.clear().hasKey)]
         case "importLegacyKey":
             switch importLegacyKey() {

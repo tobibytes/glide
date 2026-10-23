@@ -153,7 +153,7 @@ struct AIChatRootView: View {
                 ToolbarItem(placement: .principal) { Text(model.title).font(.headline).lineLimit(1) }
                 ToolbarItem {
                     Picker("Model", selection: $model.model) {
-                        ForEach(AIModels.all) { m in Text(m.label).tag(m.id) }
+                        ForEach(model.feature?.modelChoices ?? AIModels.all) { m in Text(m.label).tag(m.id) }
                     }
                     .pickerStyle(.menu)
                     .help("Model for this chat")
@@ -212,7 +212,7 @@ struct AIChatRootView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 if m.content.isEmpty { ThinkingDots() } else { AIMarkdownView(text: m.content) }
                                 if let mm = m.model, !m.content.isEmpty {
-                                    Text(AIModels.label(mm)).font(.system(size: 10.5)).foregroundStyle(.tertiary)
+                                    Text(model.feature?.modelLabel(mm) ?? AIModels.label(mm)).font(.system(size: 10.5)).foregroundStyle(.tertiary)
                                 }
                             }
                         }

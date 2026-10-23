@@ -21,20 +21,20 @@ public struct AIError: Error, Equatable, Sendable, LocalizedError {
     public var errorDescription: String? { message }
 
     public static let noKey = AIError(.noKey, "Add your API key in Settings → AI")
-    public static let refused = AIError(.refusal, "Claude declined to answer this request.")
+    public static let refused = AIError(.refusal, "The model declined to answer this request.")
 
     /// HTTP status (+ the API's error body) → a user-facing error. Never includes headers or the key.
-    public static func from(status: Int, body: Data) -> AIError {
+    public static func from(status: Int, body: Data, vendor: String = "Anthropic") -> AIError {
         let obj = (try? JSONDecoder().decode(JSONValue.self, from: body))
         let apiMessage = obj?["error"]?["message"]?.stringValue ?? String(decoding: body.prefix(300), as: UTF8.self)
         switch status {
         case 401: return AIError(.auth, "Invalid API key. Check it in Settings → AI.", status: status)
         case 403: return AIError(.permission, "This API key isn't allowed to use that model.", status: status)
         case 404: return AIError(.badRequest, "Model not found for this API key. Pick another model in Settings → AI.", status: status)
-        case 429: return AIError(.rateLimit, "Rate limited by Anthropic. Wait a moment and try again.", status: status)
+        case 429: return AIError(.rateLimit, "Rate limited by \(vendor). Wait a moment and try again.", status: status)
         case 400, 413, 422: return AIError(.badRequest, "Request rejected: \(apiMessage)", status: status)
-        case 500...599: return AIError(.overloaded, "Anthropic is overloaded or unavailable right now. Try again shortly.", status: status)
-        default: return AIError(.other, "Anthropic API error \(status): \(apiMessage)", status: status)
+        case 500...599: return AIError(.overloaded, "\(vendor) is overloaded or unavailable right now. Try again shortly.", status: status)
+        default: return AIError(.other, "\(vendor) API error \(status): \(apiMessage)", status: status)
         }
     }
 
@@ -52,9 +52,9 @@ public struct AIError: Error, Equatable, Sendable, LocalizedError {
         }
     }
 
-    public static func from(_ error: Error) -> AIError {
+    public static func from(_ error: Error, vendor: String = "Anthropic") -> AIError {
         if let e = error as? AIError { return e }
-        if let u = error as? URLError { return AIError(.network, "Can't reach the Anthropic API. Check your internet connection. (\(u.code.rawValue))") }
+        if let u = error as? URLError { return AIError(.network, "Can't reach the \(vendor) API. Check your internet connection. (\(u.code.rawValue))") }
         return AIError(.other, error.localizedDescription)
     }
 
@@ -375,8 +375,31 @@ public struct AIMessageAccumulator: Sendable {
 
 // MARK: - client
 
+/// What Quick AI, the chat window and AI Commands need from a provider's client.
+public protocol AIChatClient: Sendable {
+    var vendor: String { get }
+    func stream(_ req: AIRequest) -> AsyncThrowingStream<AIStreamEvent, Error>
+    /// Checks the key and model without generating tokens; returns a display name.
+    func testKey(model: String) async throws -> String
+}
+
+extension AIChatClient {
+    /// Convenience: run a request to completion, calling `onText` for every delta.
+    public func complete(_ req: AIRequest, onText: @Sendable (String) -> Void = { _ in }) async throws -> AIStreamOutcome {
+        for try await e in stream(req) {
+            switch e {
+            case let .textDelta(t): onText(t)
+            case let .finished(out): return out
+            default: break
+            }
+        }
+        throw AIError(.network, "The answer was cut off (connection closed early).")
+    }
+}
+
 /// Stateless Messages API client. `baseURL` is a test seam (a 127.0.0.1 fake server in tests and headless runs).
-public struct AnthropicClient: Sendable {
+public struct AnthropicClient: AIChatClient {
+    public var vendor: String { "Anthropic" }
     public static let defaultBaseURL = URL(string: "https://api.anthropic.com")!
     public let apiKey: String
     public let baseURL: URL
@@ -484,18 +507,6 @@ public struct AnthropicClient: Sendable {
         if out.stopReason == "refusal" { throw AIError.refused }
         if !acc.finished && out.stopReason == nil { throw AIError(.network, "The answer was cut off (connection closed early).") }
         continuation.yield(.finished(out))
-    }
-
-    /// Convenience: run a request to completion, calling `onText` for every delta.
-    public func complete(_ req: AIRequest, onText: @Sendable (String) -> Void = { _ in }) async throws -> AIStreamOutcome {
-        for try await e in stream(req) {
-            switch e {
-            case let .textDelta(t): onText(t)
-            case let .finished(out): return out
-            default: break
-            }
-        }
-        throw AIError(.network, "The answer was cut off (connection closed early).")
     }
 
     /// Validates the key against the Models API (no tokens generated). Returns the model's display name.

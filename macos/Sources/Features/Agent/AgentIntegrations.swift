@@ -6,10 +6,15 @@ import GlideCore
 @MainActor enum AgentIntegrations {
     static func liveClient() throws -> any AIModelClient {
         guard let provider = AgentAIBridge.provider else {
-            throw AgentClientError(message: "Glide AI isn't set up yet. Add your Anthropic API key in Settings → AI to use Glide Agent.", kind: "no-key")
+            throw AgentClientError(message: "Glide AI isn't set up yet. Add an Anthropic or OpenAI API key in Settings → AI to use Glide Agent.", kind: "no-key")
         }
-        do { return AgentAnthropicClient(client: try provider.makeClient()) } catch let e as AIError {
-            throw AgentClientError(message: e.kind == .noKey ? "Add your Anthropic API key in Settings → AI to use Glide Agent." : e.message, kind: e.kind.rawValue)
+        do {
+            let client = try provider.makeClient()
+            if let o = client as? OpenAIClient { return AgentOpenAIClient(client: o) }
+            if let a = client as? AnthropicClient { return AgentAnthropicClient(client: a) }
+            throw AgentClientError(message: "This AI provider can't run Glide Agent.", kind: "other")
+        } catch let e as AIError {
+            throw AgentClientError(message: e.kind == .noKey ? "Add an Anthropic or OpenAI API key in Settings → AI to use Glide Agent." : e.message, kind: e.kind.rawValue)
         }
     }
 

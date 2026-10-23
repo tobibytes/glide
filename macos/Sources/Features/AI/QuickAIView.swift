@@ -243,8 +243,8 @@ struct AddKeyNote: View {
     @Environment(\.glideTheme) private var theme
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label("Add your Anthropic API key", systemImage: "key.fill").font(.system(size: 14, weight: .semibold)).foregroundStyle(theme.text)
-            Text("Glide AI uses your own key, stored in the macOS Keychain. Press ↩ to open Settings → AI.")
+            Label("Add an AI API key", systemImage: "key.fill").font(.system(size: 14, weight: .semibold)).foregroundStyle(theme.text)
+            Text("Glide AI uses your own Anthropic or OpenAI key, stored in the macOS Keychain. Press ↩ to open Settings → AI.")
                 .font(.system(size: 12.5)).foregroundStyle(theme.text2)
         }
         .padding(12)

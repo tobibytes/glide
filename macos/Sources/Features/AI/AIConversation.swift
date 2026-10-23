@@ -4,7 +4,9 @@ import Observation
 
 /// What a conversation needs from the feature: a client (or the reason there is none) and the defaults.
 @MainActor protocol AIClientProvider: AnyObject {
-    func makeClient() throws -> AnthropicClient
+    func makeClient() throws -> any AIChatClient
+    /// A per-request override if valid for the active provider, else the default model.
+    func resolveModel(_ id: String?) -> String
     var currentModel: String { get }
     var currentEffort: String { get }
 }
@@ -30,7 +32,7 @@ import Observation
         self.model = model
     }
 
-    var effectiveModel: String { model.flatMap { AIModels.isKnown($0) ? $0 : nil } ?? provider?.currentModel ?? AIModels.defaultModel }
+    var effectiveModel: String { provider?.resolveModel(model) ?? model ?? AIModels.defaultModel }
 
     /// The latest non-empty assistant answer.
     var lastAnswer: String? { messages.last { $0.role == "assistant" && !$0.content.isEmpty }?.content }
@@ -41,7 +43,7 @@ import Observation
         error = nil
         cancelled = false
         let apiMessages: [AIAPIMessage]
-        let client: AnthropicClient
+        let client: any AIChatClient
         do {
             apiMessages = try AIRequestBuilder.apiMessages(history)
             guard let provider else { throw AIError(.other, "AI is not available") }
