@@ -43,6 +43,7 @@ DMG=$ROOT/build/Glide-$VERSION$DMG_SUFFIX.dmg
 if (( PUBLISH )); then
   command -v gh >/dev/null || { echo "gh is required for --publish" >&2; exit 1; }
   gh release create "v$VERSION" "$ZIP" "$ZIP.sha256" "$DMG" "$DMG.sha256" --title "Glide $VERSION" --generate-notes
+  "$ROOT/scripts/update-cask.sh" "$VERSION" "$DMG"
 else
   echo "Publish: attach $ZIP_NAME(.sha256) and $(basename "$DMG")(.sha256) to a GitHub release tagged v$VERSION (or rerun with --publish)."
 fi

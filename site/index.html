@@ -7,7 +7,9 @@
 <meta name="description" content="Glide is a fast, keyboard-first launcher for macOS. Search apps and files, manage windows, keep clipboard history, expand snippets, ask AI with your own key or a local model, and automate your Mac. Free and open source.">
 <meta property="og:title" content="Glide: a free, open-source launcher for macOS">
 <meta property="og:description" content="Press Command Space and type. Apps, windows, clipboard, snippets, AI and automations in one native, lightweight app.">
-<meta property="og:image" content="https://glide.madebytobi.com/img/search.jpg">
+<meta property="og:image" content="https://glide.madebytobi.com/img/og.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
 <meta property="og:url" content="https://glide.madebytobi.com/">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#eceff4">
@@ -55,6 +57,8 @@ a { color: inherit; }
 .mockup-window:before { color: var(--color-neutral-content); margin-left: 1rem; }
 .mockup-window img { border-top: 1px solid rgb(255 255 255 / .06); }
 .hero-shot { max-width: 900px; margin: 56px auto 0; }
+.hero-video { max-width: 960px; margin: 56px auto 0; border-radius: var(--radius-box); overflow: hidden; border: 1px solid var(--color-base-300); box-shadow: 0 24px 60px -24px rgb(46 52 64 / .45); }
+.hero-video video { display: block; width: 100%; height: auto; }
 
 /* sections */
 section { padding: 88px 0; }
@@ -156,7 +160,7 @@ footer.footer { max-width: 1120px; margin: 0 auto; padding: 32px 24px; font-size
       </a>
     </div>
     <p class="fine muted">For Apple silicon and Intel Macs on macOS 14 or later. No account needed.</p>
-    <div class="mockup-window hero-shot reveal"><img src="/img/search.jpg" width="1200" height="748" alt="Glide's launcher searching for window commands"></div>
+    <div class="hero-video reveal"><video src="/img/demo.mp4" poster="/img/demo-poster.jpg" width="1920" height="1080" autoplay muted loop playsinline preload="metadata" aria-label="A short demo of Glide: time zones, unit conversion, a timer, window commands, colors, the command list and Glide on iPhone"></video></div>
   </div>
 </section>
 
@@ -309,6 +313,8 @@ footer.footer { max-width: 1120px; margin: 0 auto; padding: 32px 24px; font-size
       }
     })
     .catch(() => {});
+  // Respect reduced motion: show the first frame instead of playing the demo.
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) document.querySelectorAll(".hero-video video").forEach(v => { v.removeAttribute("autoplay"); v.pause(); v.controls = true; });
   const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }), { threshold: .1 });
   document.querySelectorAll(".reveal").forEach(el => io.observe(el));
 </script>

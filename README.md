@@ -14,7 +14,7 @@
 [![Latest release](https://img.shields.io/github/v/release/tobibytes/glide)](https://github.com/tobibytes/glide/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-5e81ac.svg)](LICENSE)
 
-<img src="docs/screenshots/native-search.jpg" width="820" alt="Glide's launcher searching for window commands" />
+<img src="docs/screenshots/glide-demo.gif" width="820" alt="A short demo of Glide: time zones, unit conversion, a timer, window commands, colors, the command list and Glide on iPhone" />
 
 </div>
 
