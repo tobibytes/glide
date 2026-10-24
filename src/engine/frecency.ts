@@ -1,8 +1,7 @@
 /**
- * Raycast's "future date" frecency (research/01-backend-ranking.md §1.3, §1.4).
+ * "Future date" frecency.
  *
- * The native addon stores no score: `frecency.root_search(item_id, frecency_date REAL,
- * search_terms, opened_at)`. The score is a function of the stored date:
+ * No score is stored, only a date per item. The score is a function of that date:
  *
  *   decode(date) = max(1, 2^((date − now) / halfLife))
  *   visit(date)  = now + halfLife · log2( max(1, decode(max(date, now))) + 100 )
@@ -10,7 +9,7 @@
  * i.e. every launch adds +100 to the decayed score, which then halves every
  * `halfLife` (10 days by default). A never-visited item has score 1.
  *
- * The JS side (`PJi`) caches `{score, sampledAtMs}` and keeps decaying it with
+ * `FrecencyCache` caches `{score, sampledAtMs}` and keeps decaying it with
  * `score · 2^(−Δms / 864e6)`, floored at 1.
  */
 import type { UsageRecord } from "@shared/types";
@@ -19,13 +18,13 @@ import { foldText } from "./fuzzy";
 export const DAY_SEC = 86_400;
 export const DEFAULT_HALF_LIFE_DAYS = 10;
 export const DEFAULT_HALF_LIFE_SEC = DEFAULT_HALF_LIFE_DAYS * DAY_SEC; // 864,000 s
-/** Visit bonus: `s' = max(1, s) + 100` (constant 100.0 at 0x49d6cc). */
+/** Visit bonus: `s' = max(1, s) + 100` */
 export const VISIT_BONUS = 100;
-/** fXi = 1,468,800,000 ms = 17 days: stored search terms only count while opened within this window. */
+/** 1,468,800,000 ms = 17 days: stored search terms only count while opened within this window. */
 export const SEARCH_TERM_WINDOW_MS = 17 * DAY_SEC * 1000;
-/** mXi = 1: stored search terms only count while frecency > 1. */
+/** Stored search terms only count while frecency > 1. */
 export const SEARCH_TERM_MIN_FRECENCY = 1;
-/** AYi = 3: distinct stored search terms kept per item. */
+/** Distinct stored search terms kept per item. */
 export const MAX_SEARCH_TERMS = 3;
 /** Bounded launch ring kept in UsageRecord.launches. */
 export const LAUNCH_RING = 10;
@@ -39,7 +38,7 @@ export function decode(frecencyDate: number | undefined, nowSec: number, halfLif
   return Math.max(1, Math.pow(2, exponent));
 }
 
-/** New encoded date after a launch at `nowSec` (NaN-safe like the native helper at 0x49d644). */
+/** New encoded date after a launch at `nowSec` (NaN-safe). */
 export function visit(frecencyDate: number | undefined, nowSec: number, halfLifeSec = DEFAULT_HALF_LIFE_SEC): number {
   const base = frecencyDate === undefined || Number.isNaN(frecencyDate) ? nowSec : Math.max(frecencyDate, nowSec);
   const decayed = decode(base, nowSec, halfLifeSec); // ≥ 1 since base ≥ now
@@ -47,12 +46,12 @@ export function visit(frecencyDate: number | undefined, nowSec: number, halfLife
   return nowSec + halfLifeSec * Math.log2(next);
 }
 
-/** Encode a plain score as a date (`now + halfLife·log2(max(1, score))`, the 0x74fbd0 encoder). */
+/** Encode a plain score as a date (`now + halfLife·log2(max(1, score))`). */
 export function encode(score: number, nowSec: number, halfLifeSec = DEFAULT_HALF_LIFE_SEC): number {
   return nowSec + halfLifeSec * Math.log2(Math.max(1, score));
 }
 
-/** JS-side cache decay (`PJi.decayedScore`): `max(1, score · 2^(−Δms/halfLifeMs))`. */
+/** Cache decay: `max(1, score · 2^(−Δms/halfLifeMs))`. */
 export function decayScore(score: number, sampledAtMs: number, nowMs: number, halfLifeMs = DEFAULT_HALF_LIFE_SEC * 1000): number {
   const delta = nowMs - sampledAtMs;
   if (delta <= 0) return score;
@@ -172,7 +171,7 @@ export class FrecencyCache {
     return record;
   }
 
-  /** YYi: stored search terms only apply while frecency > 1 and opened within 17 days. */
+  /** Stored search terms only apply while frecency > 1 and opened within 17 days. */
   termsEligible(itemId: string, nowMs: number): string[] {
     const e = this.entries.get(itemId);
     if (!e || e.searchTerms.length === 0) return [];
@@ -182,7 +181,7 @@ export class FrecencyCache {
   }
 }
 
-/** EYi: newest → oldest, folded, de-duplicated, at most 3. */
+/** Newest → oldest, folded, de-duplicated, at most 3. */
 export function normalizeTerms(terms: string[]): string[] {
   const out: string[] = [];
   for (const raw of terms) {
@@ -196,11 +195,11 @@ export function normalizeTerms(terms: string[]): string[] {
 
 export type SearchTermMatch = { kind: "exact" } | { kind: "prefix" } | { kind: "overbounds"; count: number } | { kind: "unmatched" };
 
-/** pXi = 3: overbounds only when the user typed 1..3 extra chars beyond the stored term. */
+/** Overbounds only when the user typed 1..3 extra chars beyond the stored term. */
 export const OVERBOUNDS_MAX_EXTRA = 3;
 
 /**
- * Y7e(term, query): 'exact' when equal, 'prefix' when the stored term is longer and
+ * 'exact' when equal, 'prefix' when the stored term is longer and
  * starts with the query, 'overbounds' when the query extends the stored term by
  * 1..3 chars (count = term length). Returns the best over all eligible terms:
  * exact > prefix > overbounds (longest count).

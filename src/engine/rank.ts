@@ -1,7 +1,6 @@
 /**
- * Per-candidate match evaluation (Raycast `iXi`, §1.5), title boosting
- * (`$Yi`/`eXi`), and the tiered comparators `B4` / `sXi` (§1.6), adapted to
- * Glide's item kinds.
+ * Per-candidate match evaluation, title boosting (whole-word floor), and the
+ * tiered comparators `compareB4` / `compareRanked`, for Glide's item kinds.
  */
 import type { ItemKind, MatchKind, MatchRange, ScoredItem, SearchItem } from "@shared/types";
 import {
@@ -27,16 +26,15 @@ import { matchSearchTerms, searchTermRank, type SearchTermMatch } from "./frecen
 // ---------------------------------------------------------------------------
 
 /**
- * Command-type priority (`VYi` / `lXi`): application 5, extension command 4,
- * menu-bar/quicklink 3, preference/file 1. GLIDE CHOICE for Glide kinds:
- * workflow 5 (treated like an app, it is the user's own command), system 4,
- * snippet 3, setting 1, file 1, calculator 0 (never ranked), fallback last.
+ * Kind priority: app 5, workflow 5 (treated like an app, it is the user's own
+ * command), system 4, command 4, quicklink 3, snippet 3, setting 1, file 1,
+ * calculator 0 (never ranked), fallback last.
  */
 export const KIND_PRIORITY: Record<ItemKind, number> = {
   app: 5,
   workflow: 5,
   system: 4,
-  command: 4, // feature commands rank like Raycast extension commands (lXi map: 4)
+  command: 4, // feature and extension commands
   quicklink: 3,
   snippet: 3,
   setting: 1,
@@ -48,7 +46,7 @@ export const KIND_PRIORITY: Record<ItemKind, number> = {
 export interface Candidate {
   item: SearchItem;
   title: PreparedText;
-  /** Only when the subtitle exists and differs from the title (iXi). */
+  /** Only when the subtitle exists and differs from the title. */
   subtitle?: PreparedText;
   /** definition keywords + synthesized "title subtitle" / "subtitle title". */
   keywords: PreparedText[];
@@ -79,10 +77,10 @@ export type AliasMatch = "exact" | "prefix" | "unmatched";
 
 export interface Ranking {
   alias: AliasMatch;
-  /** exact | prefix (startsWith, J7e) | unmatched */
+  /** exact | prefix (startsWith) | unmatched */
   titleMatch: AliasMatch;
   title: FuzzyResult | null;
-  /** of(title) with the whole-word floor applied */
+  /** title score with the whole-word floor applied */
   titleScore: number;
   subtitle: FuzzyResult | null;
   subtitleScore: number;
@@ -116,7 +114,7 @@ const gate = (m: FuzzyResult | null, len: number, s: Sensitivity): boolean =>
   m !== null && passesSensitivity(m.score, len, m.skipped, s);
 
 /**
- * iXi + $Yi/eXi: evaluate one candidate against the prepared query.
+ * Evaluate one candidate against the prepared query.
  * Returns null when the candidate is not eligible (`isMatching === false`).
  */
 export function evaluate(c: Candidate, q: PreparedQuery, ctx: EvalContext): Ranked | null {
@@ -148,10 +146,8 @@ export function evaluate(c: Candidate, q: PreparedQuery, ctx: EvalContext): Rank
       }
     }
   }
-  // GLIDE CHOICE: an alias exact/prefix hit makes the item eligible. In Raycast
-  // `isMatching` ignores the alias because the frontend reacts to alias typing
-  // separately (rootSearch.aliasesChanged); Glide has no such path, so the
-  // engine must surface alias hits itself. Ordering is unchanged (T1 / T8).
+  // GLIDE CHOICE: an alias exact/prefix hit makes the item eligible, so the
+  // engine surfaces alias hits itself. Ordering is unchanged (T1 / T8).
   if (!matching && alias !== "unmatched") matching = true;
   if (!matching) return null;
 
@@ -192,10 +188,9 @@ const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "bas
 export const compareTitles = (a: string, b: string): number => collator.compare(a, b);
 
 /**
- * B4(a, b): empty-query order and final tiebreak.
+ * Empty-query order and final tiebreak.
  *  1. frecency desc  2. has alias first  3. kind priority desc
  *  4. sortHeuristic asc  5. title collation
- * (Raycast's step 5 "extensionTitle" has no Glide equivalent.)
  */
 export function compareB4(a: Ranked, b: Ranked): number {
   if (a.frecency !== b.frecency) return b.frecency - a.frecency;
@@ -227,8 +222,8 @@ function compareSearchTermRank(a: Ranking, b: Ranking): number {
 }
 
 /**
- * sXi(hasExactTitle, hasExactSearchTerm, a, b): the non-empty-query order.
- * Returns < 0 when `a` ranks first. Tiers T1–T16 from §1.6; Glide has no
+ * The non-empty-query order.
+ * Returns < 0 when `a` ranks first. Tiers T1–T16; Glide has no
  * boosted built-in commands (T3) nor contacts (T4), so those tiers are omitted.
  */
 export function compareRanked(flags: ListFlags, a: Ranked, b: Ranked): number {

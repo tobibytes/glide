@@ -8,3 +8,8 @@ build/bin/
 docs-COMMON-BRIEF.md
 **/CONTRACT-REQUESTS.md
 .vercel
+
+# internal build-session notes (kept local, never published)
+macos/docs/PHASE1-BRIEF.md
+macos/docs/requests/
+src/native/GlideHelper/CONTRACT-*.md

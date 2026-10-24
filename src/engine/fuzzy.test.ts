@@ -38,7 +38,7 @@ describe("fuzzyMatch — exact / prefix", () => {
 });
 
 describe("fuzzyMatch — boundary scoring", () => {
-  it('"vsc" vs "Visual Studio Code" = 4 + 3 + 3 − 2 gaps = 8 (report §2 example)', () => {
+  it('"vsc" vs "Visual Studio Code" = 4 + 3 + 3 − 2 gaps = 8', () => {
     const m = fuzzyMatch("Visual Studio Code", "vsc")!;
     expect(m.score).toBe(8);
     expect(m.ranges).toEqual([
@@ -162,7 +162,7 @@ describe("whole-word floor", () => {
     expect(containsWholeWord(prepareText("Xcode"), "code")).toBe(false);
     expect(containsWholeWord(prepareText("Codex"), "code")).toBe(false);
     expect(containsWholeWord(prepareText("vsCode"), "code")).toBe(true);
-    // K7e boundaries are [a-z0-9]→[A-Z] only: "S→C" is not an edge
+    // camelCase boundaries are [a-z0-9]→[A-Z] only: "S→C" is not an edge
     expect(containsWholeWord(prepareText("VSCode"), "code")).toBe(false);
   });
 });

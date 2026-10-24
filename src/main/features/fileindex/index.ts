@@ -1,6 +1,5 @@
 /**
- * "fileindex" feature: a private file-name index modelled on Raycast's
- * minidex (research/04). Root search reaches it through src/main/sources/files.ts;
+ * "fileindex" feature: a private, local file-name index. Root search reaches it through src/main/sources/files.ts;
  * the "Search Files" view, settings page and actions talk to it via `methods`.
  */
 import { execFile, spawn } from "node:child_process";

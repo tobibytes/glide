@@ -1,4 +1,4 @@
-/** Extension → kind classification (subset of minidex's compiled-in tables, research/04 §2.2). */
+/** Extension → kind classification. */
 
 export type FileKind = "folder" | "app" | "image" | "pdf" | "doc" | "code" | "audio" | "video" | "archive" | "text" | "other";
 

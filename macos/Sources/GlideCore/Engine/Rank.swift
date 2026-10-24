@@ -1,8 +1,8 @@
 import Foundation
 
-// Port of src/engine/rank.ts: per-candidate evaluation (iXi), whole-word floor, tiered comparators B4 / sXi.
+// Port of src/engine/rank.ts: per-candidate evaluation, whole-word floor, tiered comparators compareB4 / compareRanked.
 
-/// Command-type priority (VYi/lXi) adapted to Glide kinds.
+/// Priority of each Glide item kind.
 public func kindPriority(_ kind: ItemKind) -> Int {
     switch kind.rawValue {
     case "app", "workflow": return 5
@@ -87,7 +87,7 @@ public struct EvalContext: Sendable {
     return passesSensitivity(m.score, len, m.skipped, s)
 }
 
-/// iXi + whole-word floor. nil when the candidate is not eligible.
+/// Evaluation + whole-word floor. nil when the candidate is not eligible.
 public func evaluate(_ c: Candidate, _ q: PreparedQuery, _ ctx: EvalContext) -> Ranked? {
     let len = q.folded.count
     let alias: ExactOrPrefix = c.alias.isEmpty ? .unmatched : exactOrPrefix(c.alias, q.folded)
@@ -138,7 +138,7 @@ public func compareTitles(_ a: String, _ b: String) -> Int {
 @inline(__always) private func desc(_ a: Double, _ b: Double) -> Int { a == b ? 0 : (b > a ? 1 : -1) }
 @inline(__always) private func asc(_ a: Double, _ b: Double) -> Int { a == b ? 0 : (a < b ? -1 : 1) }
 
-/// B4: frecency desc → has alias → kind priority desc → sortHeuristic asc → title collation.
+/// Empty-query order: frecency desc → has alias → kind priority desc → sortHeuristic asc → title collation.
 public func compareB4(_ a: Ranked, _ b: Ranked) -> Int {
     if a.frecency != b.frecency { return desc(a.frecency, b.frecency) }
     let aa = a.candidate.alias.isEmpty ? 0 : 1
@@ -161,7 +161,7 @@ private func compareSearchTermRank(_ a: Ranking, _ b: Ranking) -> Int {
     return 0
 }
 
-/// sXi: the non-empty-query order (tiers T1–T16, T3/T4 omitted).
+/// The non-empty-query order (tiers T1–T16, T3/T4 omitted).
 public func compareRanked(_ flags: ListFlags, _ a: Ranked, _ b: Ranked) -> Int {
     let ra = a.ranking, rb = b.ranking
 

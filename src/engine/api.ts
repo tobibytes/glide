@@ -6,7 +6,7 @@
 import type { SearchItem, SearchResponse, UsageRecord, ScoredItem } from "@shared/types";
 
 export interface EngineOptions {
-  /** half-life for usage decay in days (default 10, matching Raycast) */
+  /** half-life for usage decay in days (default 10) */
   frecencyHalfLifeDays?: number;
   /** max items per section (default 8) */
   sectionLimit?: number;
@@ -31,7 +31,7 @@ export interface SearchEngine {
    * Record a launch and return the updated record (caller persists it).
    * `searchTerm` (optional, additive) is the query typed when the item was
    * launched; the engine remembers the last 3 per item and boosts the item
-   * when the same term is typed again (Raycast "search terms" memory).
+   * when the same term is typed again ("search terms" memory).
    */
   recordUsage(itemId: string, searchTerm?: string): UsageRecord;
   /** Current usage snapshot. */

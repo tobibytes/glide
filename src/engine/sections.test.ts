@@ -131,7 +131,7 @@ describe("sections — searching", () => {
     expect(res.total).toBe(4);
   });
 
-  it("suppresses the calculator when a result's title starts with the query (Raycast _Xi)", () => {
+  it("suppresses the calculator when a result's title starts with the query", () => {
     const engine = createEngine({ now: () => T0 });
     engine.setItems([item("pi", "Pixelmator")]);
     const res = engine.search("pi", { dynamicItems: [dyn(item("calc", "3.14159", { kind: "calculator" }), 1000, "exact")] });

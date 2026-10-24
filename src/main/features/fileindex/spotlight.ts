@@ -1,7 +1,7 @@
 /**
  * Spotlight (`mdfind`) queries: the name-search fallback while the first crawl
- * runs, and `content:` queries. Raycast's own FTS5 + OCR content index
- * (research/04 §2.1, §4.2) is out of scope; Spotlight's content index stands in.
+ * runs, and `content:` queries. Glide keeps no content index of its own;
+ * Spotlight's content index stands in.
  */
 import { spawn, type ChildProcess } from "node:child_process";
 

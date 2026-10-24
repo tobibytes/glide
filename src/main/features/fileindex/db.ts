@@ -3,7 +3,7 @@
  * tokens to entry ids. The "frozen" part is a sorted token array with
  * postings in one Int32Array (fast prefix lookup by binary search); changes
  * since the last compaction live in a small delta map and deletions are
- * tombstones — the LSM-style split minidex uses (research/04 §1.2).
+ * tombstones (an LSM-style split).
  */
 import { nameTokens } from "./tokenize";
 

@@ -1,7 +1,7 @@
 /**
- * Glide search engine — a pure TypeScript port of Raycast 2.8.2's root-search
- * ranking (research/01-backend-ranking.md). See README.md in this folder for
- * the rule → report-section mapping and the list of GLIDE CHOICE deviations.
+ * Glide search engine: pure TypeScript root-search ranking. See README.md in
+ * this folder for how matching, frecency and sections work, and the list of
+ * GLIDE CHOICE notes.
  */
 import type { ScoredItem, SearchItem, SearchResponse, UsageRecord } from "@shared/types";
 import type { CreateEngine, EngineOptions, SearchEngine } from "./api";
@@ -26,7 +26,7 @@ export * from "./frecency";
 export * from "./rank";
 export * from "./sections";
 
-/** Raycast's default `rootSearchSensitivity` for new installs. Not user-configurable in Glide (api.ts is frozen). */
+/** Default root-search sensitivity. Not user-configurable in Glide (api.ts is frozen). */
 export const DEFAULT_SENSITIVITY: Sensitivity = "high";
 export const DEFAULT_SECTION_LIMIT = 8;
 
@@ -72,7 +72,7 @@ export const createEngine: CreateEngine = (initial: EngineOptions = {}): SearchE
   }
 
   /**
-   * GLIDE CHOICE (Raycast does this in the frontend, which is out of scope):
+   * GLIDE CHOICE: argument extraction happens in the engine.
    * "g electron" → if the text before the first space fully identifies an
    * `acceptsArgument` item (alias exact, title exact or title prefix), that
    * item is pinned first with `argument` = the remainder.
@@ -114,7 +114,7 @@ export const createEngine: CreateEngine = (initial: EngineOptions = {}): SearchE
       if (r) ranked.push(r);
     }
     // Dynamic items of other kinds: ranked normally when they match, otherwise
-    // appended in B4 order like Raycast's `matching: 'always'` rows. Their
+    // appended in `compareB4` order as always-shown rows. Their
     // provider score only acts as the sortHeuristic (higher first).
     for (const d of dynamic) {
       const c = buildCandidate(d.item, opts.aliases?.[d.item.id]);

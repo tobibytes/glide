@@ -1,5 +1,5 @@
 /**
- * File-name tokenizer, modelled on minidex's normalisation (research/04 §1.2):
+ * File-name tokenizer:
  * split on separators and camelCase / letter↔digit edges, lowercase and fold
  * diacritics (café → cafe), CJK ideographs become one token each.
  */

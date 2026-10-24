@@ -1,8 +1,7 @@
 /**
- * Section assembly (Raycast §1.7 `IXi`/`OXi`/`PXi`/`_Xi`) adapted to the
- * contract's SectionId set.
+ * Section assembly for the contract's SectionId set.
  *
- * Empty query:   favorites (favorite order) → suggestions (frecency > 1, B4 order)
+ * Empty query:   favorites (favorite order) → suggestions (frecency > 1, `compareB4` order)
  * Searching:     calculator → results (mixed kinds) → files → fallbacks
  */
 import type { ResultSection, ScoredItem, SearchItem } from "@shared/types";
@@ -20,7 +19,7 @@ export const SECTION_TITLES = {
   fallbacks: "Use with…",
 } as const;
 
-/** Kinds that never appear in Suggestions/Results (AXi: file results, only-fallback items). */
+/** Kinds that never appear in Suggestions/Results (file results, only-fallback items). */
 const NOT_SUGGESTED = new Set<SearchItem["kind"]>(["fallback", "calculator", "file"]);
 
 export interface EmptyQueryInput {
@@ -40,15 +39,13 @@ const plain = (item: SearchItem, frecency: number): ScoredItem => ({
 });
 
 /**
- * Empty query (`VXi` order, reduced to Glide's sections):
- *  - `favorites`: user favorites in favorite order (Set insertion order —
- *    GLIDE CHOICE, Raycast uses an explicit favoriteOrder). Not capped: it is
+ * Empty query:
+ *  - `favorites`: user favorites in favorite order (Set insertion order).
+ *    Not capped: it is
  *    a user-curated list.
- *  - `suggestions` (`PXi`): items with frecency > 1 that are not favorites and
- *    have no hotkey, ordered by B4 (frecency desc → alias → kind → title), up
- *    to `sectionLimit` (Raycast caps at GXi = 5; GLIDE CHOICE: honor the
- *    user's sectionLimit instead). The "just installed" and "suggestionPriority"
- *    fills have no Glide equivalent.
+ *  - `suggestions`: items with frecency > 1 that are not favorites and
+ *    have no hotkey, ordered by `compareB4` (frecency desc → alias → kind → title), up
+ *    to `sectionLimit`.
  */
 export function buildEmptySections(input: EmptyQueryInput): ResultSection[] {
   const { candidates, favorites, frecencyOf, sectionLimit } = input;
@@ -76,9 +73,8 @@ export function buildEmptySections(input: EmptyQueryInput): ResultSection[] {
   const items = suggested.slice(0, sectionLimit).map((r) => plain(r.candidate.item, r.frecency));
   if (items.length) sections.push({ id: "suggestions", title: SECTION_TITLES.suggestions, items });
 
-  // GLIDE CHOICE: Raycast lists its commands under Suggestions on the empty query
-  // (report 02, section ids "suggestions, favorites, commands"). Glide's home is the
-  // user's workflows, so a fresh install never opens to a blank launcher.
+  // GLIDE CHOICE: Glide's empty-query home lists the user's workflows, so a fresh
+  // install never opens to a blank launcher.
   const shown = new Set<string>([...favorites, ...items.map((i) => i.item.id)]);
   const workflows: Ranked[] = [];
   for (const c of candidates) {
@@ -124,9 +120,9 @@ export interface SearchingInput {
 }
 
 /**
- * Searching order (`HXi`, reduced): calculator → results → files → fallbacks.
+ * Searching order: calculator → results → files → fallbacks.
  *  - The calculator section is suppressed when any Results item's title or
- *    alias starts with the query (`_Xi`).
+ *    alias starts with the query.
  *  - `results` is capped at sectionLimit·2 (GLIDE CHOICE), `files` and
  *    `fallbacks` at sectionLimit, calculator uncapped (one or two rows).
  */
@@ -149,7 +145,7 @@ export function buildSearchSections(input: SearchingInput): ResultSection[] {
   return sections;
 }
 
-/** `_Xi`: any visible result whose title or alias starts with the term hides the calculator. */
+/** Any visible result whose title or alias starts with the term hides the calculator. */
 export function suppressesCalculator(
   results: readonly ScoredItem[],
   foldedQuery: string,

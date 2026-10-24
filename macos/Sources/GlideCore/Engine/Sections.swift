@@ -28,7 +28,7 @@ private func shell(_ c: Candidate, _ frecency: Double) -> Ranked {
     Ranked(candidate: c, ranking: .bypass, frecency: frecency, sortHeuristic: 0)
 }
 
-/// Empty query: favorites (favorite order) → suggestions (frecency > 1, B4) → workflows (GLIDE CHOICE).
+/// Empty query: favorites (favorite order) → suggestions (frecency > 1, compareB4) → workflows (GLIDE CHOICE).
 public func buildEmptySections(candidates: [Candidate], favorites: [String], frecencyOf: (String) -> Double, sectionLimit: Int) -> [ResultSection] {
     var sections: [ResultSection] = []
     let favSet = Set(favorites)
@@ -78,7 +78,7 @@ public func buildSearchSections(foldedQuery: String, results: [ScoredItem], calc
     return sections
 }
 
-/// `_Xi`: any visible result whose title or alias starts with the term hides the calculator.
+/// Any visible result whose title or alias starts with the term hides the calculator.
 public func suppressesCalculator(_ results: [ScoredItem], foldedQuery: String, aliasOf: ((String) -> String)? = nil) -> Bool {
     if foldedQuery.isEmpty { return false }
     for r in results {

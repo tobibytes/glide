@@ -1,5 +1,5 @@
 /**
- * Built-in exclusions modelled on Raycast's utils/exclusions.rs (research/04 §2.3):
+ * Built-in exclusions:
  * VCS / dependency / build-output / cache directories, ~/Library (except iCloud
  * Drive's Mobile Documents), bundle interiors, and user patterns.
  */

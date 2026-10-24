@@ -130,11 +130,11 @@ the Settings › General recorder writes canonical accelerators.
 - `<userData>` is `GLIDE_USER_DATA` if set, otherwise `~/Library/Application Support/Glide`. Both apps use the same directory.
 - Feature settings live in `settings.features[<id>]`. Feature files live in `<userData>/features/<id>/`, in the Electron file formats.
 
-## Conventions (see PHASE1-BRIEF.md)
+## Conventions
 
 - Swift 6 language mode and strict concurrency. Features and UI run on `@MainActor`. No force-unwraps on external data.
 - Keyboard-first: every view is usable without a mouse, shortcuts are shown (as keycaps in rows and the action panel), and vim keys go through the shared handling.
 - Native look: SF Symbols, materials and the `GlideTheme` environment (`@Environment(\.glideTheme)`). Colors never come from hard-coded values in feature views.
 - Every OS side effect goes through a `SystemServices` protocol that has a headless fake, which records a `[headless] <kind> <detail>` line.
 - Tests: Swift Testing for logic, plus a headless driver check for UI flows (docs/TESTING.md).
-- Shared targets accept only small, additive edits. Larger requests go to `docs/requests/<session>.md`.
+- Shared targets accept only small, additive edits.

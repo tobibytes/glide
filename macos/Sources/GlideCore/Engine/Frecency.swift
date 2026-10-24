@@ -1,6 +1,6 @@
 import Foundation
 
-// Port of src/engine/frecency.ts — Raycast's "future date" frecency:
+// Port of src/engine/frecency.ts: "future date" frecency:
 //   decode(date) = max(1, 2^((date − now) / halfLife))
 //   visit(date)  = now + halfLife · log2( max(1, decode(max(date, now))) + 100 )
 
@@ -53,7 +53,7 @@ public enum Frecency {
         return date
     }
 
-    /// EYi: newest → oldest, folded, de-duplicated, at most 3.
+    /// Newest → oldest, folded, de-duplicated, at most 3.
     public static func normalizeTerms(_ terms: [String]) -> [String] {
         var out: [String] = []
         for raw in terms {
@@ -80,7 +80,7 @@ public enum SearchTermMatch: Equatable, Sendable {
     public var overCount: Int { if case let .overbounds(c) = self { return c }; return 0 }
 }
 
-/// Y7e(term, query): best over all eligible terms, exact > prefix > overbounds (longest).
+/// Best over all eligible terms, exact > prefix > overbounds (longest).
 public func matchSearchTerms(_ terms: [String], _ foldedQuery: String) -> SearchTermMatch {
     var best = SearchTermMatch.unmatched
     let q = Array(foldedQuery.utf16)
@@ -152,7 +152,7 @@ public struct FrecencyCache: Sendable {
         return record
     }
 
-    /// YYi: stored terms only apply while frecency > 1 and the item was opened within 17 days.
+    /// Stored terms only apply while frecency > 1 and the item was opened within 17 days.
     public func termsEligible(_ itemId: String, nowMs: Double) -> [String] {
         guard let e = entries[itemId], !e.searchTerms.isEmpty else { return [] }
         if score(itemId, nowMs: nowMs) <= Frecency.searchTermMinFrecency { return [] }

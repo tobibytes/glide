@@ -1,8 +1,7 @@
 /**
- * Port of Raycast 2.8.2's root-search subsequence scorer (`af`, bundle offset
- * 611769) and its helpers (`nf`/`K7e` word boundaries, `X7e` per-char bonus,
- * `rf` sensitivity gate, `J7e` exact/prefix test, `q7e` whole-word floor).
- * See research/01-backend-ranking.md §1.5 and §2.
+ * Glide's root-search subsequence scorer (`fuzzyMatch`) and its helpers: word
+ * boundaries, per-char bonus, sensitivity gate, exact/prefix test and the
+ * whole-word floor.
  *
  * Pure TypeScript, no platform APIs.
  */
@@ -10,16 +9,16 @@ import type { MatchRange } from "@shared/types";
 
 export type Sensitivity = "low" | "medium" | "high";
 
-/** Score Raycast assigns to an exact (whole-text) match: `of(exact) = 2^53-1`. */
+/** Score of an exact (whole-text) match: 2^53-1. */
 export const EXACT_SCORE = Number.MAX_SAFE_INTEGER;
-/** Score for an unmatched field: `of(unmatched) = -(2^53-1)`. */
+/** Score for an unmatched field: -(2^53-1). */
 export const UNMATCHED_SCORE = -Number.MAX_SAFE_INTEGER;
 
 export interface FuzzyResult {
   /** DP score (EXACT_SCORE when the whole text equals the query). */
   score: number;
   exact: boolean;
-  /** `text.length > query.length && text.startsWith(query)` (J7e). */
+  /** `text.length > query.length && text.startsWith(query)`. */
   prefix: boolean;
   /** Query separator characters that found no counterpart in the text. */
   skipped: number;
@@ -29,8 +28,7 @@ export interface FuzzyResult {
 
 export interface FuzzyOptions {
   /**
-   * When true (Raycast's V4 / {literalQueryDots:true}, used for every root-search
-   * field) a "." in the query is a literal character, not a skippable separator.
+   * When true (used for every root-search field) a "." in the query is a literal character, not a skippable separator.
    */
   literalQueryDots?: boolean;
 }
@@ -42,9 +40,9 @@ export interface PreparedText {
   readonly folded: string;
   /** UTF-16 code units of `folded`. */
   readonly codes: Uint16Array;
-  /** 1 when the folded char is a separator (sf table). */
+  /** 1 when the folded char is a separator (separator table). */
   readonly isSep: Uint8Array;
-  /** X7e(text, i): 3 at a word boundary, 2 elsewhere. */
+  /** Per-char bonus: 3 at a word boundary, 2 elsewhere. */
   readonly bonus: Uint8Array;
 }
 
@@ -63,7 +61,7 @@ export interface PreparedQuery {
 // Character tables
 // ---------------------------------------------------------------------------
 
-/** Raycast's separator byte table `sf`: '\t',' ',' ' (nbsp),'-','.','/','(',')','[',']' (ASCII/latin-1 only). */
+/** Separator byte table: '\t',' ',' ' (nbsp),'-','.','/','(',')','[',']' (ASCII/latin-1 only). */
 const SEPARATORS = new Uint8Array(256);
 for (const ch of "\t  -./()[]") SEPARATORS[ch.charCodeAt(0)] = 1;
 const DOT = 46;
@@ -94,8 +92,7 @@ const ASCII_ONLY = /^[\x00-\x7f]*$/;
 
 /**
  * Lowercase + diacritic fold while preserving string length so that match
- * positions map 1:1 onto the original text. (Raycast transliterates both sides
- * with a bundled `transliterate()`; GLIDE CHOICE: NFD + strip combining marks.)
+ * positions map 1:1 onto the original text (NFD + strip combining marks).
  */
 export function foldText(text: string): string {
   if (ASCII_ONLY.test(text)) return text.toLowerCase();
@@ -108,8 +105,8 @@ const isLowerOrDigit = (c: number): boolean => (c >= 97 && c <= 122) || (c >= 48
 const isUpper = (c: number): boolean => c >= 65 && c <= 90;
 
 /**
- * nf(text): fold the text, compute camelCase word boundaries on the ORIGINAL
- * case (`[a-z0-9]` → `[A-Z]`, K7e) and the X7e bonus for every position.
+ * Fold the text, compute camelCase word boundaries on the ORIGINAL case
+ * (`[a-z0-9]` → `[A-Z]`) and the per-char bonus for every position.
  */
 export function prepareText(text: string): PreparedText {
   const folded = foldText(text);
@@ -171,7 +168,7 @@ function ensureBuffers(textLen: number, queryLen: number): void {
   if (rowCols.length < queryLen) rowCols = new Int32Array(queryLen * 2);
 }
 
-/** Cheap ordered-subsequence precheck of the non-skippable query chars (Raycast's Z7e guard). */
+/** Cheap ordered-subsequence precheck of the non-skippable query chars. */
 function subsequencePrecheck(t: PreparedText, q: PreparedQuery): boolean {
   let pos = 0;
   const tc = t.codes;
@@ -199,7 +196,7 @@ function mergeRanges(cols: number[]): MatchRange[] {
 const NEG = UNMATCHED_SCORE;
 
 /**
- * Raycast's `af(text, query, opts)`: ordered-subsequence DP.
+ * Ordered-subsequence DP.
  *  - 4 for a match on the very first text char (first query char only),
  *  - 3 at a word boundary (prev char separator or camelCase edge, char itself not a separator),
  *  - 2 elsewhere,
@@ -348,7 +345,7 @@ export function fuzzyMatch(
 // Companions
 // ---------------------------------------------------------------------------
 
-/** J7e(text, q): 'exact' | 'prefix' | 'unmatched' on folded strings. */
+/** 'exact' | 'prefix' | 'unmatched' on folded strings. */
 export function exactOrPrefix(text: string, query: string): "exact" | "prefix" | "unmatched" {
   if (text === query) return "exact";
   if (text.length > query.length && text.startsWith(query)) return "prefix";
@@ -356,7 +353,7 @@ export function exactOrPrefix(text: string, query: string): "exact" | "prefix" |
 }
 
 /**
- * Sensitivity gate `rf(match, queryLen, sensitivity)`:
+ * Sensitivity gate:
  *   low    → any subsequence match
  *   medium → score >= 1.5 * (len − skipped − 2) + 4
  *   high   → score >  2   * (len − skipped)
@@ -376,15 +373,14 @@ export function passesSensitivity(score: number, len: number, skipped: number, l
   }
 }
 
-/** Whole-word floor `$Yi`/`eXi`: 4 + (len−1)·2 + 0.5 — just above a perfect run from position 0. */
+/** Whole-word floor: 4 + (len−1)·2 + 0.5 — just above a perfect run from position 0. */
 export function wholeWordFloor(len: number): number {
   return 4 + (len - 1) * 2 + 0.5;
 }
 
 /**
- * q7e(text, query): does the folded query occur as a whole word, bounded by
- * separators / camelCase boundaries / string ends? Raycast applies this only
- * for queries of ≥3 chars with no whitespace (see `wholeWordApplies`).
+ * Does the folded query occur as a whole word, bounded by separators /
+ * camelCase boundaries / string ends? Applied only for queries of ≥3 chars with no whitespace (see `wholeWordApplies`).
  */
 export function containsWholeWord(t: PreparedText, foldedQuery: string): boolean {
   const n = foldedQuery.length;

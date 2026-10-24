@@ -1,13 +1,12 @@
 import Foundation
 
-// Swift port of src/engine/fuzzy.ts — Raycast 2.8.2's root-search subsequence scorer (`af`) and helpers
-// (`nf`/`K7e` word boundaries, `X7e` per-char bonus, `rf` sensitivity gate, `J7e` exact/prefix, `q7e`
-// whole-word floor). All indices are UTF-16 code units, exactly like the TypeScript version, so match ranges
+// Swift port of src/engine/fuzzy.ts: the root-search subsequence scorer and helpers (word boundaries,
+// per-char bonus, sensitivity gate, exact/prefix, whole-word floor). All indices are UTF-16 code units, exactly like the TypeScript version, so match ranges
 // and test expectations are identical.
 
 public enum Sensitivity: String, Sendable { case low, medium, high }
 
-/// Score of an exact (whole-text) match: `of(exact) = 2^53-1`.
+/// Score of an exact (whole-text) match: 2^53-1.
 public let EXACT_SCORE: Double = 9_007_199_254_740_991
 /// Score of an unmatched field.
 public let UNMATCHED_SCORE: Double = -9_007_199_254_740_991
@@ -28,7 +27,7 @@ public struct PreparedText: Sendable {
     public let text: String
     public let folded: [UInt16]
     public let isSep: [Bool]
-    /// X7e: 3 at a word boundary, 2 elsewhere.
+    /// Per-char bonus: 3 at a word boundary, 2 elsewhere.
     public let bonus: [UInt8]
     public var foldedString: String { String(utf16CodeUnits: folded, count: folded.count) }
 }
@@ -44,7 +43,7 @@ public struct PreparedQuery: Sendable {
 
 // MARK: - character tables
 
-/// Raycast's separator table `sf`: tab, space, nbsp, '-', '.', '/', '(', ')', '[', ']'.
+/// Separator table: tab, space, nbsp, '-', '.', '/', '(', ')', '[', ']'.
 @inline(__always) public func isSeparatorCode(_ c: UInt16) -> Bool {
     switch c {
     case 9, 32, 160, 45, 46, 47, 40, 41, 91, 93: return true
@@ -88,7 +87,7 @@ public func foldText(_ text: String) -> String {
 @inline(__always) private func isLowerOrDigit(_ c: UInt16) -> Bool { (c >= 97 && c <= 122) || (c >= 48 && c <= 57) }
 @inline(__always) private func isUpper(_ c: UInt16) -> Bool { c >= 65 && c <= 90 }
 
-/// nf(text): fold, camelCase boundaries on the ORIGINAL case (`[a-z0-9]` → `[A-Z]`), X7e bonus per position.
+/// Fold, camelCase boundaries on the ORIGINAL case (`[a-z0-9]` → `[A-Z]`), per-char bonus per position.
 public func prepareText(_ text: String) -> PreparedText {
     let original = Array(text.utf16)
     let folded = original.map(foldUnit)
@@ -146,7 +145,7 @@ private func mergeRanges(_ cols: [Int]) -> [MatchRange] {
     return true
 }
 
-/// Raycast's `af(text, query)`: ordered-subsequence DP (4 start-of-text, 3 boundary, 2 elsewhere, 1 for a
+/// Ordered-subsequence DP (4 start-of-text, 3 boundary, 2 elsewhere, 1 for a
 /// separator matching a different separator, gaps cost 1, consecutive free, skippable query separators).
 public func fuzzyMatch(_ t: PreparedText, _ q: PreparedQuery) -> FuzzyResult? {
     let s = t.folded.count
@@ -253,14 +252,14 @@ public func fuzzyMatch(_ text: String, _ query: String, literalQueryDots: Bool =
 
 public enum ExactOrPrefix: Sendable { case exact, prefix, unmatched }
 
-/// J7e on folded strings.
+/// Exact/prefix test on folded strings.
 public func exactOrPrefix(_ text: [UInt16], _ query: [UInt16]) -> ExactOrPrefix {
     if text == query { return .exact }
     if text.count > query.count && hasPrefix(text, query) { return .prefix }
     return .unmatched
 }
 
-/// Sensitivity gate `rf`: low any; medium `score ≥ 1.5·(len−skipped−2)+4`; high `score > 2·(len−skipped)`.
+/// Sensitivity gate: low any; medium `score ≥ 1.5·(len−skipped−2)+4`; high `score > 2·(len−skipped)`.
 public func passesSensitivity(_ score: Double, _ len: Int, _ skipped: Int, _ level: Sensitivity) -> Bool {
     if score == EXACT_SCORE { return true }
     if score <= UNMATCHED_SCORE { return false }
@@ -274,7 +273,7 @@ public func passesSensitivity(_ score: Double, _ len: Int, _ skipped: Int, _ lev
 /// Whole-word floor: 4 + (len−1)·2 + 0.5.
 public func wholeWordFloor(_ len: Int) -> Double { 4 + Double(len - 1) * 2 + 0.5 }
 
-/// q7e: the folded query occurs as a whole word (separators / camelCase / string ends on both sides).
+/// The folded query occurs as a whole word (separators / camelCase / string ends on both sides).
 public func containsWholeWord(_ t: PreparedText, _ q: [UInt16]) -> Bool {
     let n = q.count
     let total = t.folded.count

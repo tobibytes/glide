@@ -11,7 +11,7 @@ Glide's UI and features are about 70k lines of TypeScript/React. They are fine; 
 - **Window focus:** quirks like hide-on-blur races and panels that appear without key focus.
 - **Native integration:** Chromium swallows SIGTERM, and safeStorage keychain prompts are tied to Electron's item names.
 
-Raycast's architecture (see the research notes, report 03) shows the alternative:
+A common alternative shape for a macOS launcher:
 
 - a native AppKit shell owns the windows, hotkeys and permissions;
 - a WKWebView renders the React UI;
@@ -66,7 +66,7 @@ Each phase ships on its own and keeps all suites green.
 
 - **Rendering:** WKWebView differs from Chromium (CSS, `structuredClone`, `ClipboardItem`). Mitigation: run the visual suite early in phase 2.
 - **Tests:** the CDP-based harness doesn't speak to WKWebView. Phase 5 is real work.
-- **Node runtime:** bundling and signing Node (~40 MB) is needed for extensions and the agent. Raycast does the same.
+- **Node runtime:** bundling and signing Node (~40 MB) is needed for extensions and the agent.
 - **Migration:** the safeStorage → Keychain migration needs one decrypt with Electron's key during the first native launch.
 
 ## Estimates

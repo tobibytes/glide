@@ -48,5 +48,3 @@ Parallel work sessions each build in their own scratch directory:
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) covers the modules, the `Feature` contract, the launcher model, data compatibility and conventions.
 - [docs/TESTING.md](docs/TESTING.md) covers headless mode, the test-server protocol and the drivers.
-- [docs/PHASE1-BRIEF.md](docs/PHASE1-BRIEF.md) holds the rules for feature sessions.
-- `docs/requests/` holds requests from feature sessions for shared-target changes.

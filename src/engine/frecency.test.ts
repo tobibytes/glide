@@ -14,7 +14,7 @@ import {
 const DAY = 86_400;
 const HL = DEFAULT_HALF_LIFE_SEC;
 
-describe("decode / visit (Raycast future-date encoding)", () => {
+describe("decode / visit (future-date encoding)", () => {
   it("a never-visited item decodes to 1", () => {
     expect(decode(undefined, 1_000_000)).toBe(1);
     expect(decode(Number.NaN, 1_000_000)).toBe(1);
@@ -126,7 +126,7 @@ describe("FrecencyCache + stored search terms", () => {
   });
 });
 
-describe("matchSearchTerms (Y7e)", () => {
+describe("matchSearchTerms", () => {
   it("exact > prefix > overbounds, overbounds only for 1..3 extra chars", () => {
     expect(matchSearchTerms(["slack"], "slack")).toEqual({ kind: "exact" });
     expect(matchSearchTerms(["slack"], "sla")).toEqual({ kind: "prefix" });
