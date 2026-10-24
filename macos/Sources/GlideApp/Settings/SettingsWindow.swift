@@ -93,7 +93,7 @@ struct SettingsRoot: View {
                 switch model.selection ?? "general" {
                 case "general": model.featureGeneralPage ?? AnyView(GeneralPage(model: model))
                 case "appearance": model.featureAppearancePage ?? AnyView(AppearancePage(model: model))
-                case "about": AboutPage()
+                case "about": AboutPage(app: model.core.registry.feature("app") as? AppFeature)
                 case let id: model.featurePages.first { $0.id == id }.map { $0.view() } ?? AnyView(Text("Nothing here yet").foregroundStyle(.secondary))
                 }
             }
@@ -153,6 +153,9 @@ struct AppearancePage: View {
 
 struct AboutPage: View {
     @Environment(\.openURL) private var openURL
+    /// The updater (feature "app"); nil in previews.
+    var app: AppFeature?
+    @State private var tick = 0
     static let repo = URL(string: "https://github.com/tobibytes/glide")!
     static let author = URL(string: "https://github.com/tobibytes")!
 
@@ -169,6 +172,7 @@ struct AboutPage: View {
             Text("Glide").font(.largeTitle.bold())
             Text(version).foregroundStyle(.secondary).textSelection(.enabled)
             Text("A keyboard-first launcher for macOS").foregroundStyle(.secondary)
+            if let app { updateRow(app).id(tick) }
             HStack(spacing: 4) {
                 Text("Built by")
                 Link("tobibytes", destination: Self.author).fontWeight(.semibold)
@@ -182,6 +186,46 @@ struct AboutPage: View {
             Text("Open source · MIT License · © 2026 tobibytes").font(.caption).foregroundStyle(.tertiary).padding(.top, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task {
+            guard let app else { return }
+            await app.checkIfStale()
+            tick += 1
+            // A check started elsewhere (the menu bar's Check for Updates…) is still running: follow it.
+            while app.update.status == "checking" || app.update.status == "installing" {
+                try? await Task.sleep(for: .milliseconds(300))
+                tick += 1
+            }
+            tick += 1
+        }
+    }
+
+    /// Update status with the action that fits it: Check for Updates, or Update to vX.
+    @ViewBuilder private func updateRow(_ app: AppFeature) -> some View {
+        let state = app.update
+        VStack(spacing: 8) {
+            Label(app.updateSummary, systemImage: Self.symbol(state.status))
+                .foregroundStyle(state.status == "error" ? Color.red : state.status == "up-to-date" ? Color.green : Color.secondary)
+                .multilineTextAlignment(.center)
+            HStack(spacing: 10) {
+                if state.status == "available" {
+                    Button("Update to v\(state.latestVersion ?? "")") { Task { await app.install(); tick += 1 } }
+                        .buttonStyle(.borderedProminent)
+                }
+                Button("Check for Updates") { Task { tick += 1; await app.check(); tick += 1 } }
+                    .disabled(state.status == "checking" || state.status == "installing")
+            }
+        }
+        .padding(.top, 8)
+    }
+
+    static func symbol(_ status: String) -> String {
+        switch status {
+        case "up-to-date": return "checkmark.circle.fill"
+        case "available": return "arrow.down.circle.fill"
+        case "checking", "installing": return "arrow.triangle.2.circlepath"
+        case "error": return "exclamationmark.triangle.fill"
+        default: return "arrow.down.circle"
+        }
     }
 }
 

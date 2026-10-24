@@ -174,6 +174,17 @@ import SwiftUI
         return update
     }
 
+    /// Check unless a check finished within `maxAge` seconds (Settings and About call this when they open).
+    @discardableResult
+    public func checkIfStale(maxAge: TimeInterval = 3600) async -> UpdateState {
+        if update.status == "checking" || update.status == "installing" || update.status == "disabled" && Releases.parseFeed(feedSetting) == nil { return update }
+        if let t = update.lastChecked, Date().timeIntervalSince1970 * 1000 - t < maxAge * 1000, update.status != "error" { return update }
+        return await check()
+    }
+
+    /// One plain sentence for the current update state (About page, Settings).
+    public var updateSummary: String { AppSettingsView.statusText(updateJSON()) }
+
     @discardableResult
     public func install() async -> UpdateState {
         guard let c = candidate else {
@@ -278,7 +289,7 @@ import SwiftUI
     func info() -> JSONValue {
         ["version": .string(currentVersion), "packaged": .bool(bundlePath != nil), "userDataPath": .string(context?.store.directory.path ?? ""),
          "appPath": bundlePath.map { .string($0.path) } ?? .null, "launchAtLogin": .bool(launchAtLogin), "loginItemStatus": .string(loginItemStatus),
-         "loginItemLog": .array(loginItemLog), "updateFeed": .string(feedSetting), "autoCheck": .bool(autoCheck), "update": updateJSON()]
+         "loginItemLog": .array(loginItemLog), "updateFeed": .string(feedSetting), "autoCheck": .bool(autoCheck), "update": updateJSON(), "summary": .string(updateSummary)]
     }
 
     // MARK: catalogue
@@ -345,6 +356,7 @@ import SwiftUI
         switch method {
         case "info": return info()
         case "check": await check(); return info()
+        case "checkIfStale": await checkIfStale(maxAge: args["maxAge"]?.doubleValue ?? 3600); return info()
         case "install": await install(); return info()
         case "setUpdateSettings": setUpdateSettings(args.objectValue ?? [:]); return info()
         case "setLaunchAtLogin":
@@ -397,16 +409,17 @@ struct AppSettingsView: View {
         .formStyle(.grouped)
         .id(tick)
         .onAppear { feed = info["updateFeed"]?.stringValue ?? "" }
+        .task { await feature?.checkIfStale(); tick += 1 }
     }
 
     static func statusText(_ up: JSONValue) -> String {
         switch up["status"]?.stringValue ?? "" {
         case "disabled": return up["error"]?.stringValue ?? "Updates are off (no feed)."
         case "idle": return "Not checked yet."
-        case "checking": return "Checking…"
-        case "up-to-date": return "Glide is up to date (latest \(up["latestVersion"]?.stringValue ?? "?"))."
-        case "available": return "Glide \(up["latestVersion"]?.stringValue ?? "") is available (\(up["asset"]?.stringValue ?? ""))."
-        case "installing": return "Installing… \(up["phase"]?.stringValue ?? "")"
+        case "checking": return "Checking for updates…"
+        case "up-to-date": return "Glide is up to date. You have the latest version (\(up["currentVersion"]?.stringValue ?? up["latestVersion"]?.stringValue ?? "?"))."
+        case "available": return "Glide \(up["latestVersion"]?.stringValue ?? "") is available. You have \(up["currentVersion"]?.stringValue ?? "an older version")."
+        case "installing": return "Installing the update… \(up["phase"]?.stringValue ?? "")"
         case "error": return up["error"]?.stringValue ?? "Error"
         default: return ""
         }

@@ -1,5 +1,6 @@
 import AppKit
 import GlideCore
+import GlideFeatures
 import GlideSystem
 
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -25,7 +26,12 @@ import GlideSystem
                 core.appFeature.onQuit = { NSApp.terminate(nil) }
                 // Glide's icon through the shared status-item API: an NSStatusItem live, recorded state only headless.
                 let item = StatusItemController(service: core.services.statusItems, hotkeyDisplay: Accelerator.display(core.store.settings.hotkey),
-                                                onShow: { core.launcher.show() }, onSettings: { core.openSettings(page: nil) })
+                                                onShow: { core.launcher.show() }, onSettings: { core.openSettings(page: nil) },
+                                                onCheckUpdates: {
+                                                    // Always a fresh check; the About page shows its result as it arrives.
+                                                    Task { await (core.registry.feature("app") as? AppFeature)?.check() }
+                                                    core.openSettings(page: "about")
+                                                })
                 statusItem = item
                 core.statusTitleSink = { [weak item] t in item?.setTitle(t) }
                 if config.testServer {

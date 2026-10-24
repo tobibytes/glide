@@ -178,7 +178,7 @@ struct PhoneHTTPResponse: Sendable {
         watchdog = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
-                try? await Task.sleep(for: .seconds(1))
+                try? await Task.sleep(for: min(.seconds(1), self.idleTimeout / 4))
                 // While a request is being handled (e.g. waiting on a confirmation) the phone is just waiting.
                 if !self.busy, ContinuousClock.now - self.lastProgress > self.idleTimeout { self.close(); return }
             }

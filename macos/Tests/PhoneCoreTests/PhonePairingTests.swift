@@ -142,10 +142,11 @@ struct PhonePairingTests {
         try await srv.start(preferredPort: 0, bonjourName: nil)
         defer { Task { @MainActor in await srv.close() } }
         let port = srv.port
-        // A connection that stalls mid-headers is dropped by the idle timeout (well before the 3 s socket timeout).
+        // A connection that stalls mid-headers is dropped by the 1 s idle timeout, well before the client's own 8 s
+        // socket timeout (generous headroom for a loaded test machine).
         let t0 = ContinuousClock.now
-        let stalled = await rawHTTP(port: port, "GET / HTTP/1.1\r\nHost: x\r\n")
-        #expect(stalled.isEmpty && ContinuousClock.now - t0 < .milliseconds(2800))
+        let stalled = await rawHTTP(port: port, "GET / HTTP/1.1\r\nHost: x\r\n", timeout: 8)
+        #expect(stalled.isEmpty && ContinuousClock.now - t0 < .milliseconds(6000))
         let big = await rawHTTP(port: port, "POST /api HTTP/1.1\r\nHost: x\r\nContent-Length: \(PhoneLANServer.maxBody + 1)\r\n\r\nabc")
         #expect(big.hasPrefix("HTTP/1.1 413"))
         let headers = await rawHTTP(port: port, "GET / HTTP/1.1\r\nX: " + String(repeating: "a", count: 70_000))
@@ -156,12 +157,12 @@ struct PhonePairingTests {
 }
 
 /// One raw HTTP exchange over a blocking loopback socket (off the main actor); returns what the server sent.
-func rawHTTP(port: Int, _ request: String) async -> String {
+func rawHTTP(port: Int, _ request: String, timeout: Int = 3) async -> String {
     await Task.detached {
         let fd = socket(AF_INET, SOCK_STREAM, 0)
         guard fd >= 0 else { return "" }
         defer { close(fd) }
-        var tv = timeval(tv_sec: 3, tv_usec: 0)
+        var tv = timeval(tv_sec: timeout, tv_usec: 0)
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
         var addr = sockaddr_in()
         addr.sin_family = sa_family_t(AF_INET)

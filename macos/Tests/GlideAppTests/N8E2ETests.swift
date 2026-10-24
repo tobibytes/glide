@@ -207,4 +207,23 @@ struct N8E2E {
         let li = result(try d.invoke("app", "setLaunchAtLogin", ["on": true]))
         #expect(((li["info"] as? [String: Any])?["loginItemLog"] as? [[String: Any]])?.count == 1)
     }
+
+    /// On the latest version, Settings and About say so in plain words, and opening them again soon doesn't re-check.
+    @Test func upToDateIsShownPlainly() throws {
+        let rel: [String: Any] = ["tag_name": "v1.0.0", "name": "Glide 1.0.0", "body": "", "draft": false, "prerelease": false,
+                                  "html_url": "https://example.invalid/r",
+                                  "assets": [["name": "Glide-darwin-universal.zip", "browser_download_url": "http://127.0.0.1:1/z"],
+                                             ["name": "Glide-darwin-universal.zip.sha256", "browser_download_url": "http://127.0.0.1:1/s"]]]
+        let stub = try N8Stub(routes: ["/repos/tobibytes/glide/releases/latest": try JSONSerialization.data(withJSONObject: rel)])
+        let d = try GlideDriver(environment: ["GLIDE_SKIP_ONBOARDING": "1", "GLIDE_UPDATE_BASE_URL": "http://127.0.0.1:\(stub.port)", "GLIDE_APP_VERSION": "1.0.0", "GLIDE_UPDATE_ARCH": "arm64"])
+        defer { d.stop() }
+        #expect(try wait(d) { (result(try d.invoke("app", "info"))["update"] as? [String: Any])?["status"] as? String == "up-to-date" })
+        let info = result(try d.invoke("app", "info"))
+        #expect((info["summary"] as? String) == "Glide is up to date. You have the latest version (1.0.0).")
+        let checked = (info["update"] as? [String: Any])?["lastChecked"] as? Double
+        let again = result(try d.invoke("app", "checkIfStale", ["maxAge": 3600]))
+        #expect((again["update"] as? [String: Any])?["lastChecked"] as? Double == checked)
+        let forced = result(try d.invoke("app", "checkIfStale", ["maxAge": 0]))
+        #expect(((forced["update"] as? [String: Any])?["lastChecked"] as? Double ?? 0) > (checked ?? 0))
+    }
 }

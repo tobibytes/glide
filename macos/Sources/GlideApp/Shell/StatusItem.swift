@@ -10,13 +10,16 @@ import GlideCore
     private let hotkeyDisplay: String
     private let onShow: () -> Void
     private let onSettings: () -> Void
+    private let onCheckUpdates: () -> Void
     private var title = ""
 
-    init(service: any StatusItemService, hotkeyDisplay: String, onShow: @escaping () -> Void, onSettings: @escaping () -> Void) {
+    init(service: any StatusItemService, hotkeyDisplay: String, onShow: @escaping () -> Void, onSettings: @escaping () -> Void,
+         onCheckUpdates: @escaping () -> Void = {}) {
         self.service = service
         self.hotkeyDisplay = hotkeyDisplay
         self.onShow = onShow
         self.onSettings = onSettings
+        self.onCheckUpdates = onCheckUpdates
         publish()
     }
 
@@ -28,10 +31,11 @@ import GlideCore
     }
 
     private func publish() {
-        let show = onShow, settings = onSettings
+        let show = onShow, settings = onSettings, checkUpdates = onCheckUpdates
         service.setGlideItem(StatusItemSpec(title: title, icon: StatusItemComposer.glideIcon, tooltip: "Glide", menu: [
             StatusMenuItem("Open Glide  \(hotkeyDisplay)") { show() },
             StatusMenuItem("Settings…", shortcut: "⌘,") { settings() },
+            StatusMenuItem("Check for Updates…") { checkUpdates() },
             .separator,
             StatusMenuItem("Quit Glide", shortcut: "⌘Q") { NSApp.terminate(nil) },
         ]))
