@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en" data-theme="nord">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Glide">
+<meta name="format-detection" content="telephone=no">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#eceff4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#2a303c" media="(prefers-color-scheme: dark)">
+<meta name="referrer" content="no-referrer">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="icon" type="image/png" href="/icon-180.png">
+<title>Glide</title>
+<link rel="stylesheet" href="/daisy.css">
+<link rel="stylesheet" href="/dim.css">
+<link rel="stylesheet" href="/app.css">
+<script>
+  // Nord when the phone is light, daisyUI "dim" when it is dark; follows the system setting live.
+  (function () {
+    var m = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+    function apply() { document.documentElement.setAttribute('data-theme', m && m.matches ? 'dim' : 'nord'); }
+    apply();
+    if (m && m.addEventListener) m.addEventListener('change', apply);
+  })();
+</script>
+</head>
+<body>
+<div id="app" class="app" aria-live="polite"></div>
+<nav id="tabs" class="tabbar" aria-label="Sections" hidden></nav>
+<div id="toast" class="toast-box" role="status" aria-live="polite"></div>
+<noscript><p class="p-4">Glide Remote needs JavaScript. Turn it on in Settings, then Safari, then Advanced.</p></noscript>
+<script src="/crypto.js"></script>
+<script src="/api.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

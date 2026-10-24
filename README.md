@@ -37,6 +37,7 @@ New to it? Type `help` and open **What Can Glide Do?** to see every command.
 | 👁️ **Screen text & QR** | Drag over any region to copy its text (Apple Vision, on your Mac), or scan a QR code |
 | 🧱 **Extensions & MCP** | An extension store, Raycast-style React extensions, and an MCP server so tools like Claude Code can use Glide |
 | 🧰 **Mac tools** | Color picker, process and port killer, system monitor, menu search, Finder actions, text transforms, timers, focus, floating notes, reminders, calendar |
+| 📱 **Glide on iPhone** (beta) | Glide Remote on your phone: run commands, send text, links and photos to the Mac, sync the clipboard both ways, a trackpad and slide clicker, pull files, and ask Glide Agent. Plus Shortcuts that work away from home and phone notifications. Paired by QR code, encrypted, off by default |
 | 🎨 **Yours** | Themes with live preview, a Hyper key, vim keys, and sync through iCloud Drive or Dropbox |
 
 <table>
@@ -100,6 +101,7 @@ More detail: [macos/README.md](macos/README.md) (layout, headless test server) a
 
 - [Features](docs/FEATURES.md): everything Glide does, with commands and shortcuts
 - [Native app](macos/README.md), [architecture](macos/docs/ARCHITECTURE.md) and [testing](macos/docs/TESTING.md)
+- [Glide on iPhone](docs/PHONE.md): design, security and Shortcuts setup
 - [MCP server](docs/MCP.md) and [MCP client](docs/MCP-CLIENT.md)
 - [Writing extensions](src/extension-api/README.md): Glide API and Raycast-style React extensions
 - [Extension store](docs/EXTENSIONS-STORE.md)
@@ -108,17 +110,19 @@ More detail: [macos/README.md](macos/README.md) (layout, headless test server) a
 
 ## Roadmap
 
+**v0.4 (shipped):** Glide on iPhone (beta): Glide Remote, Send to Mac, two-way clipboard sync, remote control, files, Glide Agent and approvals from the phone, iPhone Shortcuts through iCloud Drive, and notifications through ntfy. Text recognition now runs in a short-lived helper, so Glide stays at about 30 MB.
+
 **v0.3 (shipped):** a full native Swift rewrite (universal, about 30 MB of memory), What Can Glide Do?, local AI models without a key, OpenAI alongside Anthropic, menu-bar extras, Clipboard 2.0, the extension store, Raycast-style extensions (menu bar, OAuth, AI), Quicklinks and Snippets 2.0, Reminders and Finder actions, and Glide Agent 2.0.
 
 **v0.2 (shipped):** automations, Glide Agent, window layouts and workspaces, screen text and QR, browser bookmarks and history, text transforms, the process and port manager, themes, the system monitor, and sync and backup.
 
-**Next up:** notarized releases, so the first launch needs no extra step.
+**Next up:** notarized releases, so the first launch needs no extra step, and a native iPhone app with widgets.
 
 The original Electron version is still in `src/` for reference, but releases now ship the native app in `macos/`.
 
-## Background
+## Independent project
 
-Glide started as a study of how Raycast's root search works. Its search ranking is a port of the algorithm recovered from Raycast 2.8.2 by static reverse engineering. The research notes are not part of this repository; `src/engine/README.md` describes every rule and each deliberate deviation. Glide is an independent project, not affiliated with or endorsed by Raycast.
+Glide is an independent open-source project. It is not affiliated with or endorsed by Raycast; "Raycast-style extensions" means Glide can run extensions written for Raycast's public extension API.
 
 ## License
 

@@ -206,6 +206,7 @@ import SwiftUI
             guard case let .record(rec) = r, rec.status == "error", rec.manual != true,
                   let a = engine?.list.first(where: { $0.log.contains { $0.id == rec.id } }) else { continue }
             context?.services.notifications.notify(title: "Automation “\(a.name)” failed", body: rec.message)
+            GlideFeatureEvents.post(GlideFeatureEvents.automationFailed, ["name": a.name]) // phone-notify
         }
     }
 

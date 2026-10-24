@@ -64,7 +64,10 @@ import SwiftUI
         schedulePauseEnd()
         let w = PasteboardWatcherFactory.watcher(for: context.services)
         watcher = w
-        w.onChange = { [weak self] snap in self?.capture(snap) }
+        w.onChange = { [weak self] snap in
+            self?.capture(snap)
+            PasteboardChangeObservers.notify(snap) // phone-relay: iPhone clipboard mirror follows the same watcher
+        }
         let c = KeyboardTapComposer.shared(for: context.services)
         composer = c
         c.subscribe(id) { [weak self] e in

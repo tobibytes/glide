@@ -160,6 +160,7 @@ import SwiftUI
             ctx.log("confirmation requested: \(r.client) → \(r.tool)")
             ctx.push(Self.confirmView, payload: ["requestId": .string(r.id)])
             ctx.services.notifications.notify(title: "MCP request from \(r.client)", body: r.summary)
+            GlideFeatureEvents.post(GlideFeatureEvents.mcpConfirmation, ["id": r.id, "client": r.client, "tool": r.toolTitle]) // phone-notify
         }
         handler = MCPCallHandler(tools: tools, settings: { [weak self] in self?.settings ?? MCPServerSettings() }, backend: b, confirmations: confirmations,
                                  limiter: limiter, log: requestLog, grantAlways: { [weak self] c, t in self?.grantAlways(client: c, tool: t) })

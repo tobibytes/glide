@@ -91,6 +91,16 @@ h2 { font-size: clamp(28px, 4vw, 40px); line-height: 1.12; letter-spacing: -0.02
 .points svg { flex: none; width: 20px; height: 20px; margin-top: 3px; color: var(--color-primary); }
 .points b { font-weight: 600; }
 
+/* iPhone */
+.phones { display: flex; justify-content: center; gap: 22px; margin-top: 48px; flex-wrap: wrap; }
+.mockup-phone { border-color: var(--color-neutral); width: 230px; }
+.mockup-phone .mockup-phone-display { width: 100%; height: auto; aspect-ratio: 390 / 844; border-radius: 30px; }
+.mockup-phone .mockup-phone-camera { display: none; }
+.mockup-phone img { width: 100%; height: 100%; object-fit: cover; }
+@media (max-width: 600px) { .phones .mockup-phone:nth-child(n+3) { display: none; } .mockup-phone { width: 44%; } }
+.phone-points { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 44px; text-align: left; }
+@media (max-width: 760px) { .phone-points { grid-template-columns: 1fr; } }
+
 /* open source cards */
 .trio { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 44px; text-align: left; }
 @media (max-width: 760px) { .trio { grid-template-columns: 1fr; } }
@@ -120,6 +130,7 @@ footer.footer { max-width: 1120px; margin: 0 auto; padding: 32px 24px; font-size
     <div class="navbar-start"><a class="brand" href="#"><img src="/img/icon.png" alt="">Glide</a></div>
     <div class="navbar-end">
       <a class="btn btn-ghost btn-sm hide-sm" href="#features">Features</a>
+      <a class="btn btn-ghost btn-sm hide-sm" href="#iphone">iPhone</a>
       <a class="btn btn-ghost btn-sm hide-sm" href="#install">Install</a>
       <a class="btn btn-ghost btn-sm hide-sm" href="https://github.com/tobibytes/glide">GitHub</a>
       <a class="btn btn-primary btn-sm dl-link" href="https://github.com/tobibytes/glide/releases/latest">Download</a>
@@ -208,7 +219,26 @@ footer.footer { max-width: 1120px; margin: 0 auto; padding: 32px 24px; font-size
   </div>
 </section>
 
-<section id="open-source">
+<section id="iphone">
+  <div class="wrap center">
+    <div class="eyebrow">New: Glide on iPhone <span class="badge badge-soft badge-primary" style="vertical-align:middle;margin-left:6px">Beta</span></div>
+    <h2>Your Mac, from your pocket.</h2>
+    <p class="sub muted">Scan a QR code once and Glide Remote opens on your iPhone. No app to install and no account.</p>
+    <div class="phones reveal">
+      <div class="mockup-phone"><div class="mockup-phone-display"><img src="/img/phone-home.jpg" width="600" height="1298" alt="Glide Remote home screen on an iPhone" loading="lazy"></div></div>
+      <div class="mockup-phone"><div class="mockup-phone-display"><img src="/img/phone-clipboard.jpg" width="600" height="1298" alt="Moving the clipboard between iPhone and Mac" loading="lazy"></div></div>
+      <div class="mockup-phone"><div class="mockup-phone-display"><img src="/img/phone-remote-trackpad.jpg" width="600" height="1298" alt="Using the iPhone as a trackpad for the Mac" loading="lazy"></div></div>
+    </div>
+    <div class="phone-points">
+      <div class="card card-border feature reveal"><div class="card-body"><h3 class="card-title">Clipboard that just works</h3><p class="muted">Send text, links and photos to your Mac, or grab what you copied on the Mac, even when Universal Clipboard gives up.</p></div></div>
+      <div class="card card-border feature reveal"><div class="card-body"><h3 class="card-title">A remote in your hand</h3><p class="muted">Use your phone as a trackpad, keyboard, media remote or slide clicker. Lock the Mac or start a timer from the couch.</p></div></div>
+      <div class="card card-border feature reveal"><div class="card-body"><h3 class="card-title">Works away from home too</h3><p class="muted">Shortcuts sync through your iCloud Drive, and notifications tell you when a timer ends or Glide needs your OK.</p></div></div>
+    </div>
+    <p class="fine muted" style="margin-top:22px">Off until you turn it on. Only phones you pair can connect, and everything they send is encrypted.</p>
+  </div>
+</section>
+
+<section class="alt" id="open-source">
   <div class="wrap center">
     <div class="eyebrow">Free and open source</div>
     <h2>Light, private, and yours.</h2>
@@ -221,7 +251,7 @@ footer.footer { max-width: 1120px; margin: 0 auto; padding: 32px 24px; font-size
   </div>
 </section>
 
-<section class="alt" id="install">
+<section id="install">
   <div class="wrap install">
     <div class="reveal">
       <div class="eyebrow">Install</div>

@@ -227,7 +227,8 @@ import SwiftUI
 
     /// Starts a request (a follow-up when `conversationId` or the view's conversation is set). Returns the run id.
     @discardableResult
-    func startRun(prompt raw: String, conversationId: String?) async -> (ok: Bool, runId: String?, error: String?) {
+    /// `confirmAll`: every state-changing step asks, ignoring the always-allow list (runs started from a phone).
+    func startRun(prompt raw: String, conversationId: String?, confirmAll: Bool = false) async -> (ok: Bool, runId: String?, error: String?) {
         guard let ctx = context, let sessions else { return (false, nil, "Agent not started") }
         let prompt = String(raw.trimmingCharacters(in: .whitespacesAndNewlines).prefix(4000))
         if prompt.isEmpty { return fail("Type what you want Glide to do") }
@@ -271,7 +272,7 @@ import SwiftUI
             loop.context = context
             loop.notices = extra.problems
             loop.readOnly = s.readOnly
-            loop.isAllowed = { [weak self] tool in self?.settings.allow[tool] == true }
+            loop.isAllowed = { [weak self] tool in !confirmAll && self?.settings.allow[tool] == true }
             loop.takeRateLimit = { [weak self] _ in self?.limiter.take() }
             loop.confirm = { [weak self, weak run] confirmation, _ in
                 guard let self, let run else { return false }
@@ -337,6 +338,7 @@ import SwiftUI
                     cont.resume(returning: ok)
                 }
                 run.pending = (c.id, resume)
+                GlideFeatureEvents.post(GlideFeatureEvents.agentConfirmation, ["runId": run.id, "confirmationId": c.id]) // phone-notify
                 // An unanswered confirmation (launcher dismissed and never reopened) declines itself.
                 Task { @MainActor [weak run] in
                     try? await Task.sleep(for: Self.confirmTimeout)
@@ -462,7 +464,8 @@ import SwiftUI
         switch method {
         case "start":
             if args["fresh"]?.boolValue == true { prepareView(conversationId: nil, fresh: true) }
-            let r = await startRun(prompt: args["prompt"]?.stringValue ?? "", conversationId: args["conversationId"]?.stringValue)
+            let r = await startRun(prompt: args["prompt"]?.stringValue ?? "", conversationId: args["conversationId"]?.stringValue,
+                                   confirmAll: args["confirmAll"]?.boolValue == true)
             return ["ok": .bool(r.ok), "runId": r.runId.map(JSONValue.string) ?? .null, "error": r.error.map(JSONValue.string) ?? .null,
                     "conversationId": r.runId.flatMap { runs[$0]?.conversationId }.map(JSONValue.string) ?? .null]
         case "open":

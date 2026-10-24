@@ -37,6 +37,7 @@ let package = Package(
             name: "GlideFeatures",
             dependencies: ["GlideCore", "GlideSystem", "GlideUI"],
             path: "Sources/Features",
+            exclude: ["Phone/Web"], // the Glide Remote web app; embedded by scripts/embed-phone-web.sh (PhoneWebAssets.swift)
             swiftSettings: strict
         ),
         // The app: AppKit lifecycle, launcher NSPanel, settings window, menu bar, test server.
@@ -123,6 +124,35 @@ let package = Package(
             name: "N3FeatureTests",
             dependencies: ["GlideCore", "GlideSystem", "GlideUI", "GlideFeatures"],
             path: "Tests/N3FeatureTests",
+            swiftSettings: strict
+        ),
+        // Glide on iPhone, phone-notify: ntfy notifications, Glide Agent from the phone, approvals.
+        .testTarget(
+            name: "PhoneNotifyTests",
+            dependencies: ["GlideCore", "GlideSystem", "GlideUI", "GlideFeatures", "GlideTestHarness", "Glide"],
+            path: "Tests/PhoneNotifyTests",
+            swiftSettings: strict
+        ),
+        // Glide on iPhone, phone-core: envelope crypto, gate/policies/confirmations, pairing, core actions, LAN E2E.
+        .testTarget(
+            name: "PhoneCoreTests",
+            dependencies: ["GlideCore", "GlideSystem", "GlideUI", "GlideFeatures", "GlideTestHarness", "Glide"],
+            path: "Tests/PhoneCoreTests",
+            swiftSettings: strict
+        ),
+        // Glide on iPhone, phone-relay: iCloud Drive relay, clipboard mirror, Shortcuts generation, relay E2E.
+        .testTarget(
+            name: "PhoneRelayTests",
+            dependencies: ["GlideCore", "GlideSystem", "GlideUI", "GlideFeatures", "GlideTestHarness", "Glide"],
+            path: "Tests/PhoneRelayTests",
+            swiftSettings: strict
+        ),
+        // Glide on iPhone, phone-web: web app crypto (RFC 8439 + CryptoKit cross-check), remote/file actions, web E2E.
+        .testTarget(
+            name: "PhoneWebTests",
+            dependencies: ["GlideCore", "GlideSystem", "GlideUI", "GlideFeatures", "GlideTestHarness", "Glide"],
+            path: "Tests/Phone",
+            exclude: ["crypto-vectors.mjs", "rfc8439-vectors.json", "extract-rfc8439-vectors.py", "web-e2e.mjs"],
             swiftSettings: strict
         ),
         .target(name: "GlideTestHarness", path: "Tests/Harness", exclude: ["glide-driver.mjs"], swiftSettings: strict),

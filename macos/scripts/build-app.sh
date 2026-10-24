@@ -117,6 +117,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSDownloadsFolderUsageDescription</key><string>Glide searches files in your Downloads folder.</string>
   <key>NSRemovableVolumesUsageDescription</key><string>Glide searches and opens files on external drives you connect.</string>
   <key>NSNetworkVolumesUsageDescription</key><string>Glide searches and opens files on network drives you connect.</string>
+  <key>NSLocalNetworkUsageDescription</key><string>Glide lets your paired iPhone use Glide over your Wi-Fi when you turn on Settings, then iPhone.</string>
+  <key>NSBonjourServices</key><array><string>_glide._tcp</string></array>
   <key>NSScreenCaptureUsageDescription</key><string>Glide reads text on screen (OCR) and picks colors when you ask it to.</string>
 </dict>
 </plist>

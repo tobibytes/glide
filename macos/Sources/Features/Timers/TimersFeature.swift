@@ -88,6 +88,7 @@ import SwiftUI
         let title = "⏱ \(TimersModel.label(t)) is done"
         let body = whileClosed ? "Finished while Glide was closed (\(TimersModel.formatDuration(t.durationMs)) timer)." : "\(TimersModel.formatDuration(t.durationMs)) timer finished."
         notified.append(title)
+        GlideFeatureEvents.post(GlideFeatureEvents.timerFinished, ["label": TimersModel.label(t)]) // phone-notify
         context?.services.notifications.notify(title: title, body: body)
         if !whileClosed { playSound() }
     }

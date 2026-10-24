@@ -35,6 +35,7 @@ import GlideCore
             NotesFeature(), // N7
             OCRFeature(), // N7
             OnboardingFeature(), // N8
+            PhoneFeature(), // Glide on iPhone (docs/PHONE.md)
             ProcessesFeature(),
             RemindersFeature(), // N7
             ScriptCommandsFeature(), // N9
