@@ -1,6 +1,6 @@
 {
   "name": "glide",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "description": "A keyboard-first macOS launcher with a Shortcuts-style workflow builder, automations, an AI agent and vim keys.",
   "license": "MIT",
