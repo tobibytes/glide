@@ -131,8 +131,12 @@ SIGN_ID="-"
 SIGN_ARGS=()
 KEYCHAIN=$HOME/Library/Keychains/glide-signing.keychain-db
 PASSFILE=$HOME/.config/glide/signing-keychain-password
+DEVID=$(security find-identity -v -p codesigning 2>/dev/null | sed -nE 's/.*"(Developer ID Application: [^"]+)".*/\1/p' | head -1)
 if [[ -n ${GLIDE_SIGN_IDENTITY:-} ]]; then
   SIGN_ID=$GLIDE_SIGN_IDENTITY
+elif [[ -n $DEVID && ${GLIDE_LOCAL_SIGNING:-0} != 1 ]]; then
+  # A Developer ID certificate is installed: releases can be notarized (GLIDE_LOCAL_SIGNING=1 forces the local one).
+  SIGN_ID=$DEVID
 elif [[ -f $KEYCHAIN && -f $PASSFILE ]]; then
   if security unlock-keychain -p "$(tr -d '\n' < "$PASSFILE")" "$KEYCHAIN" 2>/dev/null \
      && security find-identity -v -p codesigning "$KEYCHAIN" 2>/dev/null | grep -q '"Glide Local Signing"'; then
@@ -142,8 +146,11 @@ elif [[ -f $KEYCHAIN && -f $PASSFILE ]]; then
     echo "warning: Glide Local Signing unavailable; signing ad-hoc" >&2
   fi
 fi
+# Notarization needs Apple's secure timestamp; local and ad-hoc signatures don't (and work offline).
+TIMESTAMP=--timestamp=none
+[[ $SIGN_ID == "Developer ID Application:"* ]] && TIMESTAMP=--timestamp
 echo "==> codesign ($SIGN_ID)"
-codesign --force --options runtime --timestamp=none --sign "$SIGN_ID" "${SIGN_ARGS[@]}" \
+codesign --force --options runtime $TIMESTAMP --sign "$SIGN_ID" "${SIGN_ARGS[@]}" \
   --identifier dev.glide.launcher --entitlements "$ROOT/scripts/Glide.entitlements" "$APP"
 codesign --verify --deep --strict "$APP"
 echo "==> verified: $(codesign -dv "$APP" 2>&1 | grep -E '^(Identifier|Authority|Signature)=' | head -3 | tr '\n' ' ')"

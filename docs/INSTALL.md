@@ -80,7 +80,20 @@ macos/scripts/release.sh --publish
 
 It builds the universal app, signs it with the local identity, and creates the GitHub release `vX.Y.Z` with `Glide-darwin-universal.zip`, `Glide-<version>.dmg` and their `.sha256` files. Without `--publish` it only builds them in `macos/build/`. Sign every release with the same identity, so people's privacy grants carry over to the new version.
 
-Notarization needs a paid Apple Developer account and isn't scripted for the native app yet.
+### Notarization
+
+Notarized releases open without the "Open Anyway" step. One-time setup (needs a paid Apple Developer account):
+
+1. In Xcode, open **Settings**, then **Accounts**, add your Apple ID, click **Manage Certificates**, and add a **Developer ID Application** certificate.
+2. Create an app-specific password at [account.apple.com](https://account.apple.com) (**Sign-In and Security**, then **App-Specific Passwords**), then save notary credentials in your Keychain:
+   ```sh
+   xcrun notarytool store-credentials glide-notary --apple-id <your Apple ID> --team-id <your team ID>
+   ```
+   It asks for the app-specific password. Your team ID is on [developer.apple.com/account](https://developer.apple.com/account) under **Membership details**.
+
+After that, `build-app.sh` signs with the Developer ID certificate automatically (with Apple's secure timestamp), and `release.sh` notarizes and staples both the app and the DMG before packaging (`scripts/notarize.sh`), then checks them with `spctl` the way Gatekeeper will. It refuses to continue if Apple rejects the build and prints Apple's log. `GLIDE_LOCAL_SIGNING=1` forces the local certificate, and `GLIDE_NOTARY_PROFILE` picks another credentials profile.
+
+Switching from the local certificate to the Developer ID changes Glide's signature, so macOS asks once more for privacy permissions (Accessibility, Input Monitoring, Screen Recording) after that update. Later updates keep them.
 
 ## The earlier Electron version
 

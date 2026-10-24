@@ -32,6 +32,15 @@ case $ARCHS in
   *arm64*x86_64*|*x86_64*arm64*) ARCH=universal; DMG_SUFFIX= ;;
   *) echo "unexpected archs: $ARCHS" >&2; exit 1 ;;
 esac
+# Developer ID builds are notarized before packaging, so the zip (in-app updates) and the DMG carry the
+# stapled ticket and open without any Gatekeeper prompt. Locally signed builds skip this.
+NOTARIZE=0
+codesign -dv "$APP" 2>&1 | grep -q "Authority=Developer ID Application" && NOTARIZE=1
+if (( NOTARIZE )); then
+  "$ROOT/scripts/notarize.sh" "$APP"
+elif (( PUBLISH )); then
+  echo "note: publishing a build that isn't notarized (no Developer ID certificate); first launch needs Open Anyway" >&2
+fi
 ZIP_NAME="Glide-darwin-$ARCH.zip"
 ZIP=$ROOT/build/$ZIP_NAME
 rm -f "$ZIP" "$ZIP.sha256"
@@ -40,6 +49,10 @@ echo "$(shasum -a 256 "$ZIP" | cut -d' ' -f1)  $ZIP_NAME" > "$ZIP.sha256"
 echo "==> $ZIP"
 GLIDE_APP=$APP "$ROOT/scripts/make-dmg.sh"
 DMG=$ROOT/build/Glide-$VERSION$DMG_SUFFIX.dmg
+if (( NOTARIZE )); then
+  "$ROOT/scripts/notarize.sh" "$DMG"
+  echo "$(shasum -a 256 "$DMG" | cut -d' ' -f1)  $(basename "$DMG")" > "$DMG.sha256"   # signing changed the DMG
+fi
 if (( PUBLISH )); then
   command -v gh >/dev/null || { echo "gh is required for --publish" >&2; exit 1; }
   gh release create "v$VERSION" "$ZIP" "$ZIP.sha256" "$DMG" "$DMG.sha256" --title "Glide $VERSION" --generate-notes

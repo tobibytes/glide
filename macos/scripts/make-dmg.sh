@@ -46,6 +46,24 @@ mkdir -p "$OUT"
 
 ditto "$APP" "$STAGE/Glide.app"
 ln -s /Applications "$STAGE/Applications"
+NOTARIZED=0
+xcrun stapler validate "$APP" >/dev/null 2>&1 && NOTARIZED=1
+if (( NOTARIZED )); then
+cat > "$STAGE/Read Me First.txt" <<TXT
+Installing Glide $VERSION
+================$(printf '%*s' ${#VERSION} '' | tr ' ' '=')=
+
+Runs on: $CHIPS, macOS $MIN_OS or later.
+
+1. Drag Glide onto the Applications folder.
+2. Open Glide from Applications.
+
+Glide then shows a short setup: pick a hotkey (⌥Space by default) and grant the permissions
+you want. Everything stays on your Mac. Glide updates itself from GitHub Releases.
+
+Source, docs and updates: https://github.com/tobibytes/glide
+TXT
+else
 cat > "$STAGE/Read Me First.txt" <<TXT
 Installing Glide $VERSION
 ================$(printf '%*s' ${#VERSION} '' | tr ' ' '=')=
@@ -76,6 +94,7 @@ you want. Everything stays on your Mac.
 
 Source, docs and updates: https://github.com/tobibytes/glide
 TXT
+fi
 
 rm -f "$DMG"
 hdiutil create -quiet -volname Glide -srcfolder "$STAGE" -fs HFS+ -format UDZO -imagekey zlib-level=9 -ov "$DMG"
