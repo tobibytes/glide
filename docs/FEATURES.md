@@ -1,6 +1,6 @@
 # Features
 
-Every feature is a module in `src/main/features/<id>` (main process) and `src/renderer/features/<id>` (UI). Type the command name in the launcher; most commands take an argument with **Tab**.
+Every feature is a module in `src/main/features/<id>` (main process) and `src/renderer/features/<id>` (UI). Type the command name in the launcher; most commands take an argument with **Tab**. In the app, **What Can Glide Do?** lists every command grouped by feature, plus things that work by just typing (`100 usd in eur`, `timer 25m tea`…).
 
 ## Core
 

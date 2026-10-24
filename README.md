@@ -64,7 +64,7 @@ Plus Quick AI and AI commands on selected text, menu-bar search for any app, a H
 
 ## Download
 
-Grab **`Glide-<version>-universal.dmg`** from the [latest release](https://github.com/tobibytes/glide/releases/latest) (runs on Apple silicon and Intel Macs), open it, and drag **Glide** onto **Applications**.
+Grab **`Glide-<version>.dmg`** from the [latest release](https://github.com/tobibytes/glide/releases/latest) (runs on Apple silicon and Intel Macs), open it, and drag **Glide** onto **Applications**.
 
 Release builds are not notarized by Apple yet, so the first launch is blocked with "Glide can't be opened". To allow it, choose one:
 
@@ -138,7 +138,7 @@ More detail: [docs/INSTALL.md](docs/INSTALL.md) (signing, releases, auto-update,
 - menu-bar mode
 - Clipboard 2.0
 - extension store
-- universal (Intel + Apple silicon) builds with tag-triggered GitHub releases
+- universal (Intel + Apple silicon) builds, published to GitHub Releases with `macos/scripts/release.sh --publish`
 - Raycast-compat (menu-bar commands, background refresh, OAuth, AI)
 - Quicklinks & Snippets 2.0
 - Reminders and Finder actions

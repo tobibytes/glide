@@ -74,6 +74,11 @@ struct AppConfig {
         launcher = LauncherController(store: store, registry: registry, services: services, headless: config.headless, log: logger)
         window = LauncherWindowController(controller: launcher, headless: config.headless)
         window.openSettingsHandler = { [weak self] page in self?.openSettings(page: page) }
+        let launcher = launcher, registry = registry
+        appFeature.catalogue = { launcher.engine.allItems }
+        appFeature.featureTitle = { registry.feature($0)?.title }
+        appFeature.openItem = { item in launcher.openFromDirectory(item) }
+        appFeature.tryQuery = { text in launcher.tryFromDirectory(text) }
         startupMs = Date().timeIntervalSince(t0) * 1000
     }
 

@@ -1,11 +1,10 @@
 name: Release
 
-# Tag push (v1.2.3) -> build, verify and publish a GitHub Release.
-# Manual run (Actions > Release > Run workflow) -> the same build as a dry run: artifacts are
-# uploaded to the workflow run, nothing is released.
+# Builds the Electron app. Releases now ship the native app, cut locally with `macos/scripts/release.sh --publish`
+# (signed with the stable local identity so macOS permissions survive updates), so tag pushes no longer trigger this.
+# Manual run (Actions > Release > Run workflow) -> a dry run of the Electron build: artifacts are uploaded to the
+# workflow run, nothing is released.
 on:
-  push:
-    tags: ["v*.*.*"]
   workflow_dispatch:
     inputs:
       notarize:

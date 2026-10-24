@@ -30,15 +30,11 @@ esbuild (used to build imported Raycast extensions that ship only sources) is pe
 
 There is no update server: Glide reads GitHub Releases. The default feed is `tobibytes/glide`; change it or clear it in Settings → Updates & App (an empty feed turns updates off and Glide makes no update requests).
 
-### Automated (GitHub Actions)
+### Cutting a release
 
-`.github/workflows/release.yml`:
+Releases ship the native app (`macos/`). To cut one, bump `version` in `package.json` (the app's version comes from it, or set `GLIDE_VERSION`), then run `macos/scripts/release.sh --publish`: it builds the universal app, signs it with the "Glide Local Signing" identity, and creates the GitHub release `vX.Y.Z` with `Glide-darwin-universal.zip`, `Glide-<version>.dmg` and their `.sha256` files.
 
-- **Tag push `vX.Y.Z`** (must equal `package.json`'s version): installs, typechecks, tests, builds, runs `package.mjs --arch universal --zip`, verifies both slices with `lipo -verify_arch`, `codesign --verify --deep --strict` and the checksum, then creates a GitHub Release with `Glide-darwin-universal.zip` + `.sha256` and auto-generated notes.
-- **Run workflow** (workflow_dispatch) is a dry run: the same build, artifacts uploaded to the run for 14 days, no release.
-- CI builds are ad-hoc signed. When the repository has the secrets `CSC_LINK` (base64 Developer ID Application `.p12`), `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID` and `APPLE_APP_PASSWORD`, tag builds (and dry runs with "Notarize" ticked) import the certificate into a temporary keychain and run `scripts/notarize.mjs --zip --arch universal`.
-
-To release: `pnpm version patch && git push --follow-tags`.
+`.github/workflows/release.yml` (the Electron build) now runs only by hand (workflow_dispatch) as a dry run: artifacts are uploaded to the run for 14 days and nothing is released.
 
 ### Manual
 

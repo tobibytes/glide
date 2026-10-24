@@ -459,6 +459,26 @@ import Observation
         return false
     }
 
+    /// "What Can Glide Do?": back to the root search, then run the item there (argument items wait for input).
+    func openFromDirectory(_ item: SearchItem) {
+        while !stack.isEmpty { pop() }
+        let s = ScoredItem(item: item, score: 0)
+        if item.acceptsArgument == true {
+            query = ""
+            beginArgument(s)
+        } else {
+            Task { await execute(s) }
+        }
+    }
+
+    /// "What Can Glide Do?" → "Just Type It": back to the root search with the example typed in.
+    func tryFromDirectory(_ text: String) {
+        while !stack.isEmpty { pop() }
+        query = text
+        mode = .insert
+        focusToken += 1
+    }
+
     /// Enter argument mode for an acceptsArgument item (multi-argument pills when it defines `data.arguments`).
     func beginArgument(_ s: ScoredItem) {
         argument = ArgumentMode(item: s, savedQuery: query)
