@@ -5,7 +5,7 @@ enum InitPayload {
     /// The app bundle's version (package.json at build time); the fallback covers test runners and `swift run`.
     static let glideVersion: String = {
         if Bundle.main.bundleIdentifier == "dev.glide.launcher", let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String, !v.isEmpty { return v }
-        return "0.4.1"
+        return "0.4.2"
     }()
 
     /// The `init` message body (InitPayload in src/extension-api/types.ts). apiPath / shimDir are set by entry.ts.

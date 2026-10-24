@@ -1,5 +1,6 @@
 import AppKit
 import GlideCore
+import GlideSystem
 import GlideUI
 import ServiceManagement
 import SwiftUI
@@ -220,12 +221,14 @@ import SwiftUI
 
     private func relaunch(_ app: URL) {
         context?.store.flush()
-        // Start the new bundle once this process (which holds the single-instance lock) has exited.
+        // Start the new bundle once this process (which holds the single-instance lock) has exited: wait for our
+        // pid to go away (up to 30 s), then open the replaced app.
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/bin/sh")
-        p.arguments = ["-c", "sleep 1; /usr/bin/open -n \"$0\"", app.path]
+        p.arguments = ["-c", "i=0; while kill -0 \"$1\" 2>/dev/null && [ $i -lt 150 ]; do sleep 0.2; i=$((i+1)); done; /usr/bin/open -n \"$0\"",
+                       app.path, String(ProcessInfo.processInfo.processIdentifier)]
         try? p.run()
-        NSApp.terminate(nil)
+        GlideQuit.request()
     }
 
     func updateJSON() -> JSONValue {

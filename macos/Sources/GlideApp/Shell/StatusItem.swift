@@ -1,5 +1,6 @@
 import AppKit
 import GlideCore
+import GlideSystem
 
 /// Glide's own menu-bar icon, registered as the "glide" item of the shared status-item API
 /// (`SystemServices.statusItems`). The live service renders it as an NSStatusItem; headless runs record it only.
@@ -37,7 +38,7 @@ import GlideCore
             StatusMenuItem("Settings…", shortcut: "⌘,") { settings() },
             StatusMenuItem("Check for Updates…") { checkUpdates() },
             .separator,
-            StatusMenuItem("Quit Glide", shortcut: "⌘Q") { NSApp.terminate(nil) },
+            StatusMenuItem("Quit Glide", shortcut: "⌘Q") { GlideQuit.request() },
         ]))
     }
 }

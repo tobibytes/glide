@@ -23,7 +23,7 @@ import GlideSystem
             self.core = core
             Task { @MainActor in
                 await core.start()
-                core.appFeature.onQuit = { NSApp.terminate(nil) }
+                core.appFeature.onQuit = { GlideQuit.request() }
                 // Glide's icon through the shared status-item API: an NSStatusItem live, recorded state only headless.
                 let item = StatusItemController(service: core.services.statusItems, hotkeyDisplay: Accelerator.display(core.store.settings.hotkey),
                                                 onShow: { core.launcher.show() }, onSettings: { core.openSettings(page: nil) },
@@ -52,6 +52,11 @@ import GlideSystem
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let core else { return .terminateNow }
+        // Last resort: if shutdown somehow never replies, exit anyway so Quit (and update restarts) always work.
+        Thread.detachNewThread {
+            Thread.sleep(forTimeInterval: 8)
+            exit(0)
+        }
         Task { @MainActor in
             await core.shutdown()
             sender.reply(toApplicationShouldTerminate: true)

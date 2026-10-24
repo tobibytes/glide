@@ -120,6 +120,18 @@ import GlideSystem
                     "ms": .double(Double(DispatchTime.now().uptimeNanoseconds - t0) / 1e6)]
         case "metrics": return metrics()
         case "invoke": return try await invoke(cmd)
+        case "shutdownProbe":
+            // Stops every feature the way Quit does, one at a time with a deadline, and reports the slow ones.
+            var slow: [JSONValue] = []
+            for f in core.registry.features.reversed() {
+                let started = Date()
+                let box = ShutdownFlag()
+                Task { @MainActor in await f.stop(); box.done = true }
+                while !box.done, Date().timeIntervalSince(started) < 3 { try? await Task.sleep(for: .milliseconds(20)) }
+                let ms = Date().timeIntervalSince(started) * 1000
+                if !box.done || ms > 500 { slow.append(["feature": .string(f.id), "ms": .double(ms.rounded()), "finished": .bool(box.done)]) }
+            }
+            return ["slow": .array(slow)]
         case "quit":
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { MainActor.assumeIsolated { self.quit(code: 0) } }
             return ["quitting": true]

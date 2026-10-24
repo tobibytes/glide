@@ -1,4 +1,5 @@
 import AppKit
+import os
 import GlideCore
 import GlideFeatures
 import GlideSystem
@@ -114,10 +115,28 @@ struct AppConfig {
         settingsWindow?.show(page: page)
     }
 
+    /// Quit: stop every feature, but never let one that doesn't finish hold Glide open. Each gets up to 2 s and
+    /// the whole shutdown 4 s; slow or stuck features are logged (`log show --predicate 'subsystem == "dev.glide.launcher"'`).
     func shutdown() async {
-        await registry.stopAll()
+        let log = Logger(subsystem: "dev.glide.launcher", category: "shutdown")
+        let deadline = Date().addingTimeInterval(4)
+        for f in registry.features.reversed() {
+            let started = Date()
+            let flag = ShutdownFlag()
+            Task { @MainActor in await f.stop(); flag.done = true }
+            while !flag.done, Date() < deadline, Date().timeIntervalSince(started) < 2 { try? await Task.sleep(for: .milliseconds(20)) }
+            let ms = Int(Date().timeIntervalSince(started) * 1000)
+            if !flag.done {
+                log.error("feature \(f.id, privacy: .public) did not stop within \(ms) ms; quitting anyway")
+            } else if ms > 300 {
+                log.notice("feature \(f.id, privacy: .public) took \(ms) ms to stop")
+            }
+        }
         services.hotkeys.unregisterAll()
         services.keyboardTap.shutdown()
         store.flush()
     }
 }
+
+/// Set when a feature's `stop()` returns (shutdown waits on it with a deadline).
+@MainActor final class ShutdownFlag { var done = false }
