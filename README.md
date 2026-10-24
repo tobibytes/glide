@@ -6,6 +6,8 @@
 
 **A keyboard-first launcher for macOS, with a Shortcuts-style workflow builder, an AI agent, and vim keys everywhere.**
 
+**[glide.madebytobi.com](https://glide.madebytobi.com)**
+
 [![CI](https://github.com/tobibytes/glide/actions/workflows/ci.yml/badge.svg)](https://github.com/tobibytes/glide/actions/workflows/ci.yml)
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)
 ![Electron](https://img.shields.io/badge/Electron-44-47848F?logo=electron&logoColor=white)

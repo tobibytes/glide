@@ -7,3 +7,4 @@ build/bin/
 # internal build-session notes
 docs-COMMON-BRIEF.md
 **/CONTRACT-REQUESTS.md
+.vercel

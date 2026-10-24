@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glide: a free, open-source launcher for macOS</title>
+<meta name="description" content="Glide is a fast, keyboard-first launcher for macOS. Search apps and files, manage windows, keep clipboard history, expand snippets, ask AI with your own key or a local model, and automate your Mac. Free and open source.">
+<meta property="og:title" content="Glide: a free, open-source launcher for macOS">
+<meta property="og:description" content="Press ⌘Space and type. Apps, windows, clipboard, snippets, AI and automations, in one native, lightweight app.">
+<meta property="og:image" content="https://glide.madebytobi.com/img/search.jpg">
+<meta property="og:url" content="https://glide.madebytobi.com/">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0f0e0c;
+  --bg2: #17150f;
+  --card: #1c1a15;
+  --line: #2c2920;
+  --text: #f4efe6;
+  --muted: #a39c8e;
+  --dim: #6f695e;
+  --accent: #f6a93b;
+  --accent2: #ffc977;
+  --radius: 18px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.6 Inter, system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; }
+img { max-width: 100%; height: auto; display: block; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+/* nav */
+nav { position: sticky; top: 0; z-index: 10; backdrop-filter: blur(14px); background: rgba(15,14,12,.72); border-bottom: 1px solid transparent; transition: border-color .2s; }
+nav.scrolled { border-color: var(--line); }
+nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; text-decoration: none; }
+.brand img { width: 30px; height: 30px; border-radius: 8px; }
+.navlinks { display: flex; gap: 26px; align-items: center; font-size: 14px; color: var(--muted); }
+.navlinks a { text-decoration: none; }
+.navlinks a:hover { color: var(--text); }
+@media (max-width: 720px) { .navlinks .hide-sm { display: none; } }
+
+/* buttons */
+.btn { display: inline-flex; align-items: center; gap: 10px; padding: 13px 22px; border-radius: 12px; font-weight: 600; font-size: 15px; text-decoration: none; transition: transform .15s, background .15s, border-color .15s; }
+.btn:hover { transform: translateY(-1px); }
+.btn-primary { background: var(--accent); color: #1a1205; }
+.btn-primary:hover { background: var(--accent2); }
+.btn-ghost { border: 1px solid var(--line); color: var(--text); }
+.btn-ghost:hover { border-color: #4a4434; }
+.btn-sm { padding: 8px 14px; font-size: 13px; border-radius: 10px; }
+.btn svg { width: 18px; height: 18px; }
+
+/* hero */
+.hero { position: relative; padding: 96px 0 40px; text-align: center; overflow: hidden; }
+.hero::before { content: ""; position: absolute; inset: -200px 0 auto; height: 700px; background: radial-gradient(ellipse 60% 50% at 50% 30%, rgba(246,169,59,.20), transparent 70%); pointer-events: none; }
+.hero .icon { width: 92px; height: 92px; margin: 0 auto 28px; border-radius: 22px; box-shadow: 0 20px 60px rgba(246,169,59,.25); }
+.pill { display: inline-block; font-size: 13px; color: var(--accent2); border: 1px solid rgba(246,169,59,.3); background: rgba(246,169,59,.08); padding: 5px 12px; border-radius: 999px; margin-bottom: 22px; }
+h1 { font-size: clamp(40px, 7vw, 72px); line-height: 1.04; letter-spacing: -0.035em; margin: 0 0 20px; font-weight: 800; }
+h1 em { font-style: normal; background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.lede { max-width: 640px; margin: 0 auto 34px; font-size: clamp(17px, 2.2vw, 20px); color: var(--muted); }
+.ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.meta { margin-top: 16px; font-size: 13px; color: var(--dim); }
+.shot { margin: 64px auto 0; max-width: 900px; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 40px 120px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.02); }
+
+/* sections */
+section { padding: 96px 0; }
+.eyebrow { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 13px; color: var(--accent); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 14px; }
+h2 { font-size: clamp(30px, 4.4vw, 44px); line-height: 1.1; letter-spacing: -0.025em; margin: 0 0 16px; font-weight: 750; }
+.sub { color: var(--muted); font-size: 18px; max-width: 620px; margin: 0; }
+.center { text-align: center; }
+.center .sub { margin: 0 auto; }
+
+/* type-it */
+.typeit { display: grid; grid-template-columns: 1fr 1.25fr; gap: 56px; align-items: center; }
+.examples { list-style: none; padding: 0; margin: 30px 0 0; display: grid; gap: 10px; }
+.examples li { display: flex; justify-content: space-between; gap: 16px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg2); }
+.examples code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 14px; color: var(--text); }
+.examples span { color: var(--dim); font-size: 14px; white-space: nowrap; }
+.stack { position: relative; }
+.stack .shot { margin: 0; }
+.stack .shot + .shot { position: absolute; width: 78%; right: -24px; bottom: -64px; }
+@media (max-width: 900px) {
+  .typeit { grid-template-columns: 1fr; }
+  .stack .shot + .shot { position: static; width: 100%; margin-top: 16px; }
+}
+
+/* features */
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 52px; }
+@media (max-width: 900px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px; transition: border-color .2s, transform .2s; }
+.card:hover { border-color: #3d382b; transform: translateY(-2px); }
+.card .ic { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; background: rgba(246,169,59,.12); color: var(--accent); margin-bottom: 18px; }
+.card .ic svg { width: 21px; height: 21px; }
+.card h3 { margin: 0 0 8px; font-size: 18px; letter-spacing: -0.01em; }
+.card p { margin: 0; color: var(--muted); font-size: 15px; }
+.card.wide { grid-column: span 2; }
+@media (max-width: 600px) { .card.wide { grid-column: auto; } }
+
+/* split */
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
+@media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+.checks { list-style: none; padding: 0; margin: 26px 0 0; display: grid; gap: 12px; }
+.checks li { display: flex; gap: 12px; color: var(--muted); }
+.checks li b { color: var(--text); font-weight: 600; }
+.checks svg { flex: none; width: 20px; height: 20px; color: var(--accent); margin-top: 3px; }
+
+/* stats */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 48px; }
+@media (max-width: 760px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+.stat { border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; background: var(--bg2); }
+.stat b { display: block; font-size: 34px; letter-spacing: -0.03em; font-weight: 750; }
+.stat span { color: var(--muted); font-size: 14px; }
+
+/* install */
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 40px auto 0; max-width: 720px; display: grid; gap: 14px; text-align: left; }
+.steps li { counter-increment: s; display: flex; gap: 16px; padding: 18px 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg2); color: var(--muted); }
+.steps li::before { content: counter(s); flex: none; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: rgba(246,169,59,.12); color: var(--accent); font-weight: 700; font-size: 14px; }
+.steps b { color: var(--text); font-weight: 600; }
+kbd { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 13px; padding: 2px 7px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
+
+/* footer */
+.cta-final { text-align: center; padding: 110px 0; background: radial-gradient(ellipse 50% 60% at 50% 100%, rgba(246,169,59,.14), transparent 70%); border-top: 1px solid var(--line); }
+footer { border-top: 1px solid var(--line); padding: 34px 0; color: var(--dim); font-size: 14px; }
+footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+footer a { text-decoration: none; color: var(--muted); }
+footer a:hover { color: var(--text); }
+.reveal { opacity: 0; transform: translateY(16px); transition: opacity .6s ease, transform .6s ease; }
+.reveal.in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+
+<nav id="nav">
+  <div class="wrap">
+    <a class="brand" href="#"><img src="/img/icon.png" alt="">Glide</a>
+    <div class="navlinks">
+      <a class="hide-sm" href="#features">Features</a>
+      <a class="hide-sm" href="#open-source">Open source</a>
+      <a class="hide-sm" href="https://github.com/tobibytes/glide">GitHub</a>
+      <a class="btn btn-primary btn-sm dl-link" href="https://github.com/tobibytes/glide/releases/latest">Download</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <img class="icon" src="/img/icon.png" alt="Glide icon">
+    <div class="pill">Free &amp; open source · <span class="dl-version">macOS 14+</span></div>
+    <h1>Your Mac, at the<br><em>speed of typing.</em></h1>
+    <p class="lede">Glide is a keyboard-first launcher for macOS. Press <kbd>⌘</kbd> <kbd>Space</kbd>, type a few letters, and open apps, move windows, paste from your clipboard history, ask AI or automate your Mac, without touching the mouse.</p>
+    <div class="ctas">
+      <a class="btn btn-primary dl-link" href="https://github.com/tobibytes/glide/releases/latest">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.37 12.6c-.02-2.1 1.72-3.12 1.8-3.17-.98-1.43-2.5-1.63-3.05-1.65-1.3-.13-2.53.76-3.19.76-.66 0-1.67-.74-2.75-.72a4.07 4.07 0 0 0-3.44 2.09c-1.47 2.55-.38 6.32 1.05 8.39.7 1.01 1.53 2.15 2.62 2.11 1.05-.04 1.45-.68 2.72-.68 1.27 0 1.63.68 2.74.66 1.13-.02 1.85-1.03 2.54-2.05.8-1.17 1.13-2.3 1.15-2.36-.03-.01-2.2-.85-2.22-3.36ZM14.3 6.43c.58-.7.97-1.68.86-2.65-.83.03-1.84.55-2.44 1.25-.53.62-1 1.62-.88 2.57.93.07 1.88-.47 2.46-1.17Z"/></svg>
+        Download for Mac
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/tobibytes/glide">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.58 9.58 0 0 1 5 0c1.91-1.3 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.75c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"/></svg>
+        View on GitHub
+      </a>
+    </div>
+    <div class="meta">Apple silicon &amp; Intel · about 30 MB of memory · no account needed</div>
+    <div class="shot reveal"><img src="/img/search.jpg" width="1200" height="748" alt="Glide's launcher searching for window commands"></div>
+  </div>
+</header>
+
+<section id="type-it">
+  <div class="wrap typeit">
+    <div class="reveal">
+      <div class="eyebrow">Just type it</div>
+      <h2>No commands to remember.</h2>
+      <p class="sub">Type what you mean and Glide works it out as you go: math, conversions, time zones, timers and reminders.</p>
+      <ul class="examples">
+        <li><code>5pm london in tokyo</code><span>Time zones</span></li>
+        <li><code>100 usd in eur</code><span>Currency</span></li>
+        <li><code>5 ft 10 in to cm</code><span>Units</span></li>
+        <li><code>timer 25m tea</code><span>Named timer</span></li>
+        <li><code>remind call mom tomorrow 9am</code><span>Reminder</span></li>
+        <li><code>port 3000</code><span>What's using a port</span></li>
+      </ul>
+    </div>
+    <div class="stack reveal">
+      <div class="shot"><img src="/img/timezone.jpg" width="1200" height="651" alt="Glide converting 5pm London to Tokyo time" loading="lazy"></div>
+      <div class="shot"><img src="/img/timer.jpg" width="1200" height="651" alt="Glide starting a 25 minute tea timer" loading="lazy"></div>
+    </div>
+  </div>
+</section>
+
+<section id="features" style="padding-top:140px">
+  <div class="wrap center">
+    <div class="eyebrow">Everything in one place</div>
+    <h2>One shortcut. Your whole Mac.</h2>
+    <p class="sub">Glide replaces a handful of utilities with one fast, native app.</p>
+  </div>
+  <div class="wrap">
+    <div class="grid">
+      <div class="card reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></div><h3>Search everything</h3><p>Apps, files, commands, bookmarks and more, ranked by what you use most. Fuzzy matching, aliases and per-command hotkeys.</p></div>
+      <div class="card reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/></svg></div><h3>Clipboard &amp; snippets</h3><p>Searchable clipboard history (including the text inside copied images), a paste stack, and snippets that expand as you type in any app.</p></div>
+      <div class="card reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg></div><h3>Windows &amp; workspaces</h3><p>Halves, thirds and quarters across displays. Save layouts, and open a whole workspace of apps, links and a focus session at once.</p></div>
+      <div class="card reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></svg></div><h3>AI, your way</h3><p>Quick AI, AI Chat and one-key commands like fix spelling or summarize. Use your own Anthropic or OpenAI key, or a local model through Ollama or LM Studio.</p></div>
+      <div class="card reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg></div><h3>Glide Agent</h3><p>Describe a task in plain words. The agent shows its plan, asks before changing anything, and can undo or save the task as a workflow.</p></div>
+      <div class="card reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><h3>Automations</h3><p>Run workflows on a schedule, when an app opens, when Wi‑Fi or power changes, or when a new file lands in a folder. Build them visually, no code needed.</p></div>
+      <div class="card reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 9h10M7 13h7"/></svg></div><h3>Screen text &amp; QR</h3><p>Drag over anything on screen to copy its text, or scan a QR code. Recognition runs on your Mac.</p></div>
+      <div class="card reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M10 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg></div><h3>Extensions &amp; MCP</h3><p>Install from the extension store or run Raycast-style React extensions. Glide is also an MCP server, so tools like Claude Code can use it.</p></div>
+      <div class="card reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M7 20h10M9 16v4M15 16v4"/></svg></div><h3>Mac utilities built in</h3><p>Color picker, process and port killer, system monitor, menu search, timers, focus sessions, floating notes, reminders and calendar.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="discover" style="background:var(--bg2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+  <div class="wrap split">
+    <div class="shot reveal" style="margin:0"><img src="/img/commands.jpg" width="1200" height="748" alt="The What Can Glide Do? command list" loading="lazy"></div>
+    <div class="reveal">
+      <div class="eyebrow">Easy to learn</div>
+      <h2>Not sure what it can do? Ask it.</h2>
+      <p class="sub">Type <kbd>help</kbd> and open <b style="color:var(--text)">What Can Glide Do?</b> to see every command grouped by feature, with examples you can try in one keystroke.</p>
+      <ul class="checks">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg><span><b>Keyboard-first:</b> <kbd>⌘K</kbd> shows the actions for anything, with optional vim keys.</span></li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg><span><b>Make it yours:</b> 9 themes, light and dark, density and size.</span></li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg><span><b>Sync without an account:</b> point Glide at iCloud Drive or Dropbox. Secrets never sync.</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="open-source">
+  <div class="wrap center">
+    <div class="eyebrow">Free &amp; open source</div>
+    <h2>Light, private, and yours.</h2>
+    <p class="sub">Glide is a native Swift app under the MIT license. No account, no subscription, no telemetry. Your keys stay in the macOS Keychain.</p>
+    <div class="stats">
+      <div class="stat reveal"><b>~30 MB</b><span>memory while running</span></div>
+      <div class="stat reveal"><b>0.1%</b><span>CPU when idle</span></div>
+      <div class="stat reveal"><b>180+</b><span>built-in commands</span></div>
+      <div class="stat reveal"><b>MIT</b><span>licensed, on GitHub</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="install" style="padding-top:20px">
+  <div class="wrap center">
+    <div class="eyebrow">Install</div>
+    <h2>Up and running in a minute.</h2>
+    <ol class="steps">
+      <li><span>Download the latest <b>Glide .dmg</b>, open it, and drag <b>Glide</b> onto <b>Applications</b>.</span></li>
+      <li><span>Glide isn't notarized by Apple yet, so the first launch is blocked. Open <b>System Settings → Privacy &amp; Security</b> and click <b>Open Anyway</b> next to the message about Glide.</span></li>
+      <li><span>Press <kbd>⌘</kbd> <kbd>Space</kbd>. Glide walks you through your hotkey, permissions, an optional AI key and a theme. After that, it updates itself.</span></li>
+    </ol>
+  </div>
+</section>
+
+<div class="cta-final">
+  <div class="wrap">
+    <h2>Give your Mac a launcher it deserves.</h2>
+    <p class="sub" style="margin:0 auto 32px">Free, open source, and built for the keyboard.</p>
+    <div class="ctas">
+      <a class="btn btn-primary dl-link" href="https://github.com/tobibytes/glide/releases/latest">Download for Mac</a>
+      <a class="btn btn-ghost" href="https://github.com/tobibytes/glide">Star on GitHub</a>
+    </div>
+    <div class="meta dl-version-line">macOS 14 or later · Apple silicon &amp; Intel</div>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>© 2026 <a href="https://github.com/tobibytes">tobibytes</a> · MIT License</span>
+    <span><a href="https://github.com/tobibytes/glide">GitHub</a> · <a href="https://github.com/tobibytes/glide/releases">Releases</a> · <a href="https://github.com/tobibytes/glide/issues">Report an issue</a> · <a href="https://madebytobi.com">madebytobi.com</a></span>
+  </div>
+</footer>
+
+<script>
+  // Point the download buttons straight at the newest .dmg (falls back to the releases page).
+  fetch("https://api.github.com/repos/tobibytes/glide/releases/latest")
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(rel => {
+      const dmg = (rel.assets || []).find(a => /\.dmg$/.test(a.name));
+      const v = (rel.tag_name || "").replace(/^v/, "");
+      if (dmg) document.querySelectorAll(".dl-link").forEach(a => a.href = dmg.browser_download_url);
+      if (v) {
+        document.querySelectorAll(".dl-version").forEach(e => e.textContent = "v" + v + " · macOS 14+");
+        document.querySelectorAll(".dl-version-line").forEach(e => e.textContent = "Version " + v + " · macOS 14 or later · Apple silicon & Intel");
+      }
+    })
+    .catch(() => {});
+  const nav = document.getElementById("nav");
+  addEventListener("scroll", () => nav.classList.toggle("scrolled", scrollY > 8), { passive: true });
+  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }), { threshold: .12 });
+  document.querySelectorAll(".reveal").forEach(el => io.observe(el));
+</script>
+</body>
+</html>
