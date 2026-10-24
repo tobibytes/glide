@@ -176,3 +176,25 @@ struct OpenAIClientLoopbackTests {
         #expect(sys == "SYS\n\nToday is Friday")
     }
 }
+
+@Suite("AI with a local server", .serialized)
+@MainActor struct AILocalServerTests {
+    @Test func localServerCountsAsReadyWithoutAKey() async throws {
+        let ctx = try N4TestContext(featureId: "ai")
+        defer { ctx.cleanup() }
+        let f = AIFeature(environment: [:])
+        await f.start(context: ctx)
+        #expect(!f.isReady)
+        _ = try await f.invoke(method: "setSettings", args: ["provider": "openai", "openaiBaseURL": "http://localhost:11434/v1"])
+        #expect(f.usesLocalServer && f.isReady)
+        #expect(f.openaiKeys.status().hasKey == false)
+        let r = try await f.invoke(method: "hasApiKey", args: .null)
+        #expect(r["ready"]?.boolValue == true && r["hasKey"]?.boolValue == false && r["localServer"]?.boolValue == true)
+        // A remote server still needs a key.
+        _ = try await f.invoke(method: "setSettings", args: ["openaiBaseURL": "https://openrouter.ai/api/v1"])
+        #expect(!f.usesLocalServer && !f.isReady)
+        // Anthropic never uses the OpenAI server setting.
+        _ = try await f.invoke(method: "setSettings", args: ["provider": "anthropic", "openaiBaseURL": "http://127.0.0.1:1234/v1"])
+        #expect(!f.usesLocalServer)
+    }
+}

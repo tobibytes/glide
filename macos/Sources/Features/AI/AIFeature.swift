@@ -141,6 +141,14 @@ import SwiftUI
 
     // MARK: client
 
+    /// OpenAI provider pointed at a server on this Mac (Ollama, LM Studio…): those need no key.
+    var usesLocalServer: Bool {
+        guard provider == .openai, !openaiBaseURL.isEmpty, let host = OpenAIClient.normalizedBaseURL(openaiBaseURL)?.host?.lowercased() else { return false }
+        return ["127.0.0.1", "localhost", "::1"].contains(host)
+    }
+    /// AI can be used: a key is saved, or a local server needs none.
+    var isReady: Bool { keys.status().hasKey || usesLocalServer }
+
     func makeClient() throws -> any AIChatClient {
         if let baseURLRejected, headless { throw AIError(.network, "AI requests are disabled: \(baseURLRejected)") }
         if headless && baseURL == nil { throw AIError(.network, "AI requests are disabled in headless mode (set GLIDE_AI_BASE_URL to a local test server)") }
@@ -359,7 +367,7 @@ import SwiftUI
         case "hasApiKey":
             let s = keys.status()
             return ["hasKey": .bool(s.hasKey), "encryptionAvailable": .bool(s.encryptionAvailable), "legacyKeyAvailable": .bool(legacyKeyAvailable),
-                    "provider": .string(provider.rawValue)]
+                    "provider": .string(provider.rawValue), "localServer": .bool(usesLocalServer), "ready": .bool(s.hasKey || usesLocalServer)]
         case "setApiKey":
             let s = try saveKey(args["key"]?.stringValue ?? args.stringValue ?? "")
             return ["hasKey": .bool(s.hasKey), "provider": .string(provider.rawValue)]

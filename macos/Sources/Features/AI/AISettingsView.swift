@@ -18,6 +18,7 @@ import SwiftUI
         return feature?.keys.status() ?? AIKeyStatus(hasKey: false, encryptionAvailable: true)
     }
     var legacyAvailable: Bool { _ = revision; return feature?.legacyKeyAvailable ?? false }
+    var localServer: Bool { _ = revision; return feature?.usesLocalServer ?? false }
     var model: String { _ = revision; return feature?.anthropicModel ?? AIModels.defaultModel }
     var provider: AIProvider { _ = revision; return feature?.provider ?? .anthropic }
     var openaiModel: String { _ = revision; return feature?.openaiModel ?? OpenAIModels.defaultModel }
@@ -79,6 +80,12 @@ import SwiftUI
         message = (t.isEmpty ? "Using api.openai.com." : "Using \(t).", true)
     }
 
+    /// Preset server (Ollama, LM Studio, or "" for api.openai.com).
+    func useServer(_ url: String) {
+        baseURLDraft = url
+        saveBaseURL()
+    }
+
     func set(_ key: String, _ value: JSONValue) {
         feature?.applySettings([key: value])
         revision += 1
@@ -106,16 +113,20 @@ struct AISettingsView: View {
                     ForEach(AIProvider.allCases) { p in Text(p.label).tag(p.rawValue) }
                 }
                 .pickerStyle(.segmented)
-                Text("Pasting a key for the other provider switches to it automatically.").font(.caption).foregroundStyle(.secondary)
+                Text("Pasting a key for the other provider switches to it automatically. For a local model (Ollama, LM Studio), choose OpenAI — it covers every OpenAI-compatible server — and pick the server under Model.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("\(model.provider.label) API key") {
                 HStack {
-                    Image(systemName: model.status.hasKey ? "checkmark.seal.fill" : "key")
-                        .foregroundStyle(model.status.hasKey ? Color.green : Color.secondary)
-                    Text(model.status.hasKey ? "A key is saved in the Keychain" : "No key saved")
+                    let local = model.localServer && !model.status.hasKey
+                    Image(systemName: model.status.hasKey || local ? "checkmark.seal.fill" : "key")
+                        .foregroundStyle(model.status.hasKey || local ? Color.green : Color.secondary)
+                    Text(model.status.hasKey ? "A key is saved in the Keychain" : local ? "No key needed for the local server" : "No key saved")
                     Spacer()
-                    if model.status.hasKey {
+                    if model.status.hasKey || local {
                         Button("Test Connection") { model.test() }.disabled(model.testing)
+                    }
+                    if model.status.hasKey {
                         Button("Remove", role: .destructive) { model.clearKey() }
                     }
                 }
@@ -165,6 +176,13 @@ struct AISettingsView: View {
                             .onSubmit { model.saveBaseURL() }
                         Button("Save") { model.saveBaseURL() }.disabled(model.baseURLDraft == nil)
                     }
+                    HStack(spacing: 8) {
+                        Text("Local:").font(.caption).foregroundStyle(.secondary)
+                        Button("Ollama") { model.useServer("http://localhost:11434/v1") }
+                        Button("LM Studio") { model.useServer("http://localhost:1234/v1") }
+                        Button("OpenAI") { model.useServer("") }
+                    }
+                    .controlSize(.small)
                     Text("Leave the server empty for api.openai.com. Any OpenAI-compatible server works; local servers need no key. Your OpenAI key is sent to the server you enter here, so only use servers you trust.")
                         .font(.caption).foregroundStyle(.secondary)
                 }

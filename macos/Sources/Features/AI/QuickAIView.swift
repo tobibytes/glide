@@ -20,7 +20,8 @@ import SwiftUI
         conversation = AIConversation(provider: feature, model: props.model)
     }
 
-    var hasKey: Bool { feature?.keys.status().hasKey ?? false }
+    /// A saved key, or a local server (Ollama, LM Studio) that needs none.
+    var hasKey: Bool { feature?.isReady ?? false }
 
     func start() {
         guard !started else { return }

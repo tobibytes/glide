@@ -1017,7 +1017,7 @@ extension ExtensionsFeature {
     /// Glide AI's key status (environment.canAccess(AI)) and active provider.
     func aiStatus() async -> (hasKey: Bool, provider: String) {
         guard let r = try? await context?.callFeature("ai", method: "hasApiKey", args: .null) else { return (false, "anthropic") }
-        return (r["hasKey"]?.boolValue == true, r["provider"]?.stringValue ?? "anthropic")
+        return ((r["ready"] ?? r["hasKey"])?.boolValue == true, r["provider"]?.stringValue ?? "anthropic")
     }
 
     /// AI.ask: streams Glide AI's answer as "data" chunks and resolves with the full text.
