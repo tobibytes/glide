@@ -1,6 +1,6 @@
 # Features
 
-Every feature is a module in `src/main/features/<id>` (main process) and `src/renderer/features/<id>` (UI). Type the command name in the launcher; most commands take an argument with **Tab**. In the app, **What Can Glide Do?** lists every command grouped by feature, plus things that work by just typing (`100 usd in eur`, `timer 25m tea`…).
+Every feature is a module in `macos/Sources/Features/<Name>`. Type the command name in the launcher; most commands take an argument with **Tab**. In the app, **What Can Glide Do?** lists every command grouped by feature, plus things that work by just typing (`100 usd in eur`, `timer 25m tea`…).
 
 ## Core
 
@@ -51,6 +51,17 @@ Every feature is a module in `src/main/features/<id>` (main process) and `src/re
 | **Themes & Appearance** | *Switch Theme* (live preview while moving), 9 presets, accent, density, font size, radius, width, translucency, follow system light/dark. |
 | **Sync & Backup** | Settings → Sync. Pick any synced folder: each Mac writes its own file, merges are deterministic, there's a conflict log and 10 rolling backups. Secrets are never synced. |
 | **Vim mode** | Normal and insert modes, `j k gg G ⌃D ⌃U { } / counts`, in the launcher and feature views. |
+
+## New in v0.4
+
+| Feature | Commands and behaviour |
+| --- | --- |
+| **Glide on iPhone** (beta) | Settings → iPhone. Pair once with a QR code and Glide Remote opens in Safari on the phone, no app needed. Run commands and workflows, send text, links and photos to the Mac, move the clipboard both ways, trackpad, keys, media and slide clicker, search and pull files, Glide Agent with approvals. Every call is encrypted; clipboard, remote control and files each have their own switch, and each action can be Allow, Ask or Off. See [PHONE.md](PHONE.md). |
+| **Shortcuts and iCloud** | Settings → iPhone. Generated Shortcuts (Send to Glide, Send Clipboard to Mac, Get Mac Clipboard, Run Glide Workflow, Ask Glide Agent) that work away from home through your iCloud Drive, a clipboard mirror, and recipes for iPhone automations (leave home, CarPlay, alarm). |
+| **Phone notifications** | Through the free ntfy app: timer finished, automation failed, approval waiting (with a link that opens it in Glide Remote). Off by default. |
+| **What Can Glide Do?** | Type `help`: every command grouped by feature, plus a "Just Type It" list of things that work by typing. |
+| **Updates** | About shows whether Glide is up to date, with Check for Updates and Update buttons; Check for Updates… in the menu bar menu; Settings checks when opened. |
+| **Lighter** | Text recognition (Capture Text, QR, clipboard images) runs in a short-lived helper, so Glide stays at about 30 MB of memory. |
 
 ## New in v0.3
 

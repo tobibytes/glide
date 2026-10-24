@@ -183,7 +183,7 @@ struct AboutPage: View {
                 Button { openURL(Self.repo.appendingPathComponent("issues/new")) } label: { Label("Report an Issue", systemImage: "exclamationmark.bubble") }
             }
             .padding(.top, 6)
-            Text("Open source · MIT License · © 2026 tobibytes").font(.caption).foregroundStyle(.tertiary).padding(.top, 8)
+            Text("Open source under the MIT License. © 2026 tobibytes").font(.caption).foregroundStyle(.tertiary).padding(.top, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task {
