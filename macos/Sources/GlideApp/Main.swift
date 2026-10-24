@@ -12,6 +12,8 @@ struct GlideMain {
         let args = CommandLine.arguments
         // N5: stdio ⇄ HTTP bridge to the running app's MCP server (no UI, no NSApplication).
         if args.contains(MCPStdioBridge.flag) { MCPStdioBridge.runAndExit(arguments: args) }
+        // One Vision OCR / barcode request in a short-lived process, so the app never keeps Vision's memory.
+        if args.contains(OCRWorker.flag) { OCRWorker.runAndExit(arguments: args) }
         // Offline self-tests kept from glide-helper (never create taps, post events or touch the pasteboard).
         if let i = args.firstIndex(of: "--selftest-keys"), let path = args.dropFirst(i + 1).first {
             guard let data = FileManager.default.contents(atPath: path), let out = KeysSelfTest.run(fixture: data),

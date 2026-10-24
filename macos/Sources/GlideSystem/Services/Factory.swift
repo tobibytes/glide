@@ -18,7 +18,7 @@ public enum SystemServicesFactory {
             notifications: SystemNotificationService(), scripts: SystemScriptService(), confirmation: AlertConfirmationService(),
             frontmost: frontmost, selection: AXSelectionService(frontmost: frontmost), windows: AXWindowService(frontmost: frontmost),
             menus: AXMenuService(frontmost: frontmost), hotkeys: hotkeys, keyboardTap: keyboard, permissions: permissions,
-            ocr: VisionOCRService(), eventKit: eventKit, finder: FinderSelectionService(), wifi: wifi, colorPicker: SamplerColorPicker(),
+            ocr: VisionOCRService(worker: VisionOCRService.appWorker), eventKit: eventKit, finder: FinderSelectionService(), wifi: wifi, colorPicker: SamplerColorPicker(),
             layouts: AXLayoutService(frontmost: frontmost), spotlight: SpotlightShortcut(), isHeadless: false)
         services.statusItems = SystemStatusItemService() // NSStatusItems are created only when an item is shown
         return services
@@ -33,7 +33,7 @@ public enum SystemServicesFactory {
             confirmation: HeadlessConfirmation(log: log, answer: environment["GLIDE_HEADLESS_CONFIRM"] != "0"),
             frontmost: frontmost, selection: HeadlessSelection(text: environment["GLIDE_HEADLESS_SELECTION"]), windows: HeadlessWindows(log: log),
             menus: HeadlessMenus(log: log), hotkeys: HeadlessHotkeys(log: log), keyboardTap: HeadlessKeyboardTap(log: log),
-            permissions: HeadlessPermissions(log: log), ocr: VisionOCRService(), eventKit: HeadlessEventKit(), finder: HeadlessFinder(),
+            permissions: HeadlessPermissions(log: log), ocr: VisionOCRService(worker: VisionOCRService.appWorker), eventKit: HeadlessEventKit(), finder: HeadlessFinder(),
             wifi: HeadlessWiFi(), colorPicker: HeadlessColorPicker(log: log), layouts: HeadlessLayouts(log: log, frontmost: frontmost),
             spotlight: HeadlessSpotlight(log: log), isHeadless: true)
         services.statusItems = HeadlessStatusItems(log: log) // records only; never an NSStatusItem
