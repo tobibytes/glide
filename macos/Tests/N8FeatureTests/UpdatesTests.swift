@@ -255,3 +255,22 @@ struct InstallerTests {
         await f.stop()
     }
 }
+
+@Suite("Update status text")
+@MainActor struct UpdateStatusTextTests {
+    @Test func lastCheckedReadsNaturally() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let ms = { (secondsAgo: Double) in (now.timeIntervalSince1970 - secondsAgo) * 1000 }
+        #expect(AppSettingsView.checkedText(ms(5), now: now) == "Checked just now")
+        #expect(AppSettingsView.checkedText(ms(60), now: now) == "Checked 1 minute ago")
+        #expect(AppSettingsView.checkedText(ms(600), now: now) == "Checked 10 minutes ago")
+        #expect(AppSettingsView.checkedText(ms(7200), now: now).hasPrefix("Checked at "))
+    }
+
+    @Test func statusSentences() {
+        #expect(AppSettingsView.statusText(["status": "up-to-date", "currentVersion": "0.4.1"]) == "Glide is up to date. You have the latest version (0.4.1).")
+        #expect(AppSettingsView.statusText(["status": "available", "latestVersion": "0.5.0", "currentVersion": "0.4.1"]) == "Glide 0.5.0 is available. You have 0.4.1.")
+        #expect(AppSettingsView.statusText(["status": "checking"]) == "Checking for updates…")
+    }
+}
+

@@ -377,6 +377,7 @@ struct AppSettingsView: View {
     @State private var feed = ""
     @State private var tick = 0
     @State private var message: String?
+    @State private var checking = false
 
     var body: some View {
         let info = feature?.info() ?? .null
@@ -396,12 +397,25 @@ struct AppSettingsView: View {
                     .onSubmit { feature?.setUpdateSettings(["updateFeed": .string(feed)]); tick += 1 }
                 Toggle("Check automatically", isOn: Binding(get: { info["autoCheck"]?.boolValue ?? true }, set: { feature?.setUpdateSettings(["autoCheck": .bool($0)]); tick += 1 }))
                 HStack {
-                    Button("Check Now") { Task { await feature?.check(); tick += 1 } }
+                    Button {
+                        Task { await checkNow() }
+                    } label: {
+                        if checking {
+                            HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Checking…") }
+                        } else {
+                            Text("Check Now")
+                        }
+                    }
+                    .disabled(checking || up["status"]?.stringValue == "installing")
                     if up["status"]?.stringValue == "available" {
                         Button("Update to v\(up["latestVersion"]?.stringValue ?? "")") { Task { await feature?.install(); tick += 1 } }.buttonStyle(.borderedProminent)
                     }
                 }
-                Text(Self.statusText(up)).font(.caption).foregroundStyle(up["status"]?.stringValue == "error" ? .red : .secondary)
+                Label(Self.statusText(up), systemImage: Self.symbol(up["status"]?.stringValue ?? ""))
+                    .foregroundStyle(up["status"]?.stringValue == "error" ? Color.red : up["status"]?.stringValue == "up-to-date" ? Color.green : Color.secondary)
+                if let t = up["lastChecked"]?.doubleValue {
+                    Text(Self.checkedText(t)).font(.caption).foregroundStyle(.secondary)
+                }
             } header: { Text("Updates") } footer: {
                 Text("Glide reads GitHub Releases (default tobibytes/glide). It picks this Mac's architecture build, verifies its SHA-256, code signature and bundle id before replacing Glide.app. An empty feed turns updates off: no update requests are made.")
             }
@@ -410,6 +424,40 @@ struct AppSettingsView: View {
         .id(tick)
         .onAppear { feed = info["updateFeed"]?.stringValue ?? "" }
         .task { await feature?.checkIfStale(); tick += 1 }
+    }
+
+    /// Runs a check with visible progress (at least briefly, so a fast "still up to date" doesn't look like nothing happened).
+    private func checkNow() async {
+        guard let feature, !checking else { return }
+        checking = true
+        let started = Date()
+        await feature.check()
+        let elapsed = Date().timeIntervalSince(started)
+        if elapsed < 0.6 { try? await Task.sleep(for: .milliseconds(Int((0.6 - elapsed) * 1000))) }
+        checking = false
+        tick += 1
+    }
+
+    static func symbol(_ status: String) -> String {
+        switch status {
+        case "up-to-date": return "checkmark.circle.fill"
+        case "available": return "arrow.down.circle.fill"
+        case "checking", "installing": return "arrow.triangle.2.circlepath"
+        case "error": return "exclamationmark.triangle.fill"
+        default: return "arrow.down.circle"
+        }
+    }
+
+    /// "Checked just now", "Checked 5 minutes ago", "Checked at 9:41 AM".
+    static func checkedText(_ ms: Double, now: Date = Date()) -> String {
+        let at = Date(timeIntervalSince1970: ms / 1000)
+        let s = Int(now.timeIntervalSince(at))
+        if s < 60 { return "Checked just now" }
+        if s < 3600 { let m = s / 60; return "Checked \(m) minute\(m == 1 ? "" : "s") ago" }
+        let f = DateFormatter()
+        f.dateStyle = Calendar.current.isDate(at, inSameDayAs: now) ? .none : .medium
+        f.timeStyle = .short
+        return "Checked at \(f.string(from: at))"
     }
 
     static func statusText(_ up: JSONValue) -> String {
