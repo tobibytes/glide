@@ -1,0 +1,42 @@
+name: Bug report
+description: Something in Glide doesn't work the way it should
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+      placeholder: I typed "timer 25m tea" and pressed Return, but no timer started.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Glide with ⌥Space
+        2. Type …
+        3. Press …
+    validations:
+      required: true
+  - type: input
+    id: glide
+    attributes:
+      label: Glide version
+      description: Settings, then About.
+      placeholder: "0.3.2"
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac
+      placeholder: macOS 15.5 on a MacBook Air (M2)
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Screenshots, which permissions are on, or anything that might help.

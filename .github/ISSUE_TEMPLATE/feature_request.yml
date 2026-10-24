@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest something Glide should do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe the task or annoyance, not just the feature.
+      placeholder: I copy the same three things into every new project and want to paste them in one go.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like Glide to do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: How do you do it today?
+      description: Another app, a script, or by hand.

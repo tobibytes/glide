@@ -4,122 +4,94 @@
 
 # Glide
 
-**A keyboard-first launcher for macOS, with a Shortcuts-style workflow builder, an AI agent, and vim keys everywhere.**
+**A free, open-source, keyboard-first launcher for macOS.**
 
-**[glide.madebytobi.com](https://glide.madebytobi.com)**
+**[glide.madebytobi.com](https://glide.madebytobi.com)** &nbsp;|&nbsp; **[Download](https://github.com/tobibytes/glide/releases/latest)**
 
-[![CI](https://github.com/tobibytes/glide/actions/workflows/ci.yml/badge.svg)](https://github.com/tobibytes/glide/actions/workflows/ci.yml)
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)
-![Electron](https://img.shields.io/badge/Electron-44-47848F?logo=electron&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
-[![License: MIT](https://img.shields.io/badge/License-MIT-f5a623.svg)](LICENSE)
+![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)
+![Apple silicon and Intel](https://img.shields.io/badge/Apple%20silicon%20%26%20Intel-universal-555)
+[![Latest release](https://img.shields.io/github/v/release/tobibytes/glide)](https://github.com/tobibytes/glide/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-5e81ac.svg)](LICENSE)
 
-<img src="docs/screenshots/themes.png" width="820" alt="Glide's Switch Theme view with a live preview" />
+<img src="docs/screenshots/native-search.jpg" width="820" alt="Glide's launcher searching for window commands" />
 
 </div>
 
-Press **⌘Space**, type a few letters, hit **⏎**. Glide finds apps, files, bookmarks and commands, runs your workflows, converts anything, manages windows, and lets an AI agent do multi-step chores for you. Everything works from the keyboard, with `j`/`k` vim navigation in every list.
+Press **⌥Space** (or switch it to **⌘Space**), type a few letters, hit **⏎**. Glide opens apps and files, snaps windows, searches your clipboard, expands snippets, converts anything, asks AI with your own key or a local model, and automates your Mac. It's a native Swift app that stays at about 30 MB of memory, with no account and no tracking.
+
+New to it? Type `help` and open **What Can Glide Do?** to see every command.
 
 ## Highlights
 
 | | |
 | --- | --- |
-| 🔎 **Fast fuzzy search** | Subsequence matching, aliases and frecency ranking ([how it ranks](src/engine/README.md)) |
-| 🧩 **Workflows** | A Shortcuts-style visual builder: 17 actions, variables, conditions, hotkeys |
-| ⚡ **Automations** | Run workflows on a schedule, on app launch, Wi‑Fi change, battery, display, folder changes or a hotkey |
-| 🤖 **Glide Agent** | "Put Safari left, Notes right and start a 25 min timer". Claude plans it, you confirm, Glide does it, with undo, conversations and Save as Workflow |
-| 🪟 **Windows & workspaces** | Snap windows, save and restore layouts, open whole workspaces in one keystroke |
+| 🔎 **Fast fuzzy search** | Apps, files, commands and bookmarks, with aliases, hotkeys and ranking by what you use most |
+| ⌨️ **Just type it** | `5pm london in tokyo`, `100 usd in eur`, `timer 25m tea`, `remind call mom tomorrow 9am`, `port 3000` |
 | 📋 **Clipboard history** | List or image grid, filters, text search inside images, Paste Stack, merge, edit before pasting |
-| ✂️ **Snippets & quicklinks** | `{cursor}`, dates, nested snippets, rich text, keyword prefix; quicklinks with several arguments and open-with |
-| 🗓️ **Reminders & Finder** | "remind call mom tomorrow 9am", plus actions on the Finder selection (copy path, terminal here, move, compress) |
-| 📍 **Menu bar** | Live timers, CPU and memory, next meeting, clipboard and agent shortcuts |
-| 🔤 **Text transforms** | 34 transforms (case, JSON, Base64, hashes, JWT…) on your selection, pasted back |
-| 🔢 **Conversions** | Units, ~160 currencies, time zones and date math, right in the search bar |
-| 👁️ **Screen text & QR** | Capture any region and get the text (Apple Vision), or scan a QR code |
-| 🌐 **Bookmarks & history** | Chrome, Arc, Brave, Edge, Vivaldi, Firefox and Safari |
-| 🧰 **Dev tools** | Kill a process or a port, a live system monitor, script commands |
-| 🎨 **Themes** | 9 themes, custom accent, density, translucency, all live-previewed |
-| 🧱 **Extensions & store** | Glide's own API **and** Raycast-style React extensions (menu bar, background refresh, OAuth, AI), plus an in-app store with checksum-verified installs |
-| 🔄 **Sync** | Settings sync and backup through any folder (iCloud Drive, Dropbox…), with no server |
-| ⌨️ **Vim mode** | `j`/`k`, `gg`/`G`, `/`, counts, plus normal and insert modes in every list |
-
-Plus Quick AI and AI commands on selected text, menu-bar search for any app, a Hyper key, emoji, notes and floating notes, focus sessions, calendar, timers and stopwatch, a color picker, quicklinks, and system commands.
+| ✂️ **Snippets & quicklinks** | Expand as you type, with `{cursor}`, dates, nested snippets and rich text; quicklinks with arguments |
+| 🪟 **Windows & workspaces** | Snap windows, save and restore layouts, open whole workspaces in one keystroke |
+| ✨ **AI on your terms** | Quick AI, AI Chat and AI commands on selected text. Bring an Anthropic or OpenAI key, or use a local model through Ollama or LM Studio. Keys stay in the Keychain |
+| 🤖 **Glide Agent** | "Put Safari left, Notes right and start a 25 min timer". It shows its plan, asks before acting, and can undo |
+| ⚡ **Automations & workflows** | A visual workflow builder, run on a schedule, on app launch, Wi‑Fi or power changes, or when a file lands in a folder |
+| 👁️ **Screen text & QR** | Drag over any region to copy its text (Apple Vision, on your Mac), or scan a QR code |
+| 🧱 **Extensions & MCP** | An extension store, Raycast-style React extensions, and an MCP server so tools like Claude Code can use Glide |
+| 🧰 **Mac tools** | Color picker, process and port killer, system monitor, menu search, Finder actions, text transforms, timers, focus, floating notes, reminders, calendar |
+| 🎨 **Yours** | Themes with live preview, a Hyper key, vim keys, and sync through iCloud Drive or Dropbox |
 
 <table>
   <tr>
-    <td><img src="docs/screenshots/workflows.png" alt="Workflow editor" /></td>
-    <td><img src="docs/screenshots/agent.png" alt="Glide Agent asking for confirmation" /></td>
+    <td><img src="docs/screenshots/native-timezone.jpg" alt="Converting 5pm London to Tokyo time" /></td>
+    <td><img src="docs/screenshots/native-commands.jpg" alt="The What Can Glide Do? command list" /></td>
   </tr>
   <tr>
-    <td align="center"><sub>Build workflows like Shortcuts</sub></td>
-    <td align="center"><sub>Glide Agent asks before it acts</sub></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/transforms.png" alt="Transform Text view" /></td>
-    <td><img src="docs/screenshots/layouts.png" alt="Window Layouts view" /></td>
-  </tr>
-  <tr>
-    <td align="center"><sub>Transform the selected text</sub></td>
-    <td align="center"><sub>Save and restore workspaces</sub></td>
+    <td align="center"><sub>Type what you mean</sub></td>
+    <td align="center"><sub>Every command, one keystroke away</sub></td>
   </tr>
 </table>
 
 ## Download
 
-Grab **`Glide-<version>.dmg`** from the [latest release](https://github.com/tobibytes/glide/releases/latest) (runs on Apple silicon and Intel Macs), open it, and drag **Glide** onto **Applications**.
+Grab **`Glide-<version>.dmg`** from the [latest release](https://github.com/tobibytes/glide/releases/latest) or [glide.madebytobi.com](https://glide.madebytobi.com). It runs on Apple silicon and Intel Macs with macOS 14 or later. Open it and drag **Glide** onto **Applications**.
 
-Release builds are not notarized by Apple yet, so the first launch is blocked with "Glide can't be opened". To allow it, choose one:
+Release builds aren't notarized by Apple yet, so the first launch is blocked with "Glide can't be opened". To allow it, choose one:
 
-- **System Settings → Privacy & Security**, scroll to the message about Glide, and click **Open Anyway**.
-- **Terminal:** `xattr -dr com.apple.quarantine /Applications/Glide.app`
+- Open **System Settings**, then **Privacy & Security**, scroll to the message about Glide, and click **Open Anyway**.
+- Or in Terminal: `xattr -dr com.apple.quarantine /Applications/Glide.app`
 
-Glide then walks you through the hotkey, permissions (with live status), an optional AI key and a theme.
+Glide then walks you through your hotkey, permissions (with live status), an optional AI key and a theme. It updates itself from GitHub Releases; you can turn that off in Settings. To uninstall, quit Glide, delete the app, and delete `~/Library/Application Support/Glide`.
 
-<img src="docs/screenshots/onboarding.png" width="560" alt="Glide's first-run permissions step" />
-
- It updates itself from GitHub Releases; turn that off in Settings → Updates. To uninstall, quit Glide, delete the app, and delete `~/Library/Application Support/Glide`.
-
-## Build from source
-
-Requirements: macOS 14+ on Apple silicon, Node 22+, pnpm 10, Xcode command-line tools (for the Swift helper).
-
-```sh
-git clone https://github.com/tobibytes/glide.git && cd glide
-pnpm install
-node scripts/setup-signing.mjs   # optional, once: keeps macOS permissions across rebuilds
-pnpm install:app                 # build, sign and install /Applications/Glide.app
-```
-
-Then open Glide and press **⌥Space**. You can switch it to ⌘Space in Settings → Keyboard, which hands the shortcut over from Spotlight.
-
-For development:
-
-```sh
-pnpm dev          # Vite + esbuild watch + Electron
-pnpm test         # 906 unit tests
-pnpm typecheck
-pnpm test:e2e     # drives the real app headless (nothing appears on screen)
-pnpm test:quality # smoke, performance and accessibility suites; see docs/TESTING.md
-```
-
-Some features need macOS permissions; Glide asks when you first use them:
+Some features need macOS permissions, and Glide asks when you first use them:
 
 - **Accessibility:** windows, menus, pasting, selected text
 - **Input Monitoring:** snippets, Hyper key
 - **Screen Recording:** screen text and QR
-- **Calendars:** calendar events
+- **Calendars and Reminders:** events and reminders
 
-More detail: [docs/INSTALL.md](docs/INSTALL.md) (signing, releases, auto-update, notarization).
+## Build from source
+
+Requirements: macOS 14+, Xcode 16 or the Swift 6 toolchain. There are no third-party dependencies.
+
+```sh
+git clone https://github.com/tobibytes/glide.git && cd glide/macos
+swift build                    # debug build
+scripts/test.sh                # builds, then runs every test headless (nothing appears on screen)
+scripts/build-app.sh           # universal release app in build/Glide.app, signed
+scripts/make-dmg.sh            # build/Glide-<version>.dmg
+scripts/release.sh --publish   # build, package and publish a GitHub release
+```
+
+More detail: [macos/README.md](macos/README.md) (layout, headless test server) and [docs/INSTALL.md](docs/INSTALL.md) (signing, releases, auto-update).
 
 ## Keyboard
 
 | Keys | Action |
 | --- | --- |
-| ⌘Space / ⌥Space | Show or hide Glide |
+| ⌥Space (or ⌘Space) | Show or hide Glide |
 | ⏎ / ⌘⏎ | Primary / secondary action |
 | ⌘K | All actions for the selected item |
 | Tab | Give an argument (quicklink `{query}`, workflow input, AI command) |
-| `j` `k` · `gg` `G` · `/` | Vim navigation (Esc switches to normal mode) |
+| `j` `k`, `gg` `G`, `/` | Vim navigation (Esc switches to normal mode) |
 | ⌃J / ⌃K | Down / up, even while typing |
 | ⌘1–9 | Run the n-th visible item |
 | Esc | Back, clear, then hide |
@@ -127,45 +99,22 @@ More detail: [docs/INSTALL.md](docs/INSTALL.md) (signing, releases, auto-update,
 ## Docs
 
 - [Features](docs/FEATURES.md): everything Glide does, with commands and shortcuts
-- [Architecture](docs/ARCHITECTURE.md): how the pieces fit together
+- [Native app](macos/README.md), [architecture](macos/docs/ARCHITECTURE.md) and [testing](macos/docs/TESTING.md)
+- [MCP server](docs/MCP.md) and [MCP client](docs/MCP-CLIENT.md)
 - [Writing extensions](src/extension-api/README.md): Glide API and Raycast-style React extensions
-- [Extension store](docs/EXTENSIONS-STORE.md) · [Testing](docs/TESTING.md)
+- [Extension store](docs/EXTENSIONS-STORE.md)
 - [Search ranking](src/engine/README.md)
-- [Native helper protocol](src/native/PROTOCOL.md)
-- [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+- [Changelog](CHANGELOG.md), [Contributing](CONTRIBUTING.md) and [Security](SECURITY.md)
 
 ## Roadmap
 
-**v0.3 (shipped):**
-- menu-bar mode
-- Clipboard 2.0
-- extension store
-- universal (Intel + Apple silicon) builds, published to GitHub Releases with `macos/scripts/release.sh --publish`
-- Raycast-compat (menu-bar commands, background refresh, OAuth, AI)
-- Quicklinks & Snippets 2.0
-- Reminders and Finder actions
-- Glide Agent 2.0
-- features as workflow steps
-- the Tab chooser
-- "Keep open after running"
-- headless testing with visual, accessibility and performance suites
+**v0.3 (shipped):** a full native Swift rewrite (universal, about 30 MB of memory), What Can Glide Do?, local AI models without a key, OpenAI alongside Anthropic, menu-bar extras, Clipboard 2.0, the extension store, Raycast-style extensions (menu bar, OAuth, AI), Quicklinks and Snippets 2.0, Reminders and Finder actions, and Glide Agent 2.0.
 
-**v0.2, the top 10 (shipped):**
+**v0.2 (shipped):** automations, Glide Agent, window layouts and workspaces, screen text and QR, browser bookmarks and history, text transforms, the process and port manager, themes, the system monitor, and sync and backup.
 
-Ranked by how much they change day-to-day use:
+**Next up:** notarized releases, so the first launch needs no extra step.
 
-1. **Automations**: event-triggered workflows (time, apps, Wi‑Fi, power, displays, folders, hotkeys)
-2. **Glide Agent**: natural-language, multi-step actions with Claude tool use and confirmations
-3. **Window layouts & workspaces**: save, restore and launch whole setups
-4. **Screen text & QR**: OCR any region with Apple Vision
-5. **Browser bookmarks & history**: every major browser, local only
-6. **Text transforms**: 34 transforms on the selection, pasted back
-7. **Process & port manager**: kill by name or by port, safely
-8. **Themes & appearance**: 9 themes, accents, density, translucency
-9. **System monitor**: live CPU, memory, disk, battery and network
-10. **Sync & backup**: through any synced folder, with deterministic merges
-
-Next up: ⌘V-driven Paste Stack and live snippet placeholders (needs a helper change), and notarized releases.
+The original Electron version is still in `src/` for reference, but releases now ship the native app in `macos/`.
 
 ## Background
 
