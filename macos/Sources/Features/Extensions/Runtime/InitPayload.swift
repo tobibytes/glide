@@ -2,7 +2,11 @@ import Foundation
 import GlideCore
 
 enum InitPayload {
-    static let glideVersion = "0.3.0"
+    /// The app bundle's version (package.json at build time); the fallback covers test runners and `swift run`.
+    static let glideVersion: String = {
+        if Bundle.main.bundleIdentifier == "dev.glide.launcher", let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String, !v.isEmpty { return v }
+        return "0.3.1"
+    }()
 
     /// The `init` message body (InitPayload in src/extension-api/types.ts). apiPath / shimDir are set by entry.ts.
     static func make(ext: InstalledExtension, manifest m: ExtManifest, command cmd: ExtCommand, arguments: [String: String],
