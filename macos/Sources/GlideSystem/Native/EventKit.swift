@@ -23,11 +23,11 @@ import GlideCore
         store = EKEventStore() // a store created before the grant keeps returning nothing
     }
 
-    private static let iso: ISO8601DateFormatter = {
+    nonisolated private static func isoString(_ date: Date) -> String {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime]
-        return f
-    }()
+        return f.string(from: date)
+    }
 
     nonisolated static func parseDate(_ s: String) -> Date? {
         let f = ISO8601DateFormatter()
@@ -37,7 +37,7 @@ import GlideCore
         return f.date(from: s)
     }
 
-    static func hex(_ c: CGColor?) -> JSONValue {
+    nonisolated static func hex(_ c: CGColor?) -> JSONValue {
         guard let c, let rgb = NSColor(cgColor: c)?.usingColorSpace(.sRGB) else { return .null }
         return .string(String(format: "#%02x%02x%02x", Int(rgb.redComponent * 255), Int(rgb.greenComponent * 255), Int(rgb.blueComponent * 255)))
     }
@@ -52,7 +52,7 @@ import GlideCore
         return .array(store.events(matching: predicate).sorted { $0.startDate < $1.startDate }.map { e in
             var o: [String: JSONValue] = [
                 "id": .string("\(e.eventIdentifier ?? e.calendarItemIdentifier)@\(Int(e.startDate.timeIntervalSince1970))"),
-                "title": .string(e.title ?? ""), "start": .string(Self.iso.string(from: e.startDate)), "end": .string(Self.iso.string(from: e.endDate)),
+                "title": .string(e.title ?? ""), "start": .string(Self.isoString(e.startDate)), "end": .string(Self.isoString(e.endDate)),
                 "allDay": .bool(e.isAllDay), "calendar": .string(e.calendar?.title ?? ""), "color": Self.hex(e.calendar?.cgColor),
             ]
             if let l = e.location, !l.isEmpty { o["location"] = .string(l) }
@@ -70,17 +70,17 @@ import GlideCore
         })
     }
 
-    static func describe(_ r: EKReminder) -> JSONValue {
+    nonisolated static func describe(_ r: EKReminder) -> JSONValue {
         var o: [String: JSONValue] = [
             "id": .string(r.calendarItemIdentifier), "title": .string(r.title ?? ""), "completed": .bool(r.isCompleted),
             "priority": .int(Int64(r.priority)), "listId": .string(r.calendar?.calendarIdentifier ?? ""), "listTitle": .string(r.calendar?.title ?? ""),
             "color": hex(r.calendar?.cgColor),
         ]
         if let comps = r.dueDateComponents, let date = Calendar.current.date(from: comps) {
-            o["due"] = .string(iso.string(from: date))
+            o["due"] = .string(isoString(date))
             o["dueAllDay"] = .bool(comps.hour == nil)
         }
-        if let d = r.completionDate { o["completionDate"] = .string(iso.string(from: d)) }
+        if let d = r.completionDate { o["completionDate"] = .string(isoString(d)) }
         if let n = r.notes, !n.isEmpty { o["notes"] = .string(n) }
         if let u = r.url { o["url"] = .string(u.absoluteString) }
         return .object(o)
@@ -96,7 +96,12 @@ import GlideCore
         let predicate = includeCompleted ? store.predicateForReminders(in: cals) : store.predicateForIncompleteReminders(withDueDateStarting: nil, ending: nil, calendars: cals)
         let s = store
         let found: [JSONValue] = await withCheckedContinuation { cont in
-            s.fetchReminders(matching: predicate) { rs in cont.resume(returning: (rs ?? []).map(EventKitStore.describe)) }
+            s.fetchReminders(matching: predicate) { rs in
+                // EventKit invokes this callback on its own queue. Convert its objects there, then
+                // resume the actor-isolated continuation on the main actor.
+                let values = (rs ?? []).map(EventKitStore.describe)
+                Task { @MainActor in cont.resume(returning: values) }
+            }
         }
         return .array(found)
     }

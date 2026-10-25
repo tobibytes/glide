@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.3
+
+- **Fix launch crash with Reminders.** EventKit delivers reminder results on its own queue; Glide now handles that callback without crossing into the main actor synchronously.
+
 ## 0.4.2
 
 - **Quit works again.** Quit Glide from the menu bar or the launcher could leave Glide stuck half-quit, and Quit then stopped responding.
