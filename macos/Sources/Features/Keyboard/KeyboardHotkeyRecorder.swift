@@ -42,8 +42,9 @@ public struct HotkeyRecorderLogic: Equatable, Sendable {
             cleanMod = nil
             lastTap = nil
             if mods.isEmpty && key == "Escape" { return .cancelled }
-            guard !mods.isEmpty || key.hasPrefix("F") && key.count > 1 else {
-                preview = "Add a modifier (⌘ ⌥ ⌃ ⇧)"
+            // ⌘, ⌥ or ⌃ (or the Hyper key) is required: a bare or ⇧-only shortcut would swallow normal typing.
+            guard !mods.filter({ $0 != .shift }).isEmpty || key.hasPrefix("F") && key.count > 1 else {
+                preview = "Add ⌘, ⌥ or ⌃"
                 return .none
             }
             let accel = Self.combo(mods, key: key)

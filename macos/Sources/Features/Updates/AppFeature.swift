@@ -175,6 +175,14 @@ import SwiftUI
         return update
     }
 
+    /// Spotlight still owns ⌘Space (System Settings → Keyboard Shortcuts), so a ⌘Space hotkey would never reach Glide.
+    public var spotlightOwnsCommandSpace: Bool { context?.services.spotlight.isEnabled() ?? false }
+
+    /// Hand ⌘Space over from Spotlight (Settings → Keyboard's "Use ⌘Space for Glide").
+    public func useCommandSpaceForGlide() async throws {
+        _ = try await context?.callFeature("keyboard", method: "setUseCommandSpace", args: ["on": true])
+    }
+
     /// Check unless a check finished within `maxAge` seconds (Settings and About call this when they open).
     @discardableResult
     public func checkIfStale(maxAge: TimeInterval = 3600) async -> UpdateState {

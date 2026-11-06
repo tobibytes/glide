@@ -48,13 +48,27 @@ import GlideSystem
 enum SingleInstance {
     nonisolated(unsafe) private static var fd: Int32 = -1
     static let showNotification = Notification.Name("dev.glide.native.show")
+    /// The running Glide's answer to `showNotification` ("I'm alive and showed the launcher").
+    static let shownNotification = Notification.Name("dev.glide.native.shown")
 
-    /// true when this process holds the lock.
+    static func lockPath(_ dir: URL) -> String { dir.appendingPathComponent("glide-native.lock").path }
+
+    /// true when this process holds the lock (it then records its pid in the lock file).
     static func acquire(in dir: URL) -> Bool {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let path = dir.appendingPathComponent("glide-native.lock").path
-        fd = open(path, O_CREAT | O_RDWR, 0o644)
+        if fd < 0 { fd = open(lockPath(dir), O_CREAT | O_RDWR, 0o644) }
         guard fd >= 0 else { return true }
-        return flock(fd, LOCK_EX | LOCK_NB) == 0
+        guard flock(fd, LOCK_EX | LOCK_NB) == 0 else { return false }
+        let pid = Array("\(getpid())\n".utf8)
+        ftruncate(fd, 0)
+        _ = pid.withUnsafeBufferPointer { pwrite(fd, $0.baseAddress, $0.count, 0) }
+        return true
+    }
+
+    /// The pid recorded by the Glide that holds the lock, if any.
+    static func holderPID(in dir: URL) -> pid_t? {
+        guard let s = try? String(contentsOfFile: lockPath(dir), encoding: .utf8), let pid = pid_t(s.trimmingCharacters(in: .whitespacesAndNewlines)),
+              pid > 0, pid != getpid() else { return nil }
+        return pid
     }
 }

@@ -214,6 +214,17 @@ public enum HotkeyAdvice {
         "shift+command+5": "⇧⌘5 opens the screenshot toolbar.",
     ]
 
+    /// Why this can't be Glide's launcher hotkey, or nil when it can. Every hotkey field uses this (General,
+    /// Keyboard, the first-run tour): bare keys and ⇧-only combos would take over typing, known macOS/app
+    /// shortcuts never reach Glide, and ⌘Space only works once Spotlight hands it over.
+    public static func problem(_ accel: String, spotlightEnabled: Bool) -> String? {
+        if canonical(accel) == "command+space" { return spotlightEnabled ? spotlightMessage : nil }
+        return conflict(accel)
+    }
+
+    public static let spotlightMessage = "Spotlight uses ⌘Space. Turn on “Use ⌘Space for Glide” to hand it over."
+    public static func isCommandSpace(_ accel: String) -> Bool { canonical(accel) == "command+space" }
+
     /// A known clash with a macOS or near-universal app shortcut, or nil.
     public static func conflict(_ accel: String) -> String? {
         let c = canonical(accel)

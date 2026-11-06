@@ -37,6 +37,34 @@ import Foundation
         for f in features { await f.start(context: context(f)) }
     }
 
+    /// Like `startAll`, but a feature that takes longer than `stallAfter` to start keeps starting in the
+    /// background while the next one starts, so one stuck feature can't hold up the rest of Glide.
+    /// `report(id, ms, finished)` hears about every start slower than 300 ms.
+    public func startAll(context: (any Feature) -> FeatureContext, stallAfter: Duration,
+                         report: @escaping @MainActor (String, Int, Bool) -> Void) async {
+        guard !started else { return }
+        started = true
+        for f in features {
+            let ctx = context(f)
+            let started = ContinuousClock.now
+            let gate = StartGate()
+            let finished: Bool = await withCheckedContinuation { cont in
+                gate.cont = cont
+                Task { @MainActor in
+                    await f.start(context: ctx)
+                    gate.finish(true)
+                    let ms = Int((ContinuousClock.now - started) / .milliseconds(1))
+                    if ms > 300 { report(f.id, ms, true) }
+                }
+                Task { @MainActor in
+                    try? await Task.sleep(for: stallAfter)
+                    gate.finish(false)
+                }
+            }
+            if !finished { report(f.id, Int(stallAfter / .milliseconds(1)), false) }
+        }
+    }
+
     public func stopAll() async {
         for f in features.reversed() { await f.stop() }
         started = false
@@ -126,5 +154,15 @@ final class ResumeOnce<T: Sendable>: @unchecked Sendable {
         cont = nil
         lock.unlock()
         c?.resume(returning: value)
+    }
+}
+
+/// Resumes a continuation once: with true when the feature started, false when it timed out first.
+@MainActor private final class StartGate {
+    var cont: CheckedContinuation<Bool, Never>?
+    func finish(_ ok: Bool) {
+        guard let c = cont else { return }
+        cont = nil
+        c.resume(returning: ok)
     }
 }

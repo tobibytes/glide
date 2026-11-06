@@ -69,6 +69,7 @@ import Observation
             Task { @MainActor in self?.dataChanged() }
         }
         services.hotkeys.onPress = { [weak self] id in self?.hotkeyPressed(id) }
+        services.hotkeys.onRegistration = { [weak self] r in self?.launcherRegistration(r) }
     }
 
     // MARK: derived
@@ -171,6 +172,60 @@ import Observation
         for c in result.conflicts { log("hotkey \(c.id): \(c.reason)") }
     }
     @ObservationIgnored private var lastBindings: [HotkeyBinding] = []
+    /// The last launcher hotkey macOS accepted: a new one it refuses is rolled back to this, so Glide never ends
+    /// up with no way to open it.
+    @ObservationIgnored private var workingLauncherHotkey: String?
+    /// Message from a rollback, kept when the restored hotkey then registers fine.
+    @ObservationIgnored private var rollbackNote: String?
+
+    /// Launcher hotkey outcome → HotkeyStatus (shown in Settings) and a rollback when it can't be used at all.
+    func launcherRegistration(_ r: HotkeyRegistration) {
+        let accel = store.settings.hotkey
+        // In a sentence "⌥Space" reads better than the keycap symbol "⌥␣".
+        func readable(_ a: String) -> String { Accelerator.display(a).replacingOccurrences(of: "␣", with: "Space") }
+        let shown = readable(accel)
+        let status = HotkeyStatus.shared
+        if let f = r.failed.first(where: { $0.id == "launcher" }) {
+            if let good = workingLauncherHotkey, good != accel {
+                let note = "Couldn't use \(shown): \(f.reason). Glide kept \(readable(good))."
+                status.message = note
+                status.isWarning = false
+                status.spotlightConflict = false
+                rollbackNote = note
+                log("launcher hotkey \(accel) refused (\(f.reason)); restoring \(good)")
+                // Outside this registration pass (the store change re-registers the hotkeys).
+                Task { @MainActor [weak self] in _ = self?.store.mutate { $0.settings.hotkey = good } }
+            } else {
+                status.message = "Couldn't use \(shown): \(f.reason). Pick another shortcut."
+                status.isWarning = false
+                status.spotlightConflict = false
+            }
+            return
+        }
+        guard r.registered.contains("launcher") else { return } // paused while a recorder listens
+        workingLauncherHotkey = accel
+        if let note = rollbackNote {
+            rollbackNote = nil
+            status.message = note
+            status.isWarning = false
+            status.spotlightConflict = false
+            return
+        }
+        let spotlight = HotkeyAdvice.isCommandSpace(accel) && services.spotlight.isEnabled()
+        if spotlight {
+            status.message = "Spotlight still uses ⌘Space, so it may open instead of Glide. Turn on “Use ⌘Space for Glide” to hand it over."
+            status.isWarning = true
+            status.spotlightConflict = true
+        } else if r.conflicts.contains(where: { $0.id == "launcher" }) {
+            status.message = "\(shown) is also a macOS shortcut, so macOS may handle it before Glide. If it doesn't open Glide, pick another one."
+            status.isWarning = true
+            status.spotlightConflict = false
+        } else {
+            status.message = nil
+            status.isWarning = false
+            status.spotlightConflict = false
+        }
+    }
     @ObservationIgnored var featureHotkeyAccelerators: [String: String] = [:]
 
     func hotkeyPressed(_ id: String) {
@@ -659,3 +714,4 @@ import Observation
         }
     }
 }
+

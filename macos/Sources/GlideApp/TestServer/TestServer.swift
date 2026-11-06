@@ -166,6 +166,10 @@ import GlideSystem
         case ("launcher", "pop"):
             launcher.pop()
             return state()
+        case ("launcher", "hotkeyStatus"):
+            let st = HotkeyStatus.shared
+            return ["result": ["message": st.message.map(JSONValue.string) ?? .null, "warning": .bool(st.isWarning),
+                               "spotlightConflict": .bool(st.spotlightConflict), "hotkey": .string(core.store.settings.hotkey)]]
         case ("launcher", "expireIdle"):
             launcher.expireIdle()
             return ["result": true]

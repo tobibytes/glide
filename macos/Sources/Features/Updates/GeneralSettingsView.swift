@@ -35,16 +35,37 @@ import SwiftUI
         }
     }
 
-    /// Hotkey hint: a known conflict, else the usage tip.
+    /// Hotkey hint: what's wrong with the current one (from the last registration), else the usage tip.
     var hotkeyHint: (text: String, warning: Bool) {
-        if let c = HotkeyAdvice.conflict(settings.hotkey), HotkeyAdvice.canonical(settings.hotkey) != "command+space" { return (c, true) }
-        return ("Click the field and press a combination (⌘, ⌥, ⌃ or ⇧ plus a key).", false)
+        if let m = HotkeyStatus.shared.message { return (m, true) }
+        return ("Click the field and press a shortcut with ⌘, ⌥ or ⌃, for example ⌥Space.", false)
+    }
+
+    /// Whether to offer "Use ⌘Space for Glide" (the field asked for ⌘Space while Spotlight still has it).
+    var offerSpotlightHandover: Bool {
+        HotkeyStatus.shared.spotlightConflict || hotkeyError == HotkeyAdvice.spotlightMessage
     }
 
     func setHotkey(_ accel: String) {
-        if let c = HotkeyAdvice.conflict(accel), HotkeyAdvice.canonical(accel) != "command+space" { loginMessage = nil; hotkeyError = c; return }
+        loginMessage = nil
+        if let p = HotkeyAdvice.problem(accel, spotlightEnabled: app?.spotlightOwnsCommandSpace ?? false) {
+            hotkeyError = p
+            return
+        }
         hotkeyError = nil
         update { $0.hotkey = accel }
+    }
+
+    func useCommandSpace() {
+        Task { @MainActor in
+            do {
+                try await app?.useCommandSpaceForGlide()
+                hotkeyError = nil
+                settings = store.settings
+            } catch {
+                hotkeyError = (error as? LocalizedError)?.errorDescription ?? "Couldn't hand ⌘Space over from Spotlight."
+            }
+        }
     }
     var hotkeyError: String?
 }
@@ -63,6 +84,10 @@ struct GeneralSettingsView: View {
                         HotkeyRecorderField(value: s.hotkey) { model.setHotkey($0) }.frame(width: 200, height: 26)
                         let hint = model.hotkeyError.map { ($0, true) } ?? model.hotkeyHint
                         Text(hint.0).font(.caption).foregroundStyle(hint.1 ? .orange : .secondary).multilineTextAlignment(.trailing)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if model.offerSpotlightHandover {
+                            Button("Use ⌘Space for Glide") { model.useCommandSpace() }.controlSize(.small)
+                        }
                     }
                 }
                 Picker("Appearance", selection: Binding(get: { s.theme }, set: { v in model.update { $0.theme = v } })) {

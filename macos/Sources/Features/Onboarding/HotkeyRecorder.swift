@@ -48,7 +48,9 @@ public struct HotkeyRecorderField: NSViewRepresentable {
         var value: String?
         var placeholder = ""
         var onChange: (String) -> Void = { _ in }
-        private var recording = false { didSet { needsDisplay = true; updateCapture() } }
+        /// Shown while recording after a press that can't be a global hotkey (cleared by the next press).
+        private var hint: String?
+        private var recording = false { didSet { hint = nil; needsDisplay = true; updateCapture() } }
         /// Glide's global hotkeys are suspended while this field records in the key window (HotkeyCapture), or
         /// the current launcher hotkey could never be recorded: Carbon would consume it and toggle the launcher.
         private(set) var capturing = false
@@ -94,12 +96,25 @@ public struct HotkeyRecorderField: NSViewRepresentable {
                 return
             }
             if event.keyCode == 53 && f.intersection([.command, .option, .control, .shift]).isEmpty { window?.makeFirstResponder(nil); return }
-            if let a = AcceleratorRecorder.accelerator(keyCode: event.keyCode, characters: event.charactersIgnoringModifiers, command: f.contains(.command),
-                                                       option: f.contains(.option), control: f.contains(.control), shift: f.contains(.shift)) {
-                value = a
-                onChange(a)
+            guard let a = AcceleratorRecorder.accelerator(keyCode: event.keyCode, characters: event.charactersIgnoringModifiers, command: f.contains(.command),
+                                                          option: f.contains(.option), control: f.contains(.control), shift: f.contains(.shift)) else {
+                hint = "That key can't be a shortcut"
                 needsDisplay = true
+                return
             }
+            // A global hotkey needs ⌘, ⌥ or ⌃ (F-keys excepted), or it would swallow normal typing: keep listening.
+            let isFKey = a.split(separator: "+").last.map { $0.hasPrefix("F") && $0.count > 1 && $0.dropFirst().allSatisfy(\.isNumber) } ?? false
+            if f.intersection([.command, .option, .control]).isEmpty && !isFKey {
+                hint = "Add ⌘, ⌥ or ⌃"
+                needsDisplay = true
+                return
+            }
+            hint = nil
+            value = a
+            onChange(a)
+            // Done: stop listening so the next key press doesn't replace it, and give the hotkeys back.
+            window?.makeFirstResponder(nil)
+            needsDisplay = true
         }
         override public func draw(_ dirtyRect: NSRect) {
             let r = bounds.insetBy(dx: 1, dy: 1)
@@ -109,7 +124,7 @@ public struct HotkeyRecorderField: NSViewRepresentable {
             (recording ? NSColor.controlAccentColor : NSColor.separatorColor).setStroke()
             path.lineWidth = recording ? 2 : 1
             path.stroke()
-            let text = recording ? "Press a shortcut…  (Esc to cancel)" : value.map(Accelerator.display) ?? placeholder
+            let text = recording ? (hint.map { "\($0)  (Esc to cancel)" } ?? "Press a shortcut…  (Esc to cancel)") : value.map(Accelerator.display) ?? placeholder
             let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13, weight: .medium),
                                                         .foregroundColor: value == nil || recording ? NSColor.secondaryLabelColor : NSColor.labelColor]
             let s = NSAttributedString(string: text, attributes: attrs)

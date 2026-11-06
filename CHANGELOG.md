@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.4
+
+- **Changing the hotkey works reliably.** The recorder in Settings stops listening as soon as you press a valid shortcut, asks for ⌘, ⌥ or ⌃ instead of accepting a bare key, and every hotkey field follows the same rules. Choosing ⌘Space while Spotlight still has it now offers "Use ⌘Space for Glide". If macOS won't let Glide use a shortcut, Glide keeps your previous one and Settings says why; if macOS also uses it, Settings warns you.
+- **Glide always opens.** The menu bar icon and hotkey come up right away instead of after every feature has started, and a feature that's slow to start no longer holds up the rest. If an earlier copy of Glide is stuck, opening Glide offers to force quit it instead of silently doing nothing.
+
 ## 0.4.3
 
 - **Fix launch crash with Reminders.** EventKit delivers reminder results on its own queue; Glide now handles that callback without crossing into the main actor synchronously.

@@ -113,9 +113,7 @@ import SwiftUI
     func setHotkey(_ accel: String) throws {
         guard let ctx = context else { throw FeatureError.failed("Not ready") }
         if case let .failure(e) = HotkeyParser.parse(accel) { throw e }
-        if accel == Self.spotlightHotkey && ctx.services.spotlight.isEnabled() {
-            throw FeatureError.failed("⌘Space belongs to Spotlight. Turn on “Use ⌘Space for Glide” instead.")
-        }
+        if let p = HotkeyAdvice.problem(accel, spotlightEnabled: ctx.services.spotlight.isEnabled()) { throw FeatureError.failed(p) }
         ctx.store.setSettings { $0.hotkey = accel }
     }
 

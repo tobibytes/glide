@@ -252,6 +252,7 @@ private let modifierTapCallback: CGEventTapCallBack = { _, type, event, _ in
 @MainActor public final class CarbonHotkeyService: HotkeyService {
     nonisolated(unsafe) fileprivate static weak var current: CarbonHotkeyService?
     public var onPress: ((String) -> Void)?
+    public var onRegistration: ((HotkeyRegistration) -> Void)?
     /// Set by the keyboard tap once it forwards Caps Lock (F18) taps to handleHyperTap(). Turning it on retries a
     /// "Hyper" binding refused earlier: the launcher never re-sends unchanged bindings (input-audit fix).
     public var keysTapHooked = false {
@@ -398,6 +399,7 @@ private let modifierTapCallback: CGEventTapCallBack = { _, type, event, _ in
         } else {
             removeTap()
         }
+        onRegistration?(out)
         return out
     }
 

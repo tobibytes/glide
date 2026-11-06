@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import Observation
 
 // Interfaces to the operating system. Features depend ONLY on these protocols; GlideSystem provides the real
 // AppKit implementations (absorbed from the old glide-helper) and the headless fakes used by every test run.
@@ -193,6 +194,8 @@ public struct HotkeyRegistration: Hashable, Codable, Sendable {
     /// Replace all bindings. `onPress` receives the binding id.
     func set(_ bindings: [HotkeyBinding]) -> HotkeyRegistration
     var onPress: ((String) -> Void)? { get set }
+    /// Every registration result, including the one applied when a paused recorder resumes the hotkeys.
+    var onRegistration: ((HotkeyRegistration) -> Void)? { get set }
     func unregisterAll()
 }
 
@@ -460,4 +463,17 @@ public struct PickedColor: Hashable, Codable, Sendable {
         self.spotlight = spotlight
         self.isHeadless = isHeadless
     }
+}
+
+/// Whether the launcher hotkey actually works, for Settings to show (set by the launcher after every
+/// registration). `message` is nil when it registered cleanly.
+@MainActor @Observable public final class HotkeyStatus {
+    public static let shared = HotkeyStatus()
+    /// Plain sentence about the launcher hotkey, or nil.
+    public var message: String?
+    /// The problem is Spotlight owning ⌘Space (Settings offers to hand it over).
+    public var spotlightConflict = false
+    /// true when the hotkey is registered but macOS may handle it first; false when Glide couldn't use it.
+    public var isWarning = false
+    public init() {}
 }

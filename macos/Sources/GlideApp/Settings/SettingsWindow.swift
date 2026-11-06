@@ -264,8 +264,9 @@ struct HotkeyRecorder: View {
     private func commit(_ raw: String) {
         switch HotkeyParser.parse(raw) {
         case let .success(spec):
-            error = nil
             let canonical = HotkeyParser.canonical(spec)
+            if !HotkeyAdvice.isCommandSpace(canonical), let c = HotkeyAdvice.conflict(canonical) { error = c; return }
+            error = nil
             text = canonical
             onChange(canonical)
         case let .failure(e):
@@ -279,7 +280,10 @@ struct HotkeyRecorder: View {
         HotkeyCapture.begin() // the combo must reach the monitor, not toggle the launcher
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { e in
             if e.keyCode == 53 && e.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty { stop(); return nil }
-            if let accel = Self.accelerator(from: e) { commit(accel); stop() }
+            if let accel = Self.accelerator(from: e), e.modifierFlags.intersection([.command, .option, .control]).isEmpty == false || accel.hasPrefix("F") {
+                commit(accel)
+                stop()
+            }
             return nil
         }
     }

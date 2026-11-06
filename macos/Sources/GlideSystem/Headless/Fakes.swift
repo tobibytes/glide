@@ -131,18 +131,36 @@ import GlideCore
 @MainActor public final class HeadlessHotkeys: HotkeyService {
     let log: SideEffectLog
     public var onPress: ((String) -> Void)?
+    public var onRegistration: ((HotkeyRegistration) -> Void)?
     public private(set) var bindings: [HotkeyBinding] = []
-    public init(log: SideEffectLog) { self.log = log }
+    /// Accelerators another app "owns" and ones macOS also uses (tests: GLIDE_HEADLESS_TAKEN_HOTKEYS /
+    /// GLIDE_HEADLESS_SYSTEM_HOTKEYS, comma-separated), so registration failures can be exercised headless.
+    public var taken: Set<String>
+    public var system: Set<String>
+    public init(log: SideEffectLog) {
+        self.log = log
+        let env = ProcessInfo.processInfo.environment
+        func set(_ k: String) -> Set<String> {
+            Set((env[k] ?? "").split(separator: ",").compactMap { s in try? HotkeyParser.parse(String(s)).get() }.map(HotkeyParser.canonical))
+        }
+        taken = set("GLIDE_HEADLESS_TAKEN_HOTKEYS")
+        system = set("GLIDE_HEADLESS_SYSTEM_HOTKEYS")
+    }
     public func set(_ bindings: [HotkeyBinding]) -> HotkeyRegistration {
         self.bindings = bindings
         var out = HotkeyRegistration()
         for b in bindings {
             switch HotkeyParser.parse(b.accelerator) {
-            case .success: out.registered.append(b.id)
+            case let .success(spec):
+                let canon = HotkeyParser.canonical(spec)
+                if taken.contains(canon) { out.failed.append(.init(id: b.id, reason: "in use by another app")); continue }
+                out.registered.append(b.id)
+                if system.contains(canon) { out.conflicts.append(.init(id: b.id, reason: "also a macOS shortcut (System Settings → Keyboard → Keyboard Shortcuts); macOS may handle it first")) }
             case let .failure(e): out.failed.append(.init(id: b.id, reason: e.localizedDescription))
             }
         }
         log.record("hotkeys-set", .array(bindings.map { ["id": .string($0.id), "accelerator": .string($0.accelerator)] }))
+        onRegistration?(out)
         return out
     }
     public func unregisterAll() { bindings = [] }

@@ -84,11 +84,18 @@ struct AppConfig {
     }
 
     func start() async {
-        await registry.startAll { [unowned self] f in
+        let log = Logger(subsystem: "dev.glide.launcher", category: "startup")
+        await registry.startAll(context: { [unowned self] f in
             let ctx = HostContext(featureId: f.id, app: self)
             contexts.append(ctx) // the host owns contexts; features may hold them weakly
             return ctx
-        }
+        }, stallAfter: .seconds(3), report: { id, ms, finished in
+            if finished {
+                log.notice("feature \(id, privacy: .public) took \(ms) ms to start")
+            } else {
+                log.error("feature \(id, privacy: .public) still starting after \(ms) ms; continuing without waiting for it")
+            }
+        })
         launcher.rebuildCatalogue()
         window.layout()
     }
